@@ -41,6 +41,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<PackMeta | null>(null);
+  const [metaSettled, setMetaSettled] = useState(false);
   const [coverageNote, setCoverageNote] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState(true);
   const [flyTo, setFlyTo] = useState<LatLon | null>(null);
@@ -61,7 +62,10 @@ export default function Home() {
 
   // --- region metadata (bbox drives the coverage check) ---
   useEffect(() => {
-    fetchMeta().then(setMeta).catch(() => setMeta(null));
+    fetchMeta()
+      .then(setMeta)
+      .catch(() => setMeta(null))
+      .finally(() => setMetaSettled(true));
   }, []);
 
   // --- GPS -> origin ---------------------------------------------------
@@ -69,6 +73,11 @@ export default function Home() {
   // request 422. Fall back to the default view with an explanation instead.
   useEffect(() => {
     if (!geo.position || !followMode) return;
+    // Wait for the coverage bbox before acting on a fix. Without this, a GPS
+    // fix that arrives before /meta resolves skips the range check entirely
+    // and we adopt (and fly to) an out-of-coverage location, only to show the
+    // "outside the mapped area" notice a moment later.
+    if (!metaSettled) return;
     if (meta && !insideBbox(geo.position, meta.bbox)) {
       setCoverageNote(
         "You're outside the mapped area (Berkeley / North Oakland) — showing the default region. Pick points on the map to route.",
@@ -88,7 +97,7 @@ export default function Home() {
       seededRef.current = true;
       setFlyTo(next);
     }
-  }, [geo.position, followMode, meta]);
+  }, [geo.position, followMode, meta, metaSettled]);
 
   useEffect(() => {
     if (geo.error) setCoverageNote(geo.error);

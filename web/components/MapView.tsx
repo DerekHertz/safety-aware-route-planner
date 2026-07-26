@@ -6,6 +6,7 @@ import {
   Marker,
   NavigationControl,
   Popup,
+  setWorkerUrl,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection } from "geojson";
@@ -15,6 +16,17 @@ import { LatLon, RouteAlternative, RouteKind } from "@/lib/types";
 // OpenFreeMap: genuinely free vector tiles, no API key. (MapLibre demotiles
 // are demo-only; do not hotlink tile.openstreetmap.org rasters.)
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+
+// MapLibre locates its tile-parsing worker from `import.meta.url`, and
+// returns an empty string when that is not an http(s) URL — which is what
+// happens once Turbopack bundles it. It then does `new Worker("")`, which
+// resolves to the page's own HTML: a Worker that never replies and never
+// errors, leaving every tile stuck in state "loading" and the map showing
+// nothing but its background colour. Pointing MapLibre at the real worker,
+// served from /public (kept in sync by scripts/copy-maplibre-worker.mjs),
+// avoids the bundler for this one asset.
+// Must run before any Map is constructed.
+setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 export const KIND_COLORS: Record<RouteKind, string> = {
   fast: "#2563eb",

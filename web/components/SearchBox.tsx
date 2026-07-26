@@ -16,10 +16,20 @@ export default function SearchBox({ placeholder, value, onPick, onTextChange }: 
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipNext = useRef(false);
+  // Only the user's own typing should trigger a lookup. Values pushed in
+  // from outside — a map click writing coordinates, or a GPS fix writing
+  // "Current location" — must not fire a geocode request or open the
+  // suggestion dropdown over the next field.
+  const userTyped = useRef(false);
 
   useEffect(() => {
     if (skipNext.current) {
       skipNext.current = false;
+      return;
+    }
+    if (!userTyped.current) {
+      setResults([]);
+      setOpen(false);
       return;
     }
     if (timer.current) clearTimeout(timer.current);
@@ -48,7 +58,10 @@ export default function SearchBox({ placeholder, value, onPick, onTextChange }: 
         type="text"
         placeholder={placeholder}
         value={value}
-        onChange={(e) => onTextChange(e.target.value)}
+        onChange={(e) => {
+          userTyped.current = true;
+          onTextChange(e.target.value);
+        }}
         onFocus={() => results.length && setOpen(true)}
         onBlur={() => setTimeout(() => setOpen(false), 150)}
       />
@@ -60,6 +73,7 @@ export default function SearchBox({ placeholder, value, onPick, onTextChange }: 
                 type="button"
                 onMouseDown={() => {
                   skipNext.current = true;
+                  userTyped.current = false;
                   onPick(r);
                   setOpen(false);
                 }}
