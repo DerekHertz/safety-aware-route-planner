@@ -1,14 +1,25 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
-import { fetchRoutes } from "@/lib/api";
-import { GeocodeResult, LatLon, RouteAlternative, RouteKind } from "@/lib/types";
+import { fetchMeta, fetchRoutes } from "@/lib/api";
+import {
+  GeocodeResult, LatLon, PackMeta, RouteAlternative, RouteKind,
+} from "@/lib/types";
+import {
+  DEFAULT_UNITS, UNITS_STORAGE_KEY, UnitSystem, isUnitSystem,
+} from "@/lib/units";
+import { distanceMeters, insideBbox, useGeolocation } from "@/lib/useGeolocation";
 
 // MapLibre touches `window` at import time — client-only bundle
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+/** Re-route only after the tracked position moves this far, so GPS jitter
+ *  doesn't hammer the router. */
+const REROUTE_MIN_MOVE_M = 25;
+const REROUTE_DEBOUNCE_MS = 1500;
 
 function nowLocalIso(): string {
   const d = new Date();
@@ -24,12 +35,66 @@ export default function Home() {
   const [destText, setDestText] = useState("");
   const [departure, setDeparture] = useState<string>(nowLocalIso());
   const [safety, setSafety] = useState(true);
+  const [units, setUnits] = useState<UnitSystem>(DEFAULT_UNITS);
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
   const [selected, setSelected] = useState<RouteKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [meta, setMeta] = useState<PackMeta | null>(null);
+  const [coverageNote, setCoverageNote] = useState<string | null>(null);
+  const [followMode, setFollowMode] = useState(true);
+  const [flyTo, setFlyTo] = useState<LatLon | null>(null);
   const reqSeq = useRef(0);
+  const seededRef = useRef(false);
 
+  const geo = useGeolocation(true);
+
+  // --- unit preference (read in an effect so SSR and client markup agree) ---
+  useEffect(() => {
+    const stored = window.localStorage.getItem(UNITS_STORAGE_KEY);
+    if (isUnitSystem(stored)) setUnits(stored);
+  }, []);
+  const changeUnits = (u: UnitSystem) => {
+    setUnits(u);
+    window.localStorage.setItem(UNITS_STORAGE_KEY, u);
+  };
+
+  // --- region metadata (bbox drives the coverage check) ---
+  useEffect(() => {
+    fetchMeta().then(setMeta).catch(() => setMeta(null));
+  }, []);
+
+  // --- GPS -> origin ---------------------------------------------------
+  // The pack only covers one metro area, so a fix outside it would make every
+  // request 422. Fall back to the default view with an explanation instead.
+  useEffect(() => {
+    if (!geo.position || !followMode) return;
+    if (meta && !insideBbox(geo.position, meta.bbox)) {
+      setCoverageNote(
+        "You're outside the mapped area (Berkeley / North Oakland) — showing the default region. Pick points on the map to route.",
+      );
+      setFollowMode(false);
+      return;
+    }
+    setCoverageNote(null);
+    const next = geo.position;
+    setOrigin((prev) => {
+      // Ignore sub-threshold jitter so we don't re-route constantly.
+      if (prev && distanceMeters(prev, next) < REROUTE_MIN_MOVE_M) return prev;
+      return next;
+    });
+    setOriginText("Current location");
+    if (!seededRef.current) {
+      seededRef.current = true;
+      setFlyTo(next);
+    }
+  }, [geo.position, followMode, meta]);
+
+  useEffect(() => {
+    if (geo.error) setCoverageNote(geo.error);
+  }, [geo.error]);
+
+  // --- routing ---------------------------------------------------------
   const runRoute = useCallback(async () => {
     if (!origin || !destination) return;
     const seq = ++reqSeq.current;
@@ -53,14 +118,17 @@ export default function Home() {
     }
   }, [origin, destination, departure, safety]);
 
-  // auto-route whenever the inputs are complete / change
+  // Debounced so a moving origin (or rapid edits) coalesces into one request.
   useEffect(() => {
-    runRoute();
+    const t = setTimeout(runRoute, REROUTE_DEBOUNCE_MS);
+    return () => clearTimeout(t);
   }, [runRoute]);
 
+  // --- manual overrides always win over live GPS -----------------------
   const setPoint = useCallback((which: "origin" | "destination", p: LatLon) => {
     const label = `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
     if (which === "origin") {
+      setFollowMode(false); // a deliberate choice must not be overwritten
       setOrigin(p);
       setOriginText(label);
     } else {
@@ -72,12 +140,21 @@ export default function Home() {
   const pickGeocode = (which: "origin" | "destination") => (r: GeocodeResult) => {
     const p = { lat: r.lat, lon: r.lon };
     if (which === "origin") {
+      setFollowMode(false);
       setOrigin(p);
       setOriginText(r.name);
     } else {
       setDestination(p);
       setDestText(r.name);
     }
+  };
+
+  const locateMe = () => {
+    seededRef.current = false;
+    setCoverageNote(null);
+    setFollowMode(true);
+    geo.refresh();
+    if (geo.position) setFlyTo({ ...geo.position });
   };
 
   const reset = () => {
@@ -90,28 +167,49 @@ export default function Home() {
     setSelected(null);
     setError(null);
     setLoading(false);
+    setFollowMode(false);
   };
+
+  const originIsLive = followMode && !!geo.position;
+  const regionLabel = useMemo(
+    () => (meta ? meta.region.replace(/_/g, " ") : "Berkeley / North Oakland"),
+    [meta],
+  );
 
   return (
     <main className="layout">
       <aside className="sidebar">
         <h1>Safety-Aware Routes</h1>
         <p className="hint">
-          Search or click the map to set origin and destination
-          (Berkeley / North Oakland).
+          Search, click the map, or use your current location. Covered area:{" "}
+          {regionLabel}.
         </p>
-        <SearchBox
-          placeholder="Origin — search or click map"
-          value={originText}
-          onTextChange={setOriginText}
-          onPick={pickGeocode("origin")}
-        />
+
+        <div className="origin-row">
+          <SearchBox
+            placeholder="Origin — search or click map"
+            value={originText}
+            onTextChange={setOriginText}
+            onPick={pickGeocode("origin")}
+          />
+          <button
+            type="button"
+            className={`locate${originIsLive ? " active" : ""}`}
+            onClick={locateMe}
+            title="Use my current location"
+            aria-label="Use my current location"
+          >
+            ⌖
+          </button>
+        </div>
+
         <SearchBox
           placeholder="Destination"
           value={destText}
           onTextChange={setDestText}
           onPick={pickGeocode("destination")}
         />
+
         <div className="controls-row">
           <label>
             Departure
@@ -122,6 +220,7 @@ export default function Home() {
             />
           </label>
         </div>
+
         <div className="controls-row toggle-row">
           <label className="toggle">
             <input
@@ -131,11 +230,31 @@ export default function Home() {
             />
             <span>Safety optimization</span>
           </label>
+          <div className="unit-toggle" role="group" aria-label="Distance units">
+            <button
+              type="button"
+              className={units === "imperial" ? "on" : ""}
+              onClick={() => changeUnits("imperial")}
+            >
+              mi
+            </button>
+            <button
+              type="button"
+              className={units === "metric" ? "on" : ""}
+              onClick={() => changeUnits("metric")}
+            >
+              km
+            </button>
+          </div>
+        </div>
+
+        <div className="controls-row">
           <button type="button" className="reset" onClick={reset}>
             Reset
           </button>
         </div>
 
+        {coverageNote && <div className="status note">{coverageNote}</div>}
         {loading && <div className="status">Routing…</div>}
         {error && <div className="status error">{error}</div>}
 
@@ -144,6 +263,7 @@ export default function Home() {
             <RouteCard
               key={r.kind}
               route={r}
+              units={units}
               selected={selected === r.kind}
               onSelect={() => setSelected(r.kind)}
             />
@@ -165,6 +285,8 @@ export default function Home() {
           origin={origin}
           destination={destination}
           onSetPoint={setPoint}
+          originIsLive={originIsLive}
+          flyTo={flyTo}
         />
       </div>
     </main>

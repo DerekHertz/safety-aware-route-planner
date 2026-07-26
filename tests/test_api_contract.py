@@ -82,3 +82,39 @@ def test_unsnappable_origin_is_422(client):
 
 def test_health(client):
     assert client.get("/health").json() == {"status": "ok"}
+
+
+def test_meta_shape(client):
+    """Additive endpoint the front-end uses for the GPS coverage check."""
+    resp = client.get("/meta")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert set(data.keys()) == {"region", "bbox", "num_edges"}
+    assert data["region"] == "toy"
+    # toy packs declare no bbox -> null disables the client coverage check
+    assert data["bbox"] is None
+    assert data["num_edges"] == client.pack.num_edges
+
+
+def test_meta_bbox_present_for_real_region(tmp_path, monkeypatch):
+    """A pack built from a configured region exposes its bbox as
+    [west, south, east, north] so the client can range-check a GPS fix."""
+    from pyref.config import Config
+    from tests.helpers.toy_graphs import GraphBuilder
+
+    cfg = Config.load()
+    b = GraphBuilder(cfg)
+    n0 = b.node(37.87, -122.27)
+    n1 = b.node(37.871, -122.269)
+    b.edge(n0, n1, length_m=200.0)
+    # build under a real region preset so cfg.bbox() resolves
+    b.build(region="berkeley_small").write(tmp_path / "bk")
+    monkeypatch.setenv("SR_PACK_DIR", str(tmp_path / "bk"))
+
+    from api.main import create_app
+    with TestClient(create_app()) as c:
+        data = c.get("/meta").json()
+        assert data["region"] == "berkeley_small"
+        assert data["bbox"] == list(cfg.bbox("berkeley_small"))
+        west, south, east, north = data["bbox"]
+        assert west < east and south < north

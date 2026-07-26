@@ -51,3 +51,10 @@ export interface GeocodeResult {
   lat: number;
   lon: number;
 }
+
+export interface PackMeta {
+  region: string;
+  /** [west, south, east, north]; null when the pack declares no coverage. */
+  bbox: number[] | null;
+  num_edges: number;
+}
