@@ -1,0 +1,186 @@
+# =============================================================================
+# Safety-Aware Route Planner — single source of ALL tunable parameters.
+# Read only by Python (stdlib tomllib). The C++ engine never parses this file:
+# every value it needs arrives pre-resolved through pybind11 as arrays/scalars.
+# =============================================================================
+
+[region]
+# Active region preset (key into [region.presets]).
+active = "berkeley_oakland"
+network_type = "drive"
+
+[region.presets.berkeley_small]
+# ~2x2 km central Berkeley dev box: fast Overpass pull, fast iteration.
+# bbox = [west, south, east, north]  (OSMnx v2 order: left, bottom, right, top)
+bbox = [-122.283, 37.855, -122.250, 37.880]
+
+[region.presets.berkeley_oakland]
+# Confirmed initial target: Berkeley + North Oakland
+# (Albany/El Cerrito down to Lake Merritt).
+bbox = [-122.32, 37.77, -122.22, 37.90]
+
+# -----------------------------------------------------------------------------
+# Attribute defaults applied when OSM tags are missing.
+# Speeds in km/h; lanes are PER DIRECTION.
+# -----------------------------------------------------------------------------
+[defaults.speed_kph_by_class]
+motorway = 105
+motorway_link = 65
+trunk = 80
+trunk_link = 55
+primary = 56          # ~35 mph urban arterial
+primary_link = 40
+secondary = 48        # ~30 mph
+secondary_link = 40
+tertiary = 40         # ~25 mph
+tertiary_link = 35
+residential = 40      # Berkeley/Oakland default 25 mph
+unclassified = 40
+living_street = 15
+service = 25
+
+[defaults.lanes_by_class]     # per direction
+motorway = 3
+motorway_link = 1
+trunk = 2
+trunk_link = 1
+primary = 2
+primary_link = 1
+secondary = 2
+secondary_link = 1
+tertiary = 1
+tertiary_link = 1
+residential = 1
+unclassified = 1
+living_street = 1
+service = 1
+
+# -----------------------------------------------------------------------------
+# Safety cost model:  raw = w_man*sev + w_speed*norm(spd) + w_lanes*norm(lanes)
+#                         + w_vol*norm(vol) - w_med*median
+# Control override: PROTECTED/ROUNDABOUT -> raw = 0; STOP_4WAY -> raw *= factor.
+# penalty_seconds = k * max(raw, 0). Counters/tiers use the SAME post-override
+# raw score ("dual output from the same score").
+# -----------------------------------------------------------------------------
+[cost]
+k_penalty_scale_s = 45.0      # seconds of generalized cost per unit raw score
+w_man = 1.0
+w_speed = 0.5
+w_lanes = 0.3
+w_vol = 0.6
+w_med = 0.4
+stop4way_factor = 0.25        # multiplies raw at all-way stops
+# Right-of-way reduction: STRAIGHT/RIGHT maneuvers where cross traffic is
+# held back — permissive signal (red for cross street), or a 2-way stop
+# where THIS approach has priority — are far safer than the raw target-edge
+# attributes suggest. LEFT is deliberately excluded: a permissive left
+# against oncoming traffic is exactly the hazard this planner penalizes.
+# Without this factor, high-lambda routes flee arterials into residential
+# zigzags and rack up MORE counted unsafe crossings than the fast route.
+right_of_way_factor = 0.2
+uturn_fixed_penalty_s = 30.0  # flat extra for the rare allowed (dead-end) U-turn
+# Normalization caps: norm(x) = clip(x / cap, 0, 1)
+speed_norm_max_mps = 27.8     # 100 km/h
+lanes_norm_max = 3.0
+vol_norm_max_vph = 800.0      # veh/hour/lane
+
+[cost.severity]               # maneuver_severity by type
+STRAIGHT = 0.6
+LEFT = 1.0
+RIGHT = 0.15
+UTURN = 1.2
+
+# -----------------------------------------------------------------------------
+# "Busy" road definition: busy_score = a_speed*norm(spd) + a_lanes*norm(lanes)
+#                                    + a_vol*norm(vol)  >  busy_threshold
+# With the defaults above: peak-hour primary ~0.65, secondary ~0.56 (busy);
+# residential ~0.30, tertiary ~0.37 (not busy). Off-peak secondaries drop
+# below threshold — busyness is time-of-day dependent by design.
+# -----------------------------------------------------------------------------
+[busy]
+a_speed = 0.4
+a_lanes = 0.3
+a_vol = 0.3
+busy_threshold = 0.45
+
+# -----------------------------------------------------------------------------
+# Tier bands on the post-override raw score (for map coloring), and the
+# unsafe-action counter threshold tau.
+# -----------------------------------------------------------------------------
+[tiers]
+tau_caution = 0.5             # raw in [tau_caution, tau_unsafe) -> "caution"
+tau_unsafe = 0.8              # raw >= tau_unsafe (plus type predicate) -> counted
+
+# -----------------------------------------------------------------------------
+# Route alternatives: lambda sweep + Jaccard dedup + penalty-method rerun.
+# -----------------------------------------------------------------------------
+[alternatives]
+lambda_fast = 0.0
+lambda_balanced = 0.5
+lambda_safe = 1.5
+jaccard_threshold = 0.8       # above this overlap two routes are "the same"
+penalty_factor = 1.3          # arc-cost inflation on shared edges during rerun
+max_reruns = 2
+
+[search]
+algo = "astar"                # "astar" | "dijkstra"
+snap_k = 20                   # KD-tree candidates examined per snap
+snap_max_m = 300.0            # reject origins/destinations farther than this
+
+# -----------------------------------------------------------------------------
+# Synthetic traffic profiles. 24 hourly multipliers (index = local hour,
+# value at the half-hour center); piecewise-linear interpolation between
+# centers, wrapping 23 -> 0. volume[e] = base_vph_per_lane[class] * lanes[e]
+# * volume_mult(group, t). Deterministic — no RNG anywhere.
+# -----------------------------------------------------------------------------
+[sim]
+[sim.class_groups]
+arterial = ["motorway", "motorway_link", "trunk", "trunk_link", "primary", "primary_link"]
+collector = ["secondary", "secondary_link", "tertiary", "tertiary_link"]
+local = ["residential", "unclassified", "living_street", "service"]
+
+[sim.base_vph_per_lane]
+motorway = 900
+motorway_link = 500
+trunk = 700
+trunk_link = 400
+primary = 600
+primary_link = 350
+secondary = 450
+secondary_link = 300
+tertiary = 300
+tertiary_link = 200
+residential = 100
+unclassified = 80
+living_street = 40
+service = 30
+
+# speed_mult: fraction of free-flow speed. volume_mult: fraction of base volume.
+[sim.profiles.arterial]
+speed_mult =  [1.0, 1.0, 1.0, 1.0, 1.0, 0.95, 0.8, 0.6, 0.55, 0.7, 0.85, 0.85, 0.8, 0.8, 0.75, 0.65, 0.6, 0.55, 0.6, 0.75, 0.9, 1.0, 1.0, 1.0]
+volume_mult = [0.1, 0.05, 0.05, 0.05, 0.1, 0.25, 0.55, 0.85, 1.0, 0.8, 0.6, 0.6, 0.65, 0.65, 0.7, 0.85, 0.95, 1.0, 0.9, 0.6, 0.4, 0.3, 0.2, 0.15]
+
+[sim.profiles.collector]
+speed_mult =  [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.9, 0.75, 0.7, 0.8, 0.9, 0.9, 0.85, 0.85, 0.85, 0.8, 0.75, 0.7, 0.75, 0.85, 0.95, 1.0, 1.0, 1.0]
+volume_mult = [0.1, 0.05, 0.05, 0.05, 0.1, 0.2, 0.45, 0.75, 0.9, 0.7, 0.55, 0.55, 0.6, 0.6, 0.65, 0.75, 0.85, 0.9, 0.8, 0.55, 0.35, 0.25, 0.2, 0.15]
+
+[sim.profiles.local]
+speed_mult =  [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.95, 0.9, 0.85, 0.9, 0.95, 0.95, 0.95, 0.95, 0.95, 0.9, 0.85, 0.85, 0.9, 0.95, 1.0, 1.0, 1.0, 1.0]
+volume_mult = [0.1, 0.05, 0.05, 0.05, 0.1, 0.2, 0.4, 0.7, 0.8, 0.6, 0.5, 0.5, 0.55, 0.55, 0.6, 0.7, 0.8, 0.85, 0.75, 0.5, 0.35, 0.25, 0.2, 0.15]
+
+[engine]
+impl = "cpp"                  # "pyref" | "cpp"  (cpp falls back to pyref with a
+                              # warning if the sr_core extension isn't built)
+
+[api]
+host = "127.0.0.1"
+port = 8000
+cors_origins = ["http://localhost:3000"]
+nominatim_url = "https://nominatim.openstreetmap.org/search"
+nominatim_min_interval_s = 1.1
+# Nominatim's usage policy requires a User-Agent identifying the application
+# with a way to reach its operator. A project URL satisfies this and keeps
+# personal addresses out of version control. Override per-deployment with the
+# SR_NOMINATIM_CONTACT environment variable.
+nominatim_user_agent = "safety-aware-route-planner/0.1 (+https://github.com/DerekHertz/safety-aware-route-planner)"
+pack_dir = "data/packs"       # SR_PACK_DIR env var overrides (tests use this)

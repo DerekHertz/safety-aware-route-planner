@@ -1,0 +1,7 @@
+osmnx>=2.0,<3
+scipy
+fastapi
+uvicorn[standard]
+httpx
+pytest
+pybind11>=2.12

@@ -1,0 +1,9 @@
+[build-system]
+requires = ["setuptools>=68", "pybind11>=2.12"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sr-core"
+version = "0.1.0"
+description = "Safety-aware route planner C++17 core (pybind11)"
+requires-python = ">=3.11"
