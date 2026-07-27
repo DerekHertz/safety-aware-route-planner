@@ -347,3 +347,63 @@ body {
 .unsafe-count {
   color: #b45309;
 }
+
+.detour-cost {
+  color: var(--muted);
+}
+
+/* Detour budget: the same segmented-control idiom as .unit-toggle, but wide
+   enough for word labels, so it wraps onto its own line. */
+.detour-row {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.detour-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.hint-inline {
+  font-size: 0.72rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.segmented button {
+  flex: 1;
+  border: 0;
+  border-left: 1px solid var(--border);
+  background: #fff;
+  padding: 7px 6px;
+  font-size: 0.75rem;
+  line-height: 1.2;
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.segmented button:first-child {
+  border-left: 0;
+}
+
+.segmented button.on {
+  background: #0f172a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}

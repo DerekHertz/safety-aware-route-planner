@@ -21,6 +21,10 @@ class RouteRequest(BaseModel):
     destination: LatLon
     departure_time: datetime.datetime | None = None  # default: server "now"
     safety_enabled: bool = True
+    # How much longer the "safe" route may be in exchange for avoiding every
+    # counted unsafe maneuver outright. None = the config default; 0 disables
+    # the hard avoid and leaves the lambda sweep in charge.
+    detour_budget_pct: float | None = Field(default=None, ge=0.0, le=2.0)
 
 
 class UnsafeCounts(BaseModel):
@@ -48,6 +52,7 @@ class RouteAlternative(BaseModel):
     unsafe: UnsafeCounts
     segments: list[Segment]
     unsafe_points: list[UnsafePoint]
+    detour_pct: float         # extra time vs the fastest route in this response
 
 
 class RouteResponse(BaseModel):

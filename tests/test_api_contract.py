@@ -22,7 +22,7 @@ def client(tmp_path, monkeypatch):
         yield c
 
 
-def _route_body(pack, ids, safety=True):
+def _route_body(pack, ids, safety=True, **extra):
     # node coords double as origin/destination points (perfect snaps)
     o = ids["s"]
     d = ids["a0"]
@@ -31,6 +31,7 @@ def _route_body(pack, ids, safety=True):
         "destination": {"lat": float(pack.node_lat[d]), "lon": float(pack.node_lon[d])},
         "departure_time": "2026-07-24T08:30:00",
         "safety_enabled": safety,
+        **extra,
     }
 
 
@@ -42,7 +43,8 @@ def test_route_contract_shape(client):
     assert 1 <= len(data["routes"]) <= 3
     for r in data["routes"]:
         assert set(r.keys()) == {"kind", "geometry", "distance_m", "eta_s",
-                                 "unsafe", "segments", "unsafe_points"}
+                                 "unsafe", "segments", "unsafe_points",
+                                 "detour_pct"}
         assert r["kind"] in ("fast", "balanced", "safe")
         assert r["geometry"]["type"] == "LineString"
         assert len(r["geometry"]["coordinates"]) >= 2
@@ -63,6 +65,29 @@ def test_route_scenario_through_api(client):
     assert by_kind["fast"]["unsafe"]["unprotected_left"] == 1
     assert by_kind["safe"]["unsafe"]["total"] == 0
     assert by_kind["fast"]["eta_s"] < by_kind["safe"]["eta_s"]
+    # the fastest route in the response defines the baseline
+    assert by_kind["fast"]["detour_pct"] == 0.0
+    assert by_kind["safe"]["detour_pct"] > 0.0
+
+
+def test_detour_budget_caps_how_far_the_safe_route_may_go(client):
+    """A generous budget keeps the safer, slower route; a budget below what
+    that route costs drops it, leaving only the fastest one."""
+    body = _route_body(client.pack, client.ids, detour_budget_pct=1.0)
+    generous = client.post("/route", json=body).json()["routes"]
+    by_kind = {r["kind"]: r for r in generous}
+    assert by_kind["safe"]["unsafe"]["total"] == 0
+    assert by_kind["safe"]["detour_pct"] > 0.0      # it does cost something
+
+    body = _route_body(client.pack, client.ids, detour_budget_pct=0.0)
+    stingy = client.post("/route", json=body).json()["routes"]
+    assert [r["kind"] for r in stingy] == ["fast"]
+    assert stingy[0]["detour_pct"] == 0.0
+
+
+def test_negative_detour_budget_is_422(client):
+    body = _route_body(client.pack, client.ids, detour_budget_pct=-0.5)
+    assert client.post("/route", json=body).status_code == 422
 
 
 def test_safety_toggle_off_single_route(client):

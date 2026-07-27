@@ -6,6 +6,7 @@ import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
 import {
+  DEFAULT_DETOUR_BUDGET, DETOUR_BUDGET_OPTIONS,
   GeocodeResult, LatLon, PackMeta, RouteAlternative, RouteKind,
 } from "@/lib/types";
 import {
@@ -35,6 +36,7 @@ export default function Home() {
   const [destText, setDestText] = useState("");
   const [departure, setDeparture] = useState<string>(nowLocalIso());
   const [safety, setSafety] = useState(true);
+  const [detourBudget, setDetourBudget] = useState(DEFAULT_DETOUR_BUDGET);
   const [units, setUnits] = useState<UnitSystem>(DEFAULT_UNITS);
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
   const [selected, setSelected] = useState<RouteKind | null>(null);
@@ -110,7 +112,8 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetchRoutes(origin, destination, departure, safety);
+      const resp = await fetchRoutes(origin, destination, departure, safety,
+                                     detourBudget);
       if (seq !== reqSeq.current) return; // stale response
       setRoutes(resp.routes);
       setSelected((prev) =>
@@ -125,7 +128,7 @@ export default function Home() {
     } finally {
       if (seq === reqSeq.current) setLoading(false);
     }
-  }, [origin, destination, departure, safety]);
+  }, [origin, destination, departure, safety, detourBudget]);
 
   // Debounced so a moving origin (or rapid edits) coalesces into one request.
   useEffect(() => {
@@ -257,6 +260,33 @@ export default function Home() {
           </div>
         </div>
 
+        <div className="controls-row detour-row">
+          <span className="detour-label">
+            Detour for a safer crossing
+            <span className="hint-inline">
+              How far out of your way to reach a light or an all-way stop
+            </span>
+          </span>
+          <div
+            className="segmented"
+            role="group"
+            aria-label="Detour budget for a safer crossing"
+          >
+            {DETOUR_BUDGET_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={detourBudget === opt.value ? "on" : ""}
+                aria-pressed={detourBudget === opt.value}
+                onClick={() => setDetourBudget(opt.value)}
+                disabled={!safety}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="controls-row">
           <button type="button" className="reset" onClick={reset}>
             Reset
@@ -282,7 +312,10 @@ export default function Home() {
           <p className="hint">
             The selected route is colored by maneuver safety tier
             (green / amber / red). Red markers flag unsafe maneuvers:
-            L = unprotected left, X = uncontrolled crossing.
+            L = unprotected left, X = uncontrolled crossing. Only maneuvers
+            where the map data actually records the traffic control are
+            flagged — a signalized left, or an intersection OpenStreetMap says
+            nothing about, shows amber instead.
           </p>
         )}
       </aside>
