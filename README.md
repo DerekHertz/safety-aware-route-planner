@@ -94,7 +94,36 @@ cached in `data/cache/` so Overpass is hit once per region.
 ```
 
 `GET /geocode?q=...` proxies Nominatim (rate-limited, identified UA, cached)
-bounded to the pack bbox.
+bounded to the pack bbox. Set `SR_NOMINATIM_CONTACT` to override the
+User-Agent contact string per deployment.
+
+`GET /meta` → `{region, bbox, num_edges}` — additive endpoint so the client
+can tell whether a GPS fix falls inside the routable region. `bbox` is
+`[west, south, east, north]`, or `null` for packs with no declared coverage.
+
+## Front-end behavior
+
+- **Current location.** The origin tracks live GPS (`watchPosition`). A
+  deliberate origin — map click, marker drag, or geocode pick — disables
+  follow mode so it is never overwritten; the ⌖ button re-enables it.
+  Re-routing is throttled to movements over 25 m and debounced, so GPS
+  jitter doesn't hammer the router. A fix outside the pack bbox falls back
+  to the default view with an explanation rather than a 422.
+- **Units.** Miles by default, toggleable to km, persisted in
+  `localStorage`. The API always speaks SI (`distance_m`, `eta_s`);
+  conversion is presentation-only so the response contract stays
+  framework-agnostic for a future mobile client.
+- **Map robustness.** MapLibre only auto-resizes on *window* resize, so a
+  map created before layout (or while the tab/pane is hidden) would strand
+  its canvas at the 400×300 fallback inside a full-size container — a blank
+  map. A ResizeObserver plus a timer-based reconciliation (ResizeObserver
+  and `requestAnimationFrame` callbacks are both tied to the page's
+  rendering steps, which a non-compositing page never runs) keep the canvas
+  matched to its container, and map errors surface in a banner instead of
+  failing silently.
+
+See [docs/map-provider-tradeoffs.md](docs/map-provider-tradeoffs.md) for the
+MapLibre vs Google Maps Platform evaluation.
 
 ## Modeling notes / heuristics (documented approximations)
 

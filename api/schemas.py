@@ -54,6 +54,13 @@ class RouteResponse(BaseModel):
     routes: list[RouteAlternative]
 
 
+class MetaResponse(BaseModel):
+    """Pack coverage info. Additive — not part of the frozen /route contract."""
+    region: str
+    bbox: list[float] | None      # [west, south, east, north]; None for toy packs
+    num_edges: int
+
+
 class GeocodeResult(BaseModel):
     name: str
     lat: float

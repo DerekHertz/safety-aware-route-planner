@@ -6,14 +6,27 @@ import {
   Marker,
   NavigationControl,
   Popup,
+  setWorkerUrl,
 } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { useEffect, useRef } from "react";
+import type { Feature, FeatureCollection } from "geojson";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { LatLon, RouteAlternative, RouteKind } from "@/lib/types";
 
 // OpenFreeMap: genuinely free vector tiles, no API key. (MapLibre demotiles
 // are demo-only; do not hotlink tile.openstreetmap.org rasters.)
 const STYLE_URL = "https://tiles.openfreemap.org/styles/liberty";
+
+// MapLibre locates its tile-parsing worker from `import.meta.url`, and
+// returns an empty string when that is not an http(s) URL — which is what
+// happens once Turbopack bundles it. It then does `new Worker("")`, which
+// resolves to the page's own HTML: a Worker that never replies and never
+// errors, leaving every tile stuck in state "loading" and the map showing
+// nothing but its background colour. Pointing MapLibre at the real worker,
+// served from /public (kept in sync by scripts/copy-maplibre-worker.mjs),
+// avoids the bundler for this one asset.
+// Must run before any Map is constructed.
+setWorkerUrl("/maplibre/maplibre-gl-worker.mjs");
 
 export const KIND_COLORS: Record<RouteKind, string> = {
   fast: "#2563eb",
@@ -25,6 +38,7 @@ const TIER_COLORS: Record<string, string> = {
   caution: "#f59e0b",
   unsafe: "#dc2626",
 };
+const ROUTE_KINDS: RouteKind[] = ["fast", "balanced", "safe"];
 
 interface Props {
   routes: RouteAlternative[];
@@ -33,68 +47,125 @@ interface Props {
   origin: LatLon | null;
   destination: LatLon | null;
   onSetPoint: (which: "origin" | "destination", p: LatLon) => void;
+  /** Origin came from live GPS — render it as a location puck, not a pin. */
+  originIsLive?: boolean;
+  /** Recenter the map on this point when it changes identity. */
+  flyTo?: LatLon | null;
 }
 
-const EMPTY_FC = { type: "FeatureCollection", features: [] } as const;
+const emptyFC = (): FeatureCollection => ({ type: "FeatureCollection", features: [] });
 
 export default function MapView({
   routes, selected, onSelect, origin, destination, onSetPoint,
+  originIsLive = false, flyTo = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const originMarker = useRef<Marker | null>(null);
   const destMarker = useRef<Marker | null>(null);
-  const loadedRef = useRef(false);
+  const layersReady = useRef(false);
+  const [mapError, setMapError] = useState<string | null>(null);
   // refs so map event handlers see current state without re-registering
   const stateRef = useRef({ origin, destination, onSetPoint, onSelect });
   stateRef.current = { origin, destination, onSetPoint, onSelect };
+  const routesRef = useRef({ routes, selected });
+  routesRef.current = { routes, selected };
 
-  useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
-    const map = new MLMap({
-      container: containerRef.current,
-      style: STYLE_URL,
-      center: [-122.268, 37.845], // Berkeley/Oakland
-      zoom: 12.5,
-    });
-    map.addControl(new NavigationControl(), "top-right");
-    mapRef.current = map;
+  /** Push current route data into the map sources. Safe to call any time —
+   *  no-ops until the layers exist. */
+  const syncRoutes = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !layersReady.current) return;
+    const { routes, selected } = routesRef.current;
+    const byKind = new Map(routes.map((r) => [r.kind, r]));
 
-    map.on("load", () => {
-      const kinds: RouteKind[] = ["fast", "balanced", "safe"];
-      for (const kind of kinds) {
-        map.addSource(`route-${kind}`, { type: "geojson", data: EMPTY_FC });
-        map.addLayer({
-          id: `route-${kind}`,
-          type: "line",
-          source: `route-${kind}`,
-          layout: { "line-cap": "round", "line-join": "round" },
-          paint: {
-            "line-color": KIND_COLORS[kind],
-            "line-width": 5,
-            "line-opacity": 0.45,
-          },
-        });
-        map.on("click", `route-${kind}`, () => stateRef.current.onSelect(kind));
-        map.on("mouseenter", `route-${kind}`,
-          () => (map.getCanvas().style.cursor = "pointer"));
-        map.on("mouseleave", `route-${kind}`,
-          () => (map.getCanvas().style.cursor = ""));
+    for (const kind of ROUTE_KINDS) {
+      const r = byKind.get(kind);
+      const src = map.getSource(`route-${kind}`) as GeoJSONSource | undefined;
+      const feature: Feature = {
+        type: "Feature", properties: {}, geometry: r ? r.geometry : { type: "LineString", coordinates: [] },
+      };
+      src?.setData(r ? feature : emptyFC());
+      if (map.getLayer(`route-${kind}`)) {
+        map.setPaintProperty(`route-${kind}`, "line-opacity",
+          selected && selected !== kind ? 0.3 : 0.55);
       }
-      // selected route drawn on top, colored per-segment by safety tier
-      map.addSource("route-tiers", { type: "geojson", data: EMPTY_FC });
+    }
+
+    const sel = selected ? byKind.get(selected) : undefined;
+
+    const tiers: FeatureCollection = sel
+      ? {
+          type: "FeatureCollection",
+          features: sel.segments.map((s): Feature => ({
+            type: "Feature",
+            properties: { color: TIER_COLORS[s.tier] },
+            geometry: s.geometry,
+          })),
+        }
+      : emptyFC();
+    (map.getSource("route-tiers") as GeoJSONSource | undefined)?.setData(tiers);
+
+    const points: FeatureCollection = sel
+      ? {
+          type: "FeatureCollection",
+          features: sel.unsafe_points.map((p): Feature => ({
+            type: "Feature",
+            properties: { type: p.type },
+            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
+          })),
+        }
+      : emptyFC();
+    (map.getSource("unsafe-points") as GeoJSONSource | undefined)?.setData(points);
+  }, []);
+
+  /** Create sources/layers. Idempotent: guarded by per-id existence checks,
+   *  so it is safe to call repeatedly and after a style reload.
+   *
+   *  Deliberately gated on the style SPEC being parsed rather than on
+   *  map.isStyleLoaded(). The latter additionally waits for sources to
+   *  finish loading, which needs render frames — so on a page that isn't
+   *  compositing it never becomes true and the overlays would never be
+   *  created. addSource/addLayer only need the spec, and anything still
+   *  not ready throws and is retried by a later trigger. */
+  const initLayers = useCallback((map: MLMap) => {
+    if (!map.style) return;
+    try {
+    for (const kind of ROUTE_KINDS) {
+      const id = `route-${kind}`;
+      if (map.getSource(id)) continue;
+      map.addSource(id, { type: "geojson", data: emptyFC() });
+      map.addLayer({
+        id,
+        type: "line",
+        source: id,
+        layout: { "line-cap": "round", "line-join": "round" },
+        paint: {
+          "line-color": KIND_COLORS[kind],
+          "line-width": 5,
+          "line-opacity": 0.45,
+        },
+      });
+      map.on("click", id, () => stateRef.current.onSelect(kind));
+      map.on("mouseenter", id, () => (map.getCanvas().style.cursor = "pointer"));
+      map.on("mouseleave", id, () => (map.getCanvas().style.cursor = ""));
+    }
+
+    // selected route drawn on top, colored per-segment by safety tier
+    if (!map.getSource("route-tiers")) {
+      map.addSource("route-tiers", { type: "geojson", data: emptyFC() });
       map.addLayer({
         id: "route-tiers",
         type: "line",
         source: "route-tiers",
         layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": ["get", "color"],
-          "line-width": 6,
-        },
+        paint: { "line-color": ["get", "color"], "line-width": 6 },
       });
-      // flagged unsafe maneuvers on the selected route
-      map.addSource("unsafe-points", { type: "geojson", data: EMPTY_FC });
+    }
+
+    // flagged unsafe maneuvers on the selected route
+    if (!map.getSource("unsafe-points")) {
+      map.addSource("unsafe-points", { type: "geojson", data: emptyFC() });
       map.addLayer({
         id: "unsafe-points",
         type: "circle",
@@ -124,14 +195,82 @@ export default function MapView({
         const label = f.properties?.type === "unprotected_left"
           ? "Unprotected left turn onto a busy street"
           : "Uncontrolled crossing of a busy street";
-        new Popup()
-          .setLngLat(ev.lngLat)
-          .setHTML(`<strong>${label}</strong>`)
-          .addTo(map);
+        new Popup().setLngLat(ev.lngLat).setHTML(`<strong>${label}</strong>`).addTo(map);
       });
-      loadedRef.current = true;
-      syncRoutes();
+    }
+
+    layersReady.current = true;
+    syncRoutes();
+    } catch {
+      // Style spec not ready yet; load/style.load/visibilitychange/interval
+      // all retry, and every step above is idempotent.
+    }
+  }, [syncRoutes]);
+
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+    const map = new MLMap({
+      container: containerRef.current,
+      style: STYLE_URL,
+      center: [-122.268, 37.845], // Berkeley/Oakland
+      zoom: 12.5,
     });
+    map.addControl(new NavigationControl(), "top-right");
+    mapRef.current = map;
+
+    // Surface failures instead of swallowing them. Without this, a broken
+    // style or tile source leaves a silently blank map with no diagnostic.
+    map.on("error", (e) => {
+      const msg = (e as { error?: Error })?.error?.message ?? "unknown map error";
+      console.error("[MapView]", msg);
+      setMapError(msg);
+    });
+
+    // The style may already be loaded by the time we attach (e.g. a cached
+    // style on remount), in which case "load" never fires again — so try
+    // immediately, and also on both style events.
+    // "styledata" fires as soon as the style spec is parsed, well before the
+    // "load" event (which also waits on sources and therefore on rendering).
+    const tryInit = () => initLayers(map);
+    map.on("load", tryInit);
+    map.on("style.load", tryInit);
+    map.on("styledata", tryInit);
+    tryInit();
+
+    // MapLibre only auto-resizes on WINDOW resize. When the container starts
+    // at zero size (created before layout, or while the tab/pane is hidden)
+    // the canvas sticks at MapLibre's 400x300 fallback forever and the map
+    // renders into a corner of a blank area. Watch the container itself.
+    const ro = new ResizeObserver(() => map.resize());
+    ro.observe(containerRef.current);
+
+    // Belt and braces: ResizeObserver callbacks are delivered during the
+    // page's rendering steps, so a page that never composites (hidden tab,
+    // some embedded panes) never gets them — the very situation that leaves
+    // the canvas stranded at 400x300. A timer is not tied to rendering, so
+    // this reconciles the two sizes even then. Costs two reads per tick and
+    // only calls resize() on a genuine mismatch.
+    const reconcile = window.setInterval(() => {
+      const el = containerRef.current;
+      if (!el) return;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      if (w === 0 || h === 0) return;
+      const canvas = map.getCanvas();
+      if (canvas.clientWidth !== w || canvas.clientHeight !== h) map.resize();
+      if (!layersReady.current) tryInit();
+    }, 500);
+
+    // A hidden page does not composite, so requestAnimationFrame never runs
+    // and the map cannot render or finish loading. Kick it when we become
+    // visible again.
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      map.resize();
+      map.triggerRepaint();
+      tryInit();
+    };
+    document.addEventListener("visibilitychange", onVisible);
 
     map.on("click", (ev) => {
       // clicks on route/marker layers are handled above; only set endpoints
@@ -144,106 +283,102 @@ export default function MapView({
       const p = { lat: ev.lngLat.lat, lon: ev.lngLat.lng };
       const s = stateRef.current;
       if (!s.origin) s.onSetPoint("origin", p);
-      else if (!s.destination) s.onSetPoint("destination", p);
       else s.onSetPoint("destination", p);
     });
 
     return () => {
+      ro.disconnect();
+      window.clearInterval(reconcile);
+      document.removeEventListener("visibilitychange", onVisible);
       map.remove();
       mapRef.current = null;
-      loadedRef.current = false;
+      layersReady.current = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initLayers]);
 
-  function syncRoutes() {
-    const map = mapRef.current;
-    if (!map || !loadedRef.current) return;
-    const byKind = new Map(routes.map((r) => [r.kind, r]));
-    for (const kind of ["fast", "balanced", "safe"] as RouteKind[]) {
-      const r = byKind.get(kind);
-      const src = map.getSource(`route-${kind}`) as GeoJSONSource;
-      src?.setData(r
-        ? { type: "Feature", properties: {}, geometry: r.geometry }
-        : (EMPTY_FC as never));
-      if (map.getLayer(`route-${kind}`)) {
-        map.setPaintProperty(`route-${kind}`, "line-opacity",
-          selected && selected !== kind ? 0.3 : 0.55);
-      }
-    }
-    const sel = selected ? byKind.get(selected) : undefined;
-    const tierSrc = map.getSource("route-tiers") as GeoJSONSource;
-    tierSrc?.setData(sel
-      ? {
-          type: "FeatureCollection",
-          features: sel.segments.map((s) => ({
-            type: "Feature",
-            properties: { color: TIER_COLORS[s.tier] },
-            geometry: s.geometry,
-          })),
-        }
-      : (EMPTY_FC as never));
-    const ptSrc = map.getSource("unsafe-points") as GeoJSONSource;
-    ptSrc?.setData(sel
-      ? {
-          type: "FeatureCollection",
-          features: sel.unsafe_points.map((p) => ({
-            type: "Feature",
-            properties: { type: p.type },
-            geometry: { type: "Point", coordinates: [p.lon, p.lat] },
-          })),
-        }
-      : (EMPTY_FC as never));
-  }
-
-  // routes/selection -> layers
+  // routes/selection -> layers, and fit the viewport to the new routes
   useEffect(() => {
     syncRoutes();
-    // fit map to the routes once per new route set
     const map = mapRef.current;
     if (map && routes.length > 0) {
       const coords = routes.flatMap((r) => r.geometry.coordinates);
-      const lons = coords.map((c) => c[0]);
-      const lats = coords.map((c) => c[1]);
-      map.fitBounds(
-        [[Math.min(...lons), Math.min(...lats)],
-         [Math.max(...lons), Math.max(...lats)]],
-        { padding: 60, duration: 400 },
-      );
+      if (coords.length) {
+        const lons = coords.map((c) => c[0]);
+        const lats = coords.map((c) => c[1]);
+        map.fitBounds(
+          [[Math.min(...lons), Math.min(...lats)],
+           [Math.max(...lons), Math.max(...lats)]],
+          { padding: 60, duration: 400 },
+        );
+      }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routes, selected]);
+  }, [routes, selected, syncRoutes]);
+
+  // explicit recenter request (e.g. first GPS fix, or the locate button)
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !flyTo) return;
+    map.flyTo({ center: [flyTo.lon, flyTo.lat], zoom: Math.max(map.getZoom(), 14), duration: 800 });
+  }, [flyTo]);
 
   // endpoint markers
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     const sync = (
-      ref: React.MutableRefObject<Marker | null>,
+      ref: React.RefObject<Marker | null>,
       point: LatLon | null,
       color: string,
       which: "origin" | "destination",
+      live: boolean,
     ) => {
       if (!point) {
         ref.current?.remove();
         ref.current = null;
         return;
       }
+      // A live-GPS origin renders as a puck rather than a draggable pin, so
+      // it reads differently from a point the user placed deliberately.
+      const wantsPuck = which === "origin" && live;
+      const isPuck = ref.current?.getElement().classList.contains("gps-puck");
+      if (ref.current && isPuck !== wantsPuck) {
+        ref.current.remove();
+        ref.current = null;
+      }
       if (!ref.current) {
-        ref.current = new Marker({ color, draggable: true })
-          .setLngLat([point.lon, point.lat])
-          .addTo(map);
-        ref.current.on("dragend", () => {
-          const p = ref.current!.getLngLat();
-          stateRef.current.onSetPoint(which, { lat: p.lat, lon: p.lng });
-        });
+        let marker: Marker;
+        if (wantsPuck) {
+          const el = document.createElement("div");
+          el.className = "gps-puck";
+          marker = new Marker({ element: el });
+        } else {
+          marker = new Marker({ color, draggable: true });
+          marker.on("dragend", () => {
+            const p = marker.getLngLat();
+            stateRef.current.onSetPoint(which, { lat: p.lat, lon: p.lng });
+          });
+        }
+        marker.setLngLat([point.lon, point.lat]).addTo(map);
+        ref.current = marker;
       } else {
         ref.current.setLngLat([point.lon, point.lat]);
       }
     };
-    sync(originMarker, origin, "#0f766e", "origin");
-    sync(destMarker, destination, "#b91c1c", "destination");
-  }, [origin, destination]);
+    sync(originMarker, origin, "#0f766e", "origin", originIsLive);
+    sync(destMarker, destination, "#b91c1c", "destination", false);
+  }, [origin, destination, originIsLive]);
 
-  return <div ref={containerRef} style={{ width: "100%", height: "100%" }} />;
+  return (
+    <div className="map-root">
+      <div ref={containerRef} className="map-canvas" />
+      {mapError && (
+        <div className="map-error">
+          <span>Map error: {mapError}</span>
+          <button type="button" onClick={() => setMapError(null)} aria-label="Dismiss">
+            ×
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }

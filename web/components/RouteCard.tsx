@@ -2,24 +2,16 @@
 
 import { KIND_COLORS } from "./MapView";
 import { RouteAlternative } from "@/lib/types";
+import { UnitSystem, formatDistance, formatDuration } from "@/lib/units";
 
 interface Props {
   route: RouteAlternative;
+  units: UnitSystem;
   selected: boolean;
   onSelect: () => void;
 }
 
-function fmtEta(s: number): string {
-  const min = Math.round(s / 60);
-  if (min < 60) return `${min} min`;
-  return `${Math.floor(min / 60)} h ${min % 60} min`;
-}
-
-function fmtDist(m: number): string {
-  return `${(m / 1000).toFixed(1)} km`;
-}
-
-export default function RouteCard({ route, selected, onSelect }: Props) {
+export default function RouteCard({ route, units, selected, onSelect }: Props) {
   const color = KIND_COLORS[route.kind];
   const u = route.unsafe;
   return (
@@ -33,8 +25,8 @@ export default function RouteCard({ route, selected, onSelect }: Props) {
         <span className="kind-badge" style={{ background: color }}>
           {route.kind}
         </span>
-        <span className="eta">{fmtEta(route.eta_s)}</span>
-        <span className="dist">{fmtDist(route.distance_m)}</span>
+        <span className="eta">{formatDuration(route.eta_s)}</span>
+        <span className="dist">{formatDistance(route.distance_m, units)}</span>
       </div>
       <div className="route-card-unsafe">
         {u.total === 0 ? (

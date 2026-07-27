@@ -9,7 +9,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api import geocode, routes
+from api import geocode, meta, routes
 from api.state import AppState
 
 
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
     )
     app.include_router(routes.router)
     app.include_router(geocode.router)
+    app.include_router(meta.router)
 
     @app.get("/health")
     def health():
