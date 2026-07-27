@@ -109,14 +109,61 @@ def unprotected_left_city():
     return pack, ids
 
 
-def cross_with_control(control: Control):
-    """Busy E-W primary arterial crossing a quiet N-S residential street.
+def stop_sign_left_city(side_street_m: float = 500.0):
+    """The user-reported scenario: a left from a stop-controlled side street
+    across a 4-lane arterial, with a signalized intersection a block over.
+
+           A0 --- A1 --- A2 --- A3     <- 4-lane arterial (2 lanes/direction)
+                   |      |
+                  SW ---- S            <- residential side streets
+
+    A1 is signalized (every leg). A2 is a 2-way stop: the side street stops,
+    the arterial does not — so a left there means finding a gap in four lanes
+    of traffic, with nothing holding it back.
+
+    Origin S, destination A0 (west along the arterial).
+      fast: S->A2, LEFT at A2 from the stop line          [counted unsafe]
+      safe: S->SW->A1, LEFT at A1 under the signal        [not counted]
+
+    `side_street_m` lengthens the detour, for testing the detour budget.
+    """
+    b = GraphBuilder()
+    a0 = b.node(0.0, -0.008)
+    a1 = b.node(0.0, -0.004, control=Control.SIGNAL_PERMISSIVE)
+    a2 = b.node(0.0, 0.0, control=Control.STOP_2WAY)
+    a3 = b.node(0.0, 0.004)
+    s = b.node(-0.004, 0.0)
+    sw = b.node(-0.004, -0.004)
+    arterial = dict(road_class=RoadClass.primary, speed_kph=56, lanes=2,
+                    length_m=500.0)
+    b.edge(a0, a1, **arterial)
+    b.edge(a1, a2, **arterial)
+    b.edge(a2, a3, **arterial)
+    b.edge(s, a2, length_m=500.0)
+    b.edge(s, sw, length_m=side_street_m)
+    b.edge(sw, a1, length_m=side_street_m)
+    return b.build(), dict(a0=a0, a1=a1, a2=a2, a3=a3, s=s, sw=sw)
+
+
+def cross_with_control(control: Control | None, **crossed):
+    """Busy E-W arterial crossing a quiet N-S residential street.
 
     Returns (pack, ids) where ids maps 'c','n','s','e','w' to node ids.
     The interesting maneuvers, approaching from the south (edge s->c):
       LEFT  onto c->w  (left onto the busy arterial)
       STRAIGHT onto c->n (crossing the busy arterial)
+
+    control=None leaves the junction untagged, so the road-class heuristic in
+    ingestion/controls.py decides and the approach comes out INFERRED — the
+    only way to get a non-OBSERVED approach out of a toy graph. An explicit
+    Control pins it via control_override and counts as OBSERVED.
+
+    `crossed` overrides the E-W road's attributes (road_class / speed_kph /
+    lanes), for separating "busy" from "major".
     """
+    arterial = dict(road_class=RoadClass.primary, speed_kph=56, lanes=2,
+                    length_m=500.0)
+    arterial.update(crossed)
     b = GraphBuilder()
     c = b.node(0.0, 0.0, control=control)
     n = b.node(0.004, 0.0)
@@ -125,8 +172,8 @@ def cross_with_control(control: Control):
     w = b.node(0.0, -0.004)
     b.edge(s, c, length_m=500.0)   # residential 36 km/h
     b.edge(c, n, length_m=500.0)
-    b.edge(w, c, road_class=RoadClass.primary, speed_kph=56, lanes=2, length_m=500.0)
-    b.edge(c, e, road_class=RoadClass.primary, speed_kph=56, lanes=2, length_m=500.0)
+    b.edge(w, c, **arterial)
+    b.edge(c, e, **arterial)
     pack = b.build()
     ids = {"c": c, "n": n, "s": s, "e": e, "w": w}
     return pack, ids

@@ -24,13 +24,18 @@ class GraphBuilder:
         self._next_way = 100
 
     def node(self, lat: float, lon: float,
-             control: Control | None = None) -> int:
-        """Add a node. control=None leaves the node untagged so the
-        production inference heuristic decides; an explicit Control pins it
-        via the control_override hook."""
+             control: Control | None = None, **tags) -> int:
+        """Add a node.
+
+        control=None leaves the node untagged so the production inference
+        heuristic decides (yielding ControlConfidence.INFERRED); an explicit
+        Control pins it via the control_override hook (OBSERVED). Extra
+        keyword arguments become raw OSM node tags — use them to place real
+        `highway=stop` / `highway=traffic_signals` nodes.
+        """
         nid = self._next_node
         self._next_node += 1
-        attrs = {"y": lat, "x": lon}
+        attrs = {"y": lat, "x": lon, **tags}
         if control is not None:
             attrs["control_override"] = control.name
         self.G.add_node(nid, **attrs)
@@ -64,8 +69,9 @@ class GraphBuilder:
             self._median_overrides = getattr(self, "_median_overrides", [])
             self._median_overrides.append((u, v, median))
 
-    def build(self, region: str = "toy") -> GraphPack:
-        pack = build_pack(self.G, self.cfg, region)
+    def build(self, region: str = "toy", observed_controls=None) -> GraphPack:
+        pack = build_pack(self.G, self.cfg, region,
+                          observed_controls=observed_controls)
         for (u, v, median) in getattr(self, "_median_overrides", []):
             import numpy as np
             mask = ((pack.edge_tail == u) & (pack.edge_head == v)) | \

@@ -40,7 +40,20 @@ export interface RouteAlternative {
   unsafe: UnsafeCounts;
   segments: Segment[];
   unsafe_points: UnsafePoint[];
+  /** Extra time versus the fastest route in the same response, as a fraction. */
+  detour_pct: number;
 }
+
+/** How far out of the way the router may go for a safer crossing, as a
+ *  fraction of the fastest route's time. 0 means "no detour at all". */
+export const DETOUR_BUDGET_OPTIONS: { label: string; value: number }[] = [
+  { label: "Off", value: 0 },
+  { label: "A block", value: 0.1 },
+  { label: "A few blocks", value: 0.25 },
+  { label: "Whatever it takes", value: 0.5 },
+];
+
+export const DEFAULT_DETOUR_BUDGET = 0.25;
 
 export interface RouteResponse {
   routes: RouteAlternative[];

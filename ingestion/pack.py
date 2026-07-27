@@ -20,13 +20,29 @@ from ingestion.enrich import (
     road_class_from_highway,
 )
 from pyref.config import Config
-from pyref.graph import ROAD_CLASS_RANK, GraphPack, RoadClass
+from pyref.graph import (
+    ROAD_CLASS_RANK,
+    Control,
+    ControlConfidence,
+    GraphPack,
+    RoadClass,
+)
 
 KPH_TO_MPS = 1.0 / 3.6
 
 
-def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None) -> GraphPack:
+def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None,
+               observed_controls: dict | None = None) -> GraphPack:
+    """Assemble the pack.
+
+    `observed_controls` maps (junction_osmid, from_osmid) -> ApproachControl,
+    as produced by ingestion.approach_controls.harvest(). Approaches it covers
+    are marked OBSERVED; the rest fall back to the road-class heuristic in
+    controls.py and are marked INFERRED. Passing None (toy graphs, tests that
+    build their own topology) makes every approach INFERRED.
+    """
     region = region or cfg.region_name
+    observed_controls = observed_controls or {}
 
     # ---------------------------------------------------------------- nodes
     node_ids = sorted(G.nodes)
@@ -121,6 +137,7 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None) -> Gr
     node_control = np.zeros(N, dtype=np.uint8)
     edge_approach_control = np.zeros(E, dtype=np.uint8)
     edge_must_stop = np.zeros(E, dtype=np.uint8)
+    edge_control_confidence = np.full(E, int(ControlConfidence.INFERRED), dtype=np.uint8)
 
     for i, osmid in enumerate(node_ids):
         preds = set(G.predecessors(osmid))
@@ -132,15 +149,34 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None) -> Gr
             ROAD_CLASS_RANK[RoadClass(int(edge_road_class[e]))]
             for e in in_edges_by_node[i]
         ]
-        ctrl = controls.classify_node_control(
+        ctrl, ctrl_conf = controls.classify_node_control(
             G.nodes[osmid], incident_data, num_legs, approach_ranks
         )
-        node_control[i] = int(ctrl)
-        for e in in_edges_by_node[i]:
+        observed_here = [observed_controls.get((osmid, int(node_osmid[edge_tail[e]])))
+                         for e in in_edges_by_node[i]]
+        # A roundabout is recognised from the `junction` tag on the incident
+        # WAYS, which survives simplification — the approach walk only reads
+        # node tags and cannot see it. An edge-tagged roundabout therefore keeps
+        # precedence over any stop or give_way node harvested on its approaches.
+        if ctrl == Control.ROUNDABOUT:
+            observed_here = [None] * len(observed_here)
+        # node_control is a debug/reporting summary; the cost model reads
+        # edge_approach_control. Report the harvested control when every
+        # approach agrees on one, else keep the node-level classification.
+        seen = {a.control for a in observed_here if a is not None}
+        node_control[i] = int(seen.pop()) if len(seen) == 1 else int(ctrl)
+
+        for e, observed in zip(in_edges_by_node[i], observed_here):
+            if observed is not None:
+                edge_approach_control[e] = int(observed.control)
+                edge_must_stop[e] = 1 if observed.must_stop else 0
+                edge_control_confidence[e] = int(observed.confidence)
+                continue
             rank = ROAD_CLASS_RANK[RoadClass(int(edge_road_class[e]))]
             ac, must = controls.resolve_approach(ctrl, rank, approach_ranks)
             edge_approach_control[e] = int(ac)
             edge_must_stop[e] = 1 if must else 0
+            edge_control_confidence[e] = int(ctrl_conf)
 
     # ----------------------------------------------------------- turn table
     bearing_in, bearing_out = turns.edge_bearings(geom_lat, geom_lon, edge_geom_ptr)
@@ -161,6 +197,9 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None) -> Gr
         "stats": {
             "pct_speed_defaulted": round(100.0 * float(speed_defaulted.mean()), 1) if E else 0.0,
             "pct_lanes_defaulted": round(100.0 * float(lanes_defaulted.mean()), 1) if E else 0.0,
+            "pct_control_observed": round(
+                100.0 * float((edge_control_confidence
+                               == int(ControlConfidence.OBSERVED)).mean()), 1) if E else 0.0,
         },
     }
 
@@ -175,6 +214,7 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None) -> Gr
         edge_bearing_in=bearing_in, edge_bearing_out=bearing_out,
         edge_approach_control=edge_approach_control,
         edge_must_stop=edge_must_stop,
+        edge_control_confidence=edge_control_confidence,
         edge_osm_way=edge_osm_way,
         edge_geom_ptr=edge_geom_ptr, geom_lat=geom_lat, geom_lon=geom_lon,
         turn_ptr=turn_ptr, turn_out_edge=turn_out_edge,

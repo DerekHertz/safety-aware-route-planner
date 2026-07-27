@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pyref.graph import Control, GraphPack, Maneuver, RoadClass
+from pyref.graph import Control, ControlConfidence, GraphPack, Maneuver, RoadClass
 
 
 def report(pack: GraphPack) -> str:
@@ -22,8 +22,19 @@ def report(pack: GraphPack) -> str:
         lines.append(f"{name}: " + "  ".join(parts))
 
     hist("node controls", pack.node_control, Control)
+    hist("approach controls", pack.edge_approach_control, Control)
+    hist("control confidence", pack.edge_control_confidence, ControlConfidence)
     hist("edge road classes", pack.edge_road_class, RoadClass)
     hist("turn maneuvers", pack.turn_maneuver, Maneuver)
+
+    # The share of approaches whose control came from a tag rather than the
+    # road-class heuristic. Only OBSERVED approaches can be counted as unsafe
+    # maneuvers (see pyref/costs.py), so this is the headline accuracy number:
+    # it was effectively 12% of nodes before approach-arm control nodes were
+    # recovered from the unsimplified graph.
+    observed = pack.edge_control_confidence == int(ControlConfidence.OBSERVED)
+    lines.append(f"approaches with OBSERVED control: {int(observed.sum()):,} "
+                 f"({100.0 * float(observed.mean() if pack.num_edges else 0.0):.1f}%)")
 
     two_way = int((pack.edge_reverse >= 0).sum())
     lines.append(f"two-way paired edges: {two_way:,} ({100.0 * two_way / max(pack.num_edges, 1):.1f}%)")

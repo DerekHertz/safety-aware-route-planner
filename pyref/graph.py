@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-PACK_FORMAT_VERSION = 1
+PACK_FORMAT_VERSION = 2
 
 
 class Control(IntEnum):
@@ -30,6 +30,24 @@ class Control(IntEnum):
     SIGNAL_PERMISSIVE = 3
     SIGNAL_PROTECTED = 4
     ROUNDABOUT = 5
+    YIELD = 6             # highway=give_way; priority rules like STOP_2WAY
+
+
+class ControlConfidence(IntEnum):
+    """Where an approach's control came from.
+
+    OBSERVED means an OSM tag said so (a traffic_signals / stop / give_way /
+    roundabout node was actually found). INFERRED means the road-class
+    heuristic in ingestion/controls.py guessed it. The distinction is
+    load-bearing: pyref/costs.py counts a maneuver as unsafe only when the
+    governing approach is OBSERVED, so the user-facing badge never presents a
+    guess as fact. Inferred approaches still receive a (reduced) routing
+    penalty, which keeps the preference for known-controlled intersections
+    without asserting the unknown one is dangerous.
+    """
+    UNKNOWN = 0
+    INFERRED = 1
+    OBSERVED = 2
 
 
 class Maneuver(IntEnum):
@@ -97,7 +115,8 @@ class GraphPack:
     edge_bearing_in: np.ndarray   # f64 (deg, first geometry segment)
     edge_bearing_out: np.ndarray  # f64 (deg, last geometry segment)
     edge_approach_control: np.ndarray  # u8 (control governing arrival at head)
-    edge_must_stop: np.ndarray    # u8 (this approach must stop)
+    edge_must_stop: np.ndarray    # u8 (this approach must stop or yield)
+    edge_control_confidence: np.ndarray  # u8 (ControlConfidence enum)
     edge_osm_way: np.ndarray      # i64 (debug)
 
     # geometry pool (rendering/snapping only — never in the hot loop)
@@ -186,6 +205,7 @@ class GraphPack:
             "arrays": arrays_manifest,
             "enums": {
                 "control": {c.name: int(c) for c in Control},
+                "control_confidence": {c.name: int(c) for c in ControlConfidence},
                 "maneuver": {m.name: int(m) for m in Maneuver},
                 "road_class": {r.name: int(r) for r in RoadClass},
             },

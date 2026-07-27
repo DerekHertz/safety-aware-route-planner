@@ -26,6 +26,16 @@ class RoutingError(Exception):
     """User-facing routing problem (bad snap, no path...)."""
 
 
+def _with_detour_pct(routes: list["RouteOut"]) -> list["RouteOut"]:
+    """Fill in each route's extra time relative to the fastest one returned,
+    so the UI can show what a safer route actually costs."""
+    fastest = min((r.eta_s for r in routes), default=0.0)
+    if fastest > 0:
+        for r in routes:
+            r.detour_pct = (r.eta_s - fastest) / fastest
+    return routes
+
+
 @dataclass
 class RouteOut:
     """One route in (almost) API-contract shape."""
@@ -36,6 +46,7 @@ class RouteOut:
     unsafe: dict
     segments: list[dict]
     unsafe_points: list[dict]
+    detour_pct: float = 0.0   # extra time vs the fastest route in this response
 
 
 class Router:
@@ -71,7 +82,8 @@ class Router:
     def route(self, origin_lat: float, origin_lon: float,
               dest_lat: float, dest_lon: float,
               departure: datetime.datetime,
-              safety_enabled: bool = True) -> list[RouteOut]:
+              safety_enabled: bool = True,
+              detour_budget_pct: float | None = None) -> list[RouteOut]:
         cfg = self.cfg
         pack = self.pack
         sc = cfg["search"]
@@ -109,17 +121,21 @@ class Router:
         if cfg["search"]["algo"] == "astar":
             h = heuristic(pack, qc, d_cands[0].lat, d_cands[0].lon)
 
-        alts = self._alternatives(qc, seeds, dests, h, safety_enabled)
+        alts = self._alternatives(qc, seeds, dests, h, safety_enabled,
+                                  detour_budget_pct)
         if not alts:
             raise RoutingError("no route found between these points")
-        return [self._describe(a.kind, a.result, qc,
-                               o_by_edge[a.result.first_edge],
-                               d_by_edge[a.result.dest_edge]) for a in alts]
+        routes = [self._describe(a.kind, a.result, qc,
+                                 o_by_edge[a.result.first_edge],
+                                 d_by_edge[a.result.dest_edge]) for a in alts]
+        return _with_detour_pct(routes)
 
-    def _alternatives(self, qc, seeds, dests, h, safety_enabled) -> list[Alternative]:
+    def _alternatives(self, qc, seeds, dests, h, safety_enabled,
+                      detour_budget_pct) -> list[Alternative]:
         return compute_alternatives(
             self.pack, qc, self.topo, seeds, dests, h, self.cfg, safety_enabled,
-            run=lambda ac, hh, s, d: self._shortest_path(ac, hh, s, d))
+            run=lambda ac, hh, s, d: self._shortest_path(ac, hh, s, d),
+            detour_budget_pct=detour_budget_pct)
 
     def _describe(self, kind: str, result: PathResult, qc,
                   oc: SnapCandidate, dc: SnapCandidate) -> RouteOut:

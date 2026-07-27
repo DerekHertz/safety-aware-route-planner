@@ -23,6 +23,7 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
             body.destination.lat, body.destination.lon,
             departure=departure,
             safety_enabled=body.safety_enabled,
+            detour_budget_pct=body.detour_budget_pct,
         )
     except RoutingError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -35,6 +36,7 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
             "unsafe": r.unsafe,
             "segments": r.segments,
             "unsafe_points": r.unsafe_points,
+            "detour_pct": r.detour_pct,
         }
         for r in routes
     ])

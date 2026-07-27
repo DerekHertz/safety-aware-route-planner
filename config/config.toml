@@ -9,6 +9,13 @@
 active = "berkeley_oakland"
 network_type = "drive"
 
+[ingest]
+# How far up an approach arm a stop/signal/give_way node may sit and still be
+# read as control for that approach. OSM maps these at the stop line, a few
+# metres before the junction node; 30 m covers normal setbacks (including wide
+# arterials) without reaching a mid-block crossing on the next segment.
+max_control_offset_m = 30.0
+
 [region.presets.berkeley_small]
 # ~2x2 km central Berkeley dev box: fast Overpass pull, fast iteration.
 # bbox = [west, south, east, north]  (OSMnx v2 order: left, bottom, right, top)
@@ -78,6 +85,27 @@ stop4way_factor = 0.25        # multiplies raw at all-way stops
 # Without this factor, high-lambda routes flee arterials into residential
 # zigzags and rack up MORE counted unsafe crossings than the fast route.
 right_of_way_factor = 0.2
+# give_way approach. A yield constrains a LEFT across traffic much more than it
+# constrains going straight or right, so the two get different treatment: a
+# yielding left keeps yield_factor, while a yielding straight/right is handled
+# like a right-of-way movement at yield_row_factor. Composing the two would put
+# a yield-controlled straight BELOW a green light, and applying neither put it
+# 3x above one — both wrong. Ordering to preserve, for a straight:
+#   protected/roundabout 0  <  signal or stop-with-priority 0.2
+#                           <  yield 0.35  <  stop-and-must-stop 1.0
+yield_factor = 0.6
+yield_row_factor = 0.35
+# A left at a signal is discounted but not exonerated. OSM essentially never
+# records whether a signalized left has a protected arrow or is permissive, so
+# every signal reads as SIGNAL_PERMISSIVE. Routing toward signalized
+# intersections is the whole point of this planner, so the discount is large;
+# it is tuned to land a permissive left onto a busy arterial (raw ~1.9) inside
+# the caution band [tau_caution, tau_unsafe) — visible on the map, not counted.
+signal_left_factor = 0.35
+# Inferred control is a guess (see ControlConfidence). Where the guess is what
+# makes a maneuver expensive — an unprotected approach nobody tagged — damp the
+# penalty rather than assert a hazard. Observed approaches are untouched.
+inferred_confidence_factor = 0.5
 uturn_fixed_penalty_s = 30.0  # flat extra for the rare allowed (dead-end) U-turn
 # Normalization caps: norm(x) = clip(x / cap, 0, 1)
 speed_norm_max_mps = 27.8     # 100 km/h
@@ -102,6 +130,12 @@ a_speed = 0.4
 a_lanes = 0.3
 a_vol = 0.3
 busy_threshold = 0.45
+# "Major" = busy AND physically big. A stop-controlled left or straight across
+# a major road is counted unsafe; the same maneuver across a merely-busy
+# 2-lane street is not. major_lanes_min is PER DIRECTION, so 2 means a 4-lane
+# road — the "across 4 lanes from a lone stop sign" case.
+major_lanes_min = 2
+major_class_max = "secondary"
 
 # -----------------------------------------------------------------------------
 # Tier bands on the post-override raw score (for map coloring), and the
@@ -121,6 +155,16 @@ lambda_safe = 1.5
 jaccard_threshold = 0.8       # above this overlap two routes are "the same"
 penalty_factor = 1.3          # arc-cost inflation on shared edges during rerun
 max_reruns = 2
+# How much longer than the fastest route the "safe" alternative may be in
+# exchange for avoiding every counted unsafe maneuver outright. The lambda
+# sweep alone only trades penalty against time; this is a hard avoid, capped by
+# a budget, which is what makes "go two blocks over to the light" reliable.
+# Clients override per request (RouteRequest.detour_budget_pct); 0 disables it.
+detour_budget_pct = 0.25
+# Arc-cost surcharge on a counted unsafe maneuver during the hard-avoid run.
+# Large but finite: an infinite cost would disconnect the graph when no clean
+# route exists, and would break the A* heuristic's admissibility.
+avoid_surcharge_s = 1.0e6
 
 [search]
 algo = "astar"                # "astar" | "dijkstra"

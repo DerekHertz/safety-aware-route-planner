@@ -7,6 +7,7 @@ export async function fetchRoutes(
   destination: LatLon,
   departureTime: string | null,
   safetyEnabled: boolean,
+  detourBudgetPct: number,
 ): Promise<RouteResponse> {
   const resp = await fetch(`${API_BASE}/route`, {
     method: "POST",
@@ -16,6 +17,7 @@ export async function fetchRoutes(
       destination,
       departure_time: departureTime,
       safety_enabled: safetyEnabled,
+      detour_budget_pct: detourBudgetPct,
     }),
   });
   if (!resp.ok) {

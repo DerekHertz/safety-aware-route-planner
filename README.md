@@ -36,14 +36,24 @@ Key design points:
   (asserted by `tests/test_parity_cpp.py`).
 - **Cost model** (all weights in `config/config.toml`):
   `raw = w_man·sev + w_speed·norm(speed) + w_lanes·norm(lanes) + w_vol·norm(vol) − w_med·median`,
-  control override (protected/roundabout → 0, all-way stop → ×0.25,
-  right-of-way straights/rights → ×0.2), `penalty_s = k·max(raw,0)`,
+  control override (protected/roundabout → 0, all-way stop → ×0.25, give-way
+  straight/right → ×0.35 and give-way left → ×0.6, right-of-way
+  straights/rights → ×0.2, signalized left → ×0.35, inferred-unprotected →
+  ×0.5), `penalty_s = k·max(raw,0)`,
   `g = time + λ·penalty`. The same post-override raw drives the unsafe-action
-  counters (`raw > τ` + per-type predicate) and the safe/caution/unsafe tiers.
+  counters (`raw ≥ τ` + per-type predicate + OBSERVED control) and the
+  safe/caution/unsafe tiers.
 - **Alternatives**: λ sweep (0 / 0.5 / 1.5) → Jaccard dedup (0.8) →
   penalty-method rerun for genuine diversity, with a guard that drops a
   diversified route if it is safety-worse than the un-inflated optimum.
   Labels are assigned after dedup: lowest-λ survivor = fast, highest = safe.
+- **Detour budget** (`detour_budget_pct`, default 0.25): how far out of the
+  way the safe route may go for a safer crossing, as a fraction of the fastest
+  route's time. λ alone cannot express this — it trades penalty against time
+  at a fixed exchange rate with no notion of how far the user will actually
+  go. The budget works both ways: when λ will not buy a detour the budget
+  allows, a hard-avoid run forces it; when λ produces a route longer than the
+  budget allows, that alternative is dropped. Each route reports `detour_pct`.
 - **`safety_enabled=false`**: λ forced to 0, single fast route; unsafe
   counters are still computed and reported.
 - **Traffic**: deterministic synthetic hourly profiles by road-class group;
@@ -76,22 +86,29 @@ The engine implementation is chosen by `[engine] impl` in
 
 Regions are presets in `[region.presets]`; build a pack with
 `python -m ingestion.build_pack --region <name>`. Raw OSM downloads are
-cached in `data/cache/` so Overpass is hit once per region.
+cached in `data/cache/` so Overpass is hit once per region. Cache filenames
+carry `INGEST_SCHEMA_VERSION` (`ingestion/download.py`) — bump it whenever tag
+retention or simplification changes, or a stale cache will keep feeding the
+old data into new code.
 
 ## API contract (frozen — a future mobile client reuses it)
 
-`POST /route` `{origin:{lat,lon}, destination:{lat,lon}, departure_time, safety_enabled}` →
+`POST /route` `{origin:{lat,lon}, destination:{lat,lon}, departure_time,
+safety_enabled, detour_budget_pct}` →
 
 ```json
 { "routes": [ {
     "kind": "fast|balanced|safe",
     "geometry": { "type": "LineString", "coordinates": [...] },
-    "distance_m": 0, "eta_s": 0,
+    "distance_m": 0, "eta_s": 0, "detour_pct": 0,
     "unsafe": { "unprotected_left": 0, "uncontrolled_crossing": 0, "total": 0 },
     "segments": [ { "geometry": {...}, "tier": "safe|caution|unsafe" } ],
     "unsafe_points": [ { "lon": 0, "lat": 0, "type": "unprotected_left|uncontrolled_crossing" } ]
 } ] }
 ```
+
+`detour_budget_pct` (request, optional — config default when omitted) and
+`detour_pct` (response) are the additive fields; everything else is unchanged.
 
 `GET /geocode?q=...` proxies Nominatim (rate-limited, identified UA, cached)
 bounded to the pack bbox. Set `SR_NOMINATIM_CONTACT` to override the
@@ -125,16 +142,69 @@ can tell whether a GPS fix falls inside the routable region. `bbox` is
 See [docs/map-provider-tradeoffs.md](docs/map-provider-tradeoffs.md) for the
 MapLibre vs Google Maps Platform evaluation.
 
+## Intersection control: observed vs inferred
+
+Whether a maneuver is unsafe depends almost entirely on what holds back the
+traffic you cross, so control classification is the accuracy-critical step.
+
+OSM maps stop signs and traffic signals on the **approach arm** at the stop
+line, not on the junction node — and OSMnx simplification deletes those
+interstitial nodes along with their tags. On `berkeley_oakland` that discarded
+87% of `highway=stop` nodes, 25% of `highway=traffic_signals`, and 100% of
+`highway=give_way`, so most intersections fell through to a road-class guess
+and fully signalized crossings were reported as uncontrolled.
+
+`ingestion/approach_controls.py` therefore harvests control from the
+**unsimplified** graph, walking outward from each junction along every arm
+(up to `[ingest] max_control_offset_m`) and resolving per approach:
+
+- a signal on **any** arm signalizes **every** leg (pedestrian crossings
+  excluded — see `_is_pedestrian_signal`);
+- a stop node on **every** arm is an all-way stop, even without `stop=all`,
+  which is nearly never tagged;
+- otherwise `must_stop` is read off **which arm the stop node sits on**,
+  rather than guessed from road class;
+- a `give_way` is ignored at a junction that has stop signs — a junction is
+  stop-controlled or give-way-controlled, not both, and the stray tag is
+  usually a yield-to-pedestrians marking (198 of 308 give-way junctions in
+  `berkeley_oakland` are this mixed case);
+- evidence is harmonized across the **two arms of one named street**, because a
+  device that governs a road governs both directions of it. Tagging one arm
+  only is a mapping gap; left alone it makes one direction of a through street
+  "must stop" while the opposite direction keeps priority, which sends routes
+  off that street mid-block;
+- `direction` / `traffic_signals:direction` / `stop:direction` are honored.
+
+Anything the tags do not settle still falls back to the road-class heuristic
+in `ingestion/controls.py`. The two cases are distinguished by
+`edge_control_confidence` (`ControlConfidence.OBSERVED` / `INFERRED`), and
+**only OBSERVED approaches can be counted as unsafe maneuvers or painted red**
+— a guess is not evidence of a hazard. Inferred unprotected approaches still
+carry a damped penalty (`inferred_confidence_factor`), so routes keep
+preferring known-controlled intersections without the UI claiming the unknown
+one is dangerous. `approaches with OBSERVED control` in the sanity report is
+the headline number: ~56% on `berkeley_oakland`.
+
+Use `scripts/inspect_junction.py --lat --lon` to see how any single
+intersection was classified and why.
+
 ## Modeling notes / heuristics (documented approximations)
 
-- Intersection controls come from OSM tags where present
-  (`highway=traffic_signals|stop`, `junction=roundabout`); untagged
-  intersections are inferred from road-class rank + node degree
-  (see `ingestion/controls.py`). Permissive-vs-protected signals are not
-  tagged in OSM — signals default to `SIGNAL_PERMISSIVE`;
-  `SIGNAL_PROTECTED` arises via the `control_override` hook (tests/future data).
+- Permissive-vs-protected signals are not tagged in OSM, so every signal is
+  `SIGNAL_PERMISSIVE`; `SIGNAL_PROTECTED` arises only via the
+  `control_override` hook (tests/future data). A left at a signal is therefore
+  discounted (`signal_left_factor`) into the caution band rather than counted:
+  a signal is a form of traffic control, and routing toward signalized
+  intersections is the point.
 - "Busy" is a tunable weighted score of speed/lanes/volume (`[busy]`),
-  so busyness is time-of-day dependent.
+  so busyness is time-of-day dependent. "Major" additionally requires the road
+  to be physically big (`major_lanes_min` / `major_class_max`) and gates the
+  stop-controlled predicates. In practice `busy` almost implies `major` — only
+  14 of 3,698 busy edges in `berkeley_oakland` are busy-but-not-major — so the
+  gate is a safety net rather than a load-bearing filter.
+- A 2-way stop offers the approach that must stop no protection at all: both
+  the left onto and the straight across a major road are counted. The
+  approaches with priority through the same node are not.
 - Median presence is inferred from one-way major-class edges (dual
   carriageways map as one-way pairs).
 - The crossing-street busyness of a STRAIGHT maneuver is approximated by
