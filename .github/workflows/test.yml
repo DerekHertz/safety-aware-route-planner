@@ -1,0 +1,93 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: pytest (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 3.11 is the floor declared by core/pyproject.toml and the README.
+          - { os: ubuntu-latest, python: "3.11" }
+          - { os: ubuntu-latest, python: "3.12" }
+          # Windows is NOT optional. core/setup.py selects MSVC-specific flags
+          # (/fp:precise, deliberately not /fp:fast) that its own comment calls
+          # "required for bitwise parity with pyref", and that configuration has
+          # only ever been exercised on the maintainer's machine. Linux builds
+          # with -O2 -ffp-contract=off. If the two ever disagree, the fix is the
+          # compiler flags — never SR_PARITY_LOOSE, which would defeat the point.
+          - { os: windows-latest, python: "3.12" }
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - run: pip install -r requirements-dev.txt
+
+      # Builds the sr_core extension. A wheel rather than an editable install,
+      # so a compile failure is a hard error here instead of a silent fallback
+      # to the ~20x slower pure-Python engine at import time.
+      - name: Build the C++ core
+        run: pip install ./core
+
+      - name: Fetch graph packs
+        uses: ./.github/actions/fetch-packs
+        with:
+          # Only berkeley_small is needed: it is what the real-pack parity test
+          # loads. berkeley_oakland is 2.7 MB of download for no extra coverage.
+          regions: berkeley_small
+          # Required, not best-effort. Packs are published now, so a fetch
+          # failure means CI would silently drop real-pack parity — exactly the
+          # hole test_ci_preconditions.py exists to close.
+          optional: "false"
+
+      # SR_CI_STRICT turns tests/test_ci_preconditions.py from advisory into
+      # enforcing: sr_core must import, the real pack must be present, and its
+      # format_version must match the code. Without it a run can be green while
+      # having skipped the entire parity suite.
+      - name: Run tests
+        env:
+          SR_CI_STRICT: "1"
+        run: pytest tests/ -q
+
+  web-build:
+    name: web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # `npm run build`, never `next build` directly — the prebuild hook is what
+      # copies MapLibre's worker into public/. Skipping it produces a silently
+      # blank map, which is what the assertion below exists to catch.
+      - run: npm run build
+
+      - name: Assert build assets
+        run: node scripts/assert-build-assets.mjs

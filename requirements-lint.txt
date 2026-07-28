@@ -1,0 +1,12 @@
+# Linting and type checking only.
+#
+# Split out from requirements-dev.txt so the lint job does not install osmnx
+# (and with it geopandas, shapely, pyproj, pyogrio, pandas) purely to run ruff.
+# mypy still type-checks ingestion/ correctly without them: osmnx and networkx
+# are covered by ignore_missing_imports in pyproject.toml.
+-r requirements.txt
+
+# Ruff is pre-1.0, so pin the minor: a bare `ruff` would let a rule-behaviour
+# change turn CI red on an unrelated PR.
+ruff==0.16.0
+mypy==2.3.0

@@ -1,4 +1,10 @@
-import { GeocodeResult, LatLon, PackMeta, RouteResponse } from "./types";
+import {
+  GeocodeResult,
+  LatLon,
+  PackMeta,
+  RouteRequest,
+  RouteResponse,
+} from "./types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -9,16 +15,19 @@ export async function fetchRoutes(
   safetyEnabled: boolean,
   detourBudgetPct: number,
 ): Promise<RouteResponse> {
+  // Typed rather than an inline object literal, so the schema-sync check has
+  // something to compare the request side of the contract against.
+  const body: RouteRequest = {
+    origin,
+    destination,
+    departure_time: departureTime,
+    safety_enabled: safetyEnabled,
+    detour_budget_pct: detourBudgetPct,
+  };
   const resp = await fetch(`${API_BASE}/route`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      origin,
-      destination,
-      departure_time: departureTime,
-      safety_enabled: safetyEnabled,
-      detour_budget_pct: detourBudgetPct,
-    }),
+    body: JSON.stringify(body),
   });
   if (!resp.ok) {
     const detail = await resp.json().catch(() => null);

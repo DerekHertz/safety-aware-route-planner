@@ -1,0 +1,40 @@
+version: 2
+updates:
+  # Picks up requirements.txt, requirements-ingest.txt, requirements-lint.txt
+  # and requirements-dev.txt from the repo root.
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # Tightly coupled and always bumped together; separate PRs for these
+      # would just fight each other in the lockstep resolver.
+      scientific:
+        patterns: ["numpy", "scipy"]
+      lint:
+        patterns: ["ruff", "mypy"]
+
+  - package-ecosystem: npm
+    directory: "/web"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      next:
+        patterns: ["next", "eslint-config-next", "@next/*"]
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
+    # NOT grouped, on purpose: a maplibre-gl bump changes the worker files that
+    # scripts/copy-maplibre-worker.mjs copies into public/. The byte-size check
+    # in scripts/assert-build-assets.mjs is what turns a stale copy into a red
+    # build instead of a silently blank map — so that PR deserves to be read on
+    # its own rather than buried in a group.
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: monthly
+
+  # No docker entry yet — there is no Dockerfile until the hosting work lands.
+  # Add one alongside it.

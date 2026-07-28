@@ -1,0 +1,52 @@
+# web/lib/types.ts mirrors api/schemas.py by hand. The POST /route contract is
+# documented as frozen because a future mobile client reuses it, and nothing
+# enforced that the two sides stayed in step.
+#
+# Deliberately cheap: generating the OpenAPI document needs neither a graph pack
+# nor the C++ extension, because AppState.load() runs in the FastAPI lifespan
+# rather than at import. So this is a plain runtime install and finishes in
+# well under a minute.
+name: schema-sync
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: schema-sync-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      - run: pip install -r requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # The checker uses the TypeScript compiler API, which is already a
+      # devDependency — no extra packages.
+      - run: npm ci
+        working-directory: web
+
+      - name: Generate OpenAPI schema
+        run: python scripts/dump_openapi.py > openapi.json
+
+      - name: Compare against web/lib/types.ts
+        run: node web/scripts/check-schema-sync.mjs openapi.json
