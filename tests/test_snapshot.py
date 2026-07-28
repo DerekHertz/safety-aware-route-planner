@@ -5,12 +5,10 @@ import numpy as np
 import pytest
 
 from pyref.config import Config
-from pyref.graph import RoadClass
+from pyref.graph import Control, RoadClass
 from sim.profiles import class_group, interpolate_hourly, multipliers_at
 from sim.snapshot import at_time, free_flow
 from tests.helpers.fixtures import cross_with_control
-from pyref.graph import Control
-
 
 CFG = Config.load()
 

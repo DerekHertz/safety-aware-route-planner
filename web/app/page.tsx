@@ -6,13 +6,25 @@ import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
 import {
-  DEFAULT_DETOUR_BUDGET, DETOUR_BUDGET_OPTIONS,
-  GeocodeResult, LatLon, PackMeta, RouteAlternative, RouteKind,
+  DEFAULT_DETOUR_BUDGET,
+  DETOUR_BUDGET_OPTIONS,
+  GeocodeResult,
+  LatLon,
+  PackMeta,
+  RouteAlternative,
+  RouteKind,
 } from "@/lib/types";
 import {
-  DEFAULT_UNITS, UNITS_STORAGE_KEY, UnitSystem, isUnitSystem,
+  DEFAULT_UNITS,
+  UNITS_STORAGE_KEY,
+  UnitSystem,
+  isUnitSystem,
 } from "@/lib/units";
-import { distanceMeters, insideBbox, useGeolocation } from "@/lib/useGeolocation";
+import {
+  distanceMeters,
+  insideBbox,
+  useGeolocation,
+} from "@/lib/useGeolocation";
 
 // MapLibre touches `window` at import time — client-only bundle
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -112,14 +124,22 @@ export default function Home() {
     setLoading(true);
     setError(null);
     try {
-      const resp = await fetchRoutes(origin, destination, departure, safety,
-                                     detourBudget);
+      const resp = await fetchRoutes(
+        origin,
+        destination,
+        departure,
+        safety,
+        detourBudget,
+      );
       if (seq !== reqSeq.current) return; // stale response
       setRoutes(resp.routes);
       setSelected((prev) =>
         prev && resp.routes.some((r) => r.kind === prev)
           ? prev
-          : resp.routes.find((r) => r.kind === "safe")?.kind ?? resp.routes[0]?.kind ?? null);
+          : (resp.routes.find((r) => r.kind === "safe")?.kind ??
+            resp.routes[0]?.kind ??
+            null),
+      );
     } catch (e) {
       if (seq !== reqSeq.current) return;
       setRoutes([]);
@@ -149,17 +169,18 @@ export default function Home() {
     }
   }, []);
 
-  const pickGeocode = (which: "origin" | "destination") => (r: GeocodeResult) => {
-    const p = { lat: r.lat, lon: r.lon };
-    if (which === "origin") {
-      setFollowMode(false);
-      setOrigin(p);
-      setOriginText(r.name);
-    } else {
-      setDestination(p);
-      setDestText(r.name);
-    }
-  };
+  const pickGeocode =
+    (which: "origin" | "destination") => (r: GeocodeResult) => {
+      const p = { lat: r.lat, lon: r.lon };
+      if (which === "origin") {
+        setFollowMode(false);
+        setOrigin(p);
+        setOriginText(r.name);
+      } else {
+        setDestination(p);
+        setDestText(r.name);
+      }
+    };
 
   const locateMe = () => {
     seededRef.current = false;
@@ -310,12 +331,11 @@ export default function Home() {
         </div>
         {routes.length > 0 && selected && (
           <p className="hint">
-            The selected route is colored by maneuver safety tier
-            (green / amber / red). Red markers flag unsafe maneuvers:
-            L = unprotected left, X = uncontrolled crossing. Only maneuvers
-            where the map data actually records the traffic control are
-            flagged — a signalized left, or an intersection OpenStreetMap says
-            nothing about, shows amber instead.
+            The selected route is colored by maneuver safety tier (green / amber
+            / red). Red markers flag unsafe maneuvers: L = unprotected left, X =
+            uncontrolled crossing. Only maneuvers where the map data actually
+            records the traffic control are flagged — a signalized left, or an
+            intersection OpenStreetMap says nothing about, shows amber instead.
           </p>
         )}
       </aside>

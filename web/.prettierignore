@@ -1,0 +1,11 @@
+# Generated or vendored — never format these.
+.next/
+out/
+build/
+next-env.d.ts
+package-lock.json
+
+# Copied verbatim from node_modules by scripts/copy-maplibre-worker.mjs.
+# Formatting it would make the byte-size check in CI (which is what catches a
+# stale worker after a maplibre-gl bump) fail against the upstream file.
+public/maplibre/

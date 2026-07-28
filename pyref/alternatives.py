@@ -79,7 +79,8 @@ def compute_alternatives(pack: GraphPack, qc: QueryCosts, topo: TurnTopo,
     avoid and leaves the plain lambda sweep in charge.
     """
     if run is None:
-        run = lambda ac_, h_, s_, d_: shortest_path(topo, ac_, h_, s_, d_)
+        def run(ac_, h_, s_, d_):
+            return shortest_path(topo, ac_, h_, s_, d_)
     alt_cfg = cfg["alternatives"]
     if detour_budget_pct is None:
         detour_budget_pct = float(alt_cfg["detour_budget_pct"])
@@ -160,7 +161,7 @@ def compute_alternatives(pack: GraphPack, qc: QueryCosts, topo: TurnTopo,
     if safety_enabled and len(kept) > 1:
         labels = ["fast"] + ["balanced"] * (len(kept) - 2) + ["safe"]
         kept = [Alternative(kind=lbl, lam=a.lam, result=a.result)
-                for lbl, a in zip(labels, kept)]
+                for lbl, a in zip(labels, kept, strict=True)]
     return kept
 
 

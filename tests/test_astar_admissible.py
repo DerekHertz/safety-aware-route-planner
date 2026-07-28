@@ -40,7 +40,7 @@ def test_heuristic_consistency_on_toys(lam):
     so consistency at lam=0 extends to all lam >= 0 — asserted empirically."""
     for pack, pairs in _cases():
         qc = make_costs(pack)
-        for u, v in pairs:
+        for _u, v in pairs:
             h = heuristic(pack, qc, float(pack.node_lat[v]), float(pack.node_lon[v]))
             ac = arc_cost(pack, qc, lam)
             inn = pack.turn_in_edge

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import datetime
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -26,7 +26,7 @@ class RoutingError(Exception):
     """User-facing routing problem (bad snap, no path...)."""
 
 
-def _with_detour_pct(routes: list["RouteOut"]) -> list["RouteOut"]:
+def _with_detour_pct(routes: list[RouteOut]) -> list[RouteOut]:
     """Fill in each route's extra time relative to the fastest one returned,
     so the UI can show what a safer route actually costs."""
     fastest = min((r.eta_s for r in routes), default=0.0)
@@ -64,8 +64,12 @@ class Router:
                     pack.turn_ptr, pack.turn_out_edge,
                     pack.turn_in_edge, pack.turn_allowed)
             except ImportError:
+                # stacklevel=2 points the warning at whoever constructed the
+                # Router, not at this line — this is a ~20x latency cliff and
+                # the caller is who needs to see it.
                 warnings.warn("sr_core extension not built - falling back to "
-                              "the pure-Python engine ([engine] impl='cpp')")
+                              "the pure-Python engine ([engine] impl='cpp')",
+                              stacklevel=2)
                 self._impl = "pyref"
 
     # engine dispatch: identical signature both ways

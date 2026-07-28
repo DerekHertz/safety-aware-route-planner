@@ -5,7 +5,10 @@ $ErrorActionPreference = "Stop"
 if (-not (Test-Path .venv)) {
     python -m venv .venv
 }
-.\.venv\Scripts\python.exe -m pip install -q -r requirements.txt
+# requirements-dev.txt pulls in runtime + ingestion + test/lint tooling.
+# The API image installs only requirements.txt (no osmnx); pack building and
+# pytest need more than that.
+.\.venv\Scripts\python.exe -m pip install -q -r requirements-dev.txt
 .\.venv\Scripts\python.exe -m pip install -q -e ./core
 
 # Graph packs (cached: re-runs use data/cache/*.graphml, no Overpass hit)

@@ -33,7 +33,9 @@ async def geocode(request: Request, q: str = Query(min_length=2, max_length=200)
         return GeocodeResponse(results=_cache[key])
 
     bbox = request.app.state.app_state.pack.meta.get("bbox")
-    params = {"q": q, "format": "jsonv2", "limit": 5}
+    # Annotated because the mixed str/int values otherwise infer as
+    # dict[str, object], which httpx's params type does not accept.
+    params: dict[str, str | int] = {"q": q, "format": "jsonv2", "limit": 5}
     if bbox:
         west, south, east, north = bbox
         params["viewbox"] = f"{west},{north},{east},{south}"

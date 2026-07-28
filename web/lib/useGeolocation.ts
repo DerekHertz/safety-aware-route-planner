@@ -18,9 +18,14 @@ export interface GeoState {
  * Note: the Geolocation API requires a secure context. `localhost` counts as
  * one, so dev works over plain http; a deployed build needs https.
  */
-export function useGeolocation(enabled = true): GeoState & { refresh: () => void } {
+export function useGeolocation(
+  enabled = true,
+): GeoState & { refresh: () => void } {
   const [state, setState] = useState<GeoState>({
-    position: null, accuracy: null, error: null, settled: false,
+    position: null,
+    accuracy: null,
+    error: null,
+    settled: false,
   });
   const watchId = useRef<number | null>(null);
 
@@ -35,17 +40,24 @@ export function useGeolocation(enabled = true): GeoState & { refresh: () => void
 
   const onFail = useCallback((err: GeolocationPositionError) => {
     const msg =
-      err.code === err.PERMISSION_DENIED ? "Location permission denied"
-      : err.code === err.POSITION_UNAVAILABLE ? "Location unavailable"
-      : err.code === err.TIMEOUT ? "Location request timed out"
-      : "Location error";
+      err.code === err.PERMISSION_DENIED
+        ? "Location permission denied"
+        : err.code === err.POSITION_UNAVAILABLE
+          ? "Location unavailable"
+          : err.code === err.TIMEOUT
+            ? "Location request timed out"
+            : "Location error";
     setState((s) => ({ ...s, error: msg, settled: true }));
   }, []);
 
   useEffect(() => {
     if (!enabled) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) {
-      setState((s) => ({ ...s, error: "Geolocation not supported", settled: true }));
+      setState((s) => ({
+        ...s,
+        error: "Geolocation not supported",
+        settled: true,
+      }));
       return;
     }
     watchId.current = navigator.geolocation.watchPosition(onOk, onFail, {

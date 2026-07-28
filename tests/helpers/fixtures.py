@@ -12,7 +12,7 @@ from pyref.costs import arc_cost, compute_costs, heuristic
 from pyref.graph import Control, GraphPack, RoadClass
 from pyref.search import PathResult, shortest_path, topo_of
 from sim.snapshot import free_flow
-from tests.helpers.toy_graphs import GraphBuilder, find_edge
+from tests.helpers.toy_graphs import GraphBuilder
 
 
 def make_costs(pack: GraphPack, cfg: Config | None = None):

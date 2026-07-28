@@ -48,7 +48,9 @@ class _Raw:
         attrs = {"osmid": way}
         if name is not None:
             attrs["name"] = name
-        for u, v in zip(nodes, nodes[1:]):
+        # Pairwise over consecutive nodes: the operands are deliberately
+        # different lengths, so strict=False is required, not an oversight.
+        for u, v in zip(nodes, nodes[1:], strict=False):
             self.G.add_edge(u, v, reversed=False, **attrs)
             if not oneway:
                 self.G.add_edge(v, u, reversed=True, **attrs)

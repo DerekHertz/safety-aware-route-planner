@@ -3,10 +3,8 @@ import numpy as np
 import pytest
 
 from pyref.alternatives import compute_alternatives, jaccard
-from pyref.costs import arc_cost
 from pyref.search import topo_of
 from tests.helpers.fixtures import grid3x3, make_costs, unprotected_left_city
-from tests.helpers.toy_graphs import find_edge
 
 
 def test_jaccard():

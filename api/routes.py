@@ -26,8 +26,12 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
             detour_budget_pct=body.detour_budget_pct,
         )
     except RoutingError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
-    return RouteResponse(routes=[
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # model_validate, not the RouteResponse(...) constructor: RouteOut carries
+    # `unsafe`/`segments`/`unsafe_points` as plain dicts, and pydantic coerces
+    # them into the nested models here. Identical result, but it types the
+    # loose input honestly instead of claiming these are already models.
+    return RouteResponse.model_validate({"routes": [
         {
             "kind": r.kind,
             "geometry": r.geometry,
@@ -39,4 +43,4 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
             "detour_pct": r.detour_pct,
         }
         for r in routes
-    ])
+    ]})

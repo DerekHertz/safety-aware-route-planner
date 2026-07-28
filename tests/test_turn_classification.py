@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 
 from ingestion.turns import classify_maneuver, wrap_delta_deg
-from pyref.graph import Control, Maneuver, RoadClass
+from pyref.graph import Control, Maneuver
 from tests.helpers.toy_graphs import GraphBuilder, find_edge
 
 

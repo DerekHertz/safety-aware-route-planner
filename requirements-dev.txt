@@ -1,0 +1,18 @@
+# Everything needed to develop, build, and test. CI installs this file.
+#
+# Pulls in requirements.txt transitively via requirements-ingest.txt.
+-r requirements-ingest.txt
+
+pytest==9.1.1
+
+# Linting and type checking. Ruff is pre-1.0, so pin the minor: a bare
+# `ruff` would let a rule-behaviour change turn CI red on an unrelated PR.
+ruff==0.16.0
+mypy==2.3.0
+
+# `pip install ./core` uses build isolation and reads these from
+# core/pyproject.toml, so they are not strictly required here. They are
+# listed so an editable/no-isolation build (`pip install --no-build-isolation
+# -e ./core`) works too — which is how you iterate on the C++ core locally.
+pybind11>=2.12
+setuptools>=68

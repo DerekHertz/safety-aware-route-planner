@@ -14,3 +14,9 @@ core/build/
 .env
 .env.*
 !.env.example
+
+# Per-machine Claude Code permission allowlist. It accumulates absolute
+# scratchpad paths (C:\Users\<you>\AppData\Local\Temp\...) and session UUIDs,
+# which are noise at best and a small personal-info leak at worst.
+# .claude/launch.json IS tracked on purpose — it is shared project config.
+.claude/settings.local.json

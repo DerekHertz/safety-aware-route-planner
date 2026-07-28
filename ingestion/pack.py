@@ -93,7 +93,7 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None,
 
         geom = data.get("geometry")
         if geom is not None:
-            lons, lats = zip(*geom.coords)  # shapely: (x=lon, y=lat)
+            lons, lats = zip(*geom.coords, strict=True)  # shapely: (x=lon, y=lat)
         else:
             lats = (node_lat[ti], node_lat[hi])
             lons = (node_lon[ti], node_lon[hi])
@@ -166,7 +166,7 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None,
         seen = {a.control for a in observed_here if a is not None}
         node_control[i] = int(seen.pop()) if len(seen) == 1 else int(ctrl)
 
-        for e, observed in zip(in_edges_by_node[i], observed_here):
+        for e, observed in zip(in_edges_by_node[i], observed_here, strict=True):
             if observed is not None:
                 edge_approach_control[e] = int(observed.control)
                 edge_must_stop[e] = 1 if observed.must_stop else 0
@@ -193,7 +193,7 @@ def build_pack(G: nx.MultiDiGraph, cfg: Config, region: str | None = None,
         "bbox": bbox,
         "network_type": cfg.network_type,
         "config_hash": cfg.content_hash(),
-        "created_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        "created_utc": datetime.datetime.now(datetime.UTC).isoformat(),
         "stats": {
             "pct_speed_defaulted": round(100.0 * float(speed_defaulted.mean()), 1) if E else 0.0,
             "pct_lanes_defaulted": round(100.0 * float(lanes_defaulted.mean()), 1) if E else 0.0,

@@ -40,6 +40,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from pyref.config import Config
+from pyref.geo import haversine_m
 from pyref.graph import (
     ROAD_CLASS_RANK,
     Control,
@@ -48,7 +49,6 @@ from pyref.graph import (
     Maneuver,
     RoadClass,
 )
-from pyref.geo import haversine_m
 from sim.snapshot import Snapshot
 
 UNSAFE_NONE = 0

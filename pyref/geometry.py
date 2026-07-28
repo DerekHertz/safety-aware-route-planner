@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
-from pyref.costs import QueryCosts, TIER_SAFE
+from pyref.costs import TIER_SAFE, QueryCosts
 from pyref.geo import haversine_m
 from pyref.graph import GraphPack
 from pyref.search import PathResult
@@ -18,7 +18,7 @@ def _edge_coords(pack: GraphPack, e: int,
     lats = pack.geom_lat[s:t]
     lons = pack.geom_lon[s:t]
     if frac_start <= 0.0 and frac_end >= 1.0:
-        return [[float(lo), float(la)] for lo, la in zip(lons, lats)]
+        return [[float(lo), float(la)] for lo, la in zip(lons, lats, strict=True)]
 
     seg = haversine_m(lats[:-1], lons[:-1], lats[1:], lons[1:])
     cum = np.concatenate([[0.0], np.cumsum(seg)])
@@ -36,7 +36,7 @@ def _edge_coords(pack: GraphPack, e: int,
 
     d0, d1 = frac_start * total, frac_end * total
     inner = [[float(lo), float(la)]
-             for lo, la, c in zip(lons, lats, cum) if d0 < c < d1]
+             for lo, la, c in zip(lons, lats, cum, strict=True) if d0 < c < d1]
     return [point_at(d0)] + inner + [point_at(d1)]
 
 
@@ -65,7 +65,7 @@ def route_segments(pack: GraphPack, qc: QueryCosts, result: PathResult,
     tiers = [TIER_SAFE] + [int(qc.turn_tier[t]) for t in result.turn_ids]
     names = {0: "safe", 1: "caution", 2: "unsafe"}
     out = []
-    for i, (e, tier) in enumerate(zip(edges, tiers)):
+    for i, (e, tier) in enumerate(zip(edges, tiers, strict=True)):
         fs = frac_origin if i == 0 else 0.0
         fe = frac_dest if i == len(edges) - 1 else 1.0
         out.append({

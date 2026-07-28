@@ -27,7 +27,8 @@ def create_app() -> FastAPI:
     # CORS origins are configured, not wildcarded — the browser front-end
     # runs on a different port in dev
     import os
-    from pyref.config import Config, DEFAULT_CONFIG_PATH
+
+    from pyref.config import DEFAULT_CONFIG_PATH, Config
     cfg = Config.load(os.environ.get("SR_CONFIG", DEFAULT_CONFIG_PATH))
     app.add_middleware(
         CORSMiddleware,

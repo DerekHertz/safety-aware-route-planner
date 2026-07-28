@@ -6,14 +6,12 @@ Fixture (cross_with_control): E-W primary arterial (56 km/h, 2 lanes, busy
 under free-flow base volumes), N-S residential. Approaching from the south:
 LEFT turns onto the busy arterial, STRAIGHT crosses it.
 """
-import numpy as np
 import pytest
 
 from pyref.costs import (
     TIER_CAUTION,
     UNSAFE_CROSSING,
     UNSAFE_LEFT,
-    compute_costs,
 )
 from pyref.graph import Control, RoadClass
 from tests.helpers.fixtures import cross_with_control, find_turn, make_costs

@@ -8,7 +8,14 @@
     "dev": "next dev",
     "prebuild": "npm run copy:maplibre-worker",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "next typegen && tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "engines": {
+    "node": ">=20.9.0"
   },
   "dependencies": {
     "maplibre-gl": "^6.0.0",
@@ -20,6 +27,9 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.11",
+    "prettier": "^3.9.6",
     "typescript": "^5"
   }
 }

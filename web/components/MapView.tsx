@@ -53,11 +53,20 @@ interface Props {
   flyTo?: LatLon | null;
 }
 
-const emptyFC = (): FeatureCollection => ({ type: "FeatureCollection", features: [] });
+const emptyFC = (): FeatureCollection => ({
+  type: "FeatureCollection",
+  features: [],
+});
 
 export default function MapView({
-  routes, selected, onSelect, origin, destination, onSetPoint,
-  originIsLive = false, flyTo = null,
+  routes,
+  selected,
+  onSelect,
+  origin,
+  destination,
+  onSetPoint,
+  originIsLive = false,
+  flyTo = null,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -83,12 +92,17 @@ export default function MapView({
       const r = byKind.get(kind);
       const src = map.getSource(`route-${kind}`) as GeoJSONSource | undefined;
       const feature: Feature = {
-        type: "Feature", properties: {}, geometry: r ? r.geometry : { type: "LineString", coordinates: [] },
+        type: "Feature",
+        properties: {},
+        geometry: r ? r.geometry : { type: "LineString", coordinates: [] },
       };
       src?.setData(r ? feature : emptyFC());
       if (map.getLayer(`route-${kind}`)) {
-        map.setPaintProperty(`route-${kind}`, "line-opacity",
-          selected && selected !== kind ? 0.3 : 0.55);
+        map.setPaintProperty(
+          `route-${kind}`,
+          "line-opacity",
+          selected && selected !== kind ? 0.3 : 0.55,
+        );
       }
     }
 
@@ -116,7 +130,9 @@ export default function MapView({
           })),
         }
       : emptyFC();
-    (map.getSource("unsafe-points") as GeoJSONSource | undefined)?.setData(points);
+    (map.getSource("unsafe-points") as GeoJSONSource | undefined)?.setData(
+      points,
+    );
   }, []);
 
   /** Create sources/layers. Idempotent: guarded by per-id existence checks,
@@ -128,84 +144,100 @@ export default function MapView({
    *  compositing it never becomes true and the overlays would never be
    *  created. addSource/addLayer only need the spec, and anything still
    *  not ready throws and is retried by a later trigger. */
-  const initLayers = useCallback((map: MLMap) => {
-    if (!map.style) return;
-    try {
-    for (const kind of ROUTE_KINDS) {
-      const id = `route-${kind}`;
-      if (map.getSource(id)) continue;
-      map.addSource(id, { type: "geojson", data: emptyFC() });
-      map.addLayer({
-        id,
-        type: "line",
-        source: id,
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: {
-          "line-color": KIND_COLORS[kind],
-          "line-width": 5,
-          "line-opacity": 0.45,
-        },
-      });
-      map.on("click", id, () => stateRef.current.onSelect(kind));
-      map.on("mouseenter", id, () => (map.getCanvas().style.cursor = "pointer"));
-      map.on("mouseleave", id, () => (map.getCanvas().style.cursor = ""));
-    }
+  const initLayers = useCallback(
+    (map: MLMap) => {
+      if (!map.style) return;
+      try {
+        for (const kind of ROUTE_KINDS) {
+          const id = `route-${kind}`;
+          if (map.getSource(id)) continue;
+          map.addSource(id, { type: "geojson", data: emptyFC() });
+          map.addLayer({
+            id,
+            type: "line",
+            source: id,
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: {
+              "line-color": KIND_COLORS[kind],
+              "line-width": 5,
+              "line-opacity": 0.45,
+            },
+          });
+          map.on("click", id, () => stateRef.current.onSelect(kind));
+          map.on(
+            "mouseenter",
+            id,
+            () => (map.getCanvas().style.cursor = "pointer"),
+          );
+          map.on("mouseleave", id, () => (map.getCanvas().style.cursor = ""));
+        }
 
-    // selected route drawn on top, colored per-segment by safety tier
-    if (!map.getSource("route-tiers")) {
-      map.addSource("route-tiers", { type: "geojson", data: emptyFC() });
-      map.addLayer({
-        id: "route-tiers",
-        type: "line",
-        source: "route-tiers",
-        layout: { "line-cap": "round", "line-join": "round" },
-        paint: { "line-color": ["get", "color"], "line-width": 6 },
-      });
-    }
+        // selected route drawn on top, colored per-segment by safety tier
+        if (!map.getSource("route-tiers")) {
+          map.addSource("route-tiers", { type: "geojson", data: emptyFC() });
+          map.addLayer({
+            id: "route-tiers",
+            type: "line",
+            source: "route-tiers",
+            layout: { "line-cap": "round", "line-join": "round" },
+            paint: { "line-color": ["get", "color"], "line-width": 6 },
+          });
+        }
 
-    // flagged unsafe maneuvers on the selected route
-    if (!map.getSource("unsafe-points")) {
-      map.addSource("unsafe-points", { type: "geojson", data: emptyFC() });
-      map.addLayer({
-        id: "unsafe-points",
-        type: "circle",
-        source: "unsafe-points",
-        paint: {
-          "circle-radius": 8,
-          "circle-color": "#dc2626",
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 2,
-        },
-      });
-      map.addLayer({
-        id: "unsafe-points-label",
-        type: "symbol",
-        source: "unsafe-points",
-        layout: {
-          "text-field": ["case", ["==", ["get", "type"], "unprotected_left"], "L", "X"],
-          "text-size": 11,
-          "text-font": ["Noto Sans Bold"],
-          "text-allow-overlap": true,
-        },
-        paint: { "text-color": "#ffffff" },
-      });
-      map.on("click", "unsafe-points", (ev) => {
-        const f = ev.features?.[0];
-        if (!f) return;
-        const label = f.properties?.type === "unprotected_left"
-          ? "Unprotected left turn onto a busy street"
-          : "Uncontrolled crossing of a busy street";
-        new Popup().setLngLat(ev.lngLat).setHTML(`<strong>${label}</strong>`).addTo(map);
-      });
-    }
+        // flagged unsafe maneuvers on the selected route
+        if (!map.getSource("unsafe-points")) {
+          map.addSource("unsafe-points", { type: "geojson", data: emptyFC() });
+          map.addLayer({
+            id: "unsafe-points",
+            type: "circle",
+            source: "unsafe-points",
+            paint: {
+              "circle-radius": 8,
+              "circle-color": "#dc2626",
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2,
+            },
+          });
+          map.addLayer({
+            id: "unsafe-points-label",
+            type: "symbol",
+            source: "unsafe-points",
+            layout: {
+              "text-field": [
+                "case",
+                ["==", ["get", "type"], "unprotected_left"],
+                "L",
+                "X",
+              ],
+              "text-size": 11,
+              "text-font": ["Noto Sans Bold"],
+              "text-allow-overlap": true,
+            },
+            paint: { "text-color": "#ffffff" },
+          });
+          map.on("click", "unsafe-points", (ev) => {
+            const f = ev.features?.[0];
+            if (!f) return;
+            const label =
+              f.properties?.type === "unprotected_left"
+                ? "Unprotected left turn onto a busy street"
+                : "Uncontrolled crossing of a busy street";
+            new Popup()
+              .setLngLat(ev.lngLat)
+              .setHTML(`<strong>${label}</strong>`)
+              .addTo(map);
+          });
+        }
 
-    layersReady.current = true;
-    syncRoutes();
-    } catch {
-      // Style spec not ready yet; load/style.load/visibilitychange/interval
-      // all retry, and every step above is idempotent.
-    }
-  }, [syncRoutes]);
+        layersReady.current = true;
+        syncRoutes();
+      } catch {
+        // Style spec not ready yet; load/style.load/visibilitychange/interval
+        // all retry, and every step above is idempotent.
+      }
+    },
+    [syncRoutes],
+  );
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -221,7 +253,8 @@ export default function MapView({
     // Surface failures instead of swallowing them. Without this, a broken
     // style or tile source leaves a silently blank map with no diagnostic.
     map.on("error", (e) => {
-      const msg = (e as { error?: Error })?.error?.message ?? "unknown map error";
+      const msg =
+        (e as { error?: Error })?.error?.message ?? "unknown map error";
       console.error("[MapView]", msg);
       setMapError(msg);
     });
@@ -276,8 +309,12 @@ export default function MapView({
       // clicks on route/marker layers are handled above; only set endpoints
       // for plain map clicks
       const hits = map.queryRenderedFeatures(ev.point, {
-        layers: ["route-fast", "route-balanced", "route-safe", "unsafe-points"]
-          .filter((l) => map.getLayer(l)),
+        layers: [
+          "route-fast",
+          "route-balanced",
+          "route-safe",
+          "unsafe-points",
+        ].filter((l) => map.getLayer(l)),
       });
       if (hits.length > 0) return;
       const p = { lat: ev.lngLat.lat, lon: ev.lngLat.lng };
@@ -306,8 +343,10 @@ export default function MapView({
         const lons = coords.map((c) => c[0]);
         const lats = coords.map((c) => c[1]);
         map.fitBounds(
-          [[Math.min(...lons), Math.min(...lats)],
-           [Math.max(...lons), Math.max(...lats)]],
+          [
+            [Math.min(...lons), Math.min(...lats)],
+            [Math.max(...lons), Math.max(...lats)],
+          ],
           { padding: 60, duration: 400 },
         );
       }
@@ -318,7 +357,11 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyTo) return;
-    map.flyTo({ center: [flyTo.lon, flyTo.lat], zoom: Math.max(map.getZoom(), 14), duration: 800 });
+    map.flyTo({
+      center: [flyTo.lon, flyTo.lat],
+      zoom: Math.max(map.getZoom(), 14),
+      duration: 800,
+    });
   }, [flyTo]);
 
   // endpoint markers
@@ -374,7 +417,11 @@ export default function MapView({
       {mapError && (
         <div className="map-error">
           <span>Map error: {mapError}</span>
-          <button type="button" onClick={() => setMapError(null)} aria-label="Dismiss">
+          <button
+            type="button"
+            onClick={() => setMapError(null)}
+            aria-label="Dismiss"
+          >
             ×
           </button>
         </div>

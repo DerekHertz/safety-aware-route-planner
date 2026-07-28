@@ -1,0 +1,13 @@
+# Pack-building dependencies (ingestion/). Build-time only — never
+# installed into the API image.
+#
+# ingestion/ writes binary packs through pyref.graph, so it needs the
+# runtime set too.
+-r requirements.txt
+
+# osmnx v2 changed the graph_from_bbox signature (bbox tuple order is now
+# west, south, east, north); ingestion/download.py depends on v2 semantics.
+osmnx>=2.0,<3
+# Imported directly for type annotations in ingestion/download.py, not just
+# transitively via osmnx.
+networkx==3.6.1

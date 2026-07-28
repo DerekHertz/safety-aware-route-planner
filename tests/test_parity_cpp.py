@@ -21,7 +21,11 @@ from pyref.graph import GraphPack
 from pyref.search import shortest_path, topo_of
 from sim.snapshot import free_flow
 from tests.helpers.fixtures import (
-    cross_with_control, grid3x3, line3, make_costs, unprotected_left_city,
+    cross_with_control,
+    grid3x3,
+    line3,
+    make_costs,
+    unprotected_left_city,
 )
 
 LOOSE = os.environ.get("SR_PARITY_LOOSE") == "1"

@@ -1,7 +1,24 @@
-osmnx>=2.0,<3
-scipy
-fastapi
-uvicorn[standard]
-httpx
-pytest
-pybind11>=2.12
+# Runtime dependencies — exactly what `api/`, `pyref/`, and `sim/` import.
+# This file IS the Docker runtime layer, so keep it minimal and pinned.
+#
+# Deliberately absent: osmnx and networkx. They are ingestion-only (see
+# requirements-ingest.txt) and pull in geopandas/shapely/pyproj/pyogrio/
+# pandas, which roughly quadruples the image. Nothing served at request
+# time imports them.
+#
+# Also absent: pybind11 and setuptools. `core/pyproject.toml` declares them
+# as build-system requires, so pip's build isolation supplies them during
+# `pip install ./core` — they are never needed at runtime.
+
+fastapi==0.140.0
+httpx==0.28.1
+numpy==2.5.1
+pydantic==2.13.4
+scipy==1.18.0
+uvicorn[standard]==0.51.0
+
+# zoneinfo ships no tz database of its own: zoneinfo.TZPATH is empty on
+# Windows, and python:*-slim carries no system tzdata either. This arrived
+# transitively via pandas (osmnx) until that moved out of this file, so the
+# per-region timezone handling in api/routes.py needs it stated outright.
+tzdata==2026.3

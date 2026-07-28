@@ -15,7 +15,8 @@ export function formatDistance(meters: number, system: UnitSystem): string {
   if (!Number.isFinite(meters)) return "—";
   if (system === "imperial") {
     const miles = meters / METERS_PER_MILE;
-    if (miles < 0.1) return `${Math.round(meters / METERS_PER_FOOT / 10) * 10} ft`;
+    if (miles < 0.1)
+      return `${Math.round(meters / METERS_PER_FOOT / 10) * 10} ft`;
     return `${miles.toFixed(miles < 10 ? 1 : 0)} mi`;
   }
   if (meters < 1000) return `${Math.round(meters / 10) * 10} m`;

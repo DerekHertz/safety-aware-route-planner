@@ -214,7 +214,7 @@ class GraphPack:
         (pack_dir / "manifest.json").write_text(json.dumps(manifest, indent=2))
 
     @classmethod
-    def load(cls, pack_dir: str | Path) -> "GraphPack":
+    def load(cls, pack_dir: str | Path) -> GraphPack:
         pack_dir = Path(pack_dir)
         manifest = json.loads((pack_dir / "manifest.json").read_text())
         if manifest["format_version"] != PACK_FORMAT_VERSION:
