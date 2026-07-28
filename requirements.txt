@@ -10,7 +10,7 @@
 # as build-system requires, so pip's build isolation supplies them during
 # `pip install ./core` — they are never needed at runtime.
 
-fastapi==0.140.0
+fastapi==0.140.13
 httpx==0.28.1
 numpy==2.5.1
 pydantic==2.13.4
