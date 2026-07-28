@@ -167,9 +167,22 @@ class TestLockFile:
         assert lock.regions["a"].sha256 == "ab"  # normalized to lowercase
         assert lock.regions["a"].size_bytes == 12
 
+    def test_base_url_without_regions_reads_as_unconfigured(self, tmp_path):
+        """The half-configured state between creating a bucket and landing the
+        first publish must say "not set up", not "your region is missing"."""
+        p = tmp_path / "packs.lock"
+        p.write_text('base_url = "https://x.test/"\ntag = ""\nformat_version = 2\n[regions]\n')
+        lock = load_lock(p)
+        assert lock is not None and not lock.enabled
+        with pytest.raises(PackFetchError, match="not configured"):
+            ensure_packs(["toyland"], tmp_path / "packs", lock)
+
     def test_env_var_overrides_base_url(self, tmp_path, monkeypatch):
         p = tmp_path / "packs.lock"
-        p.write_text('base_url = ""\ntag = "t"\nformat_version = 2\n[regions]\n')
+        p.write_text(
+            'base_url = ""\ntag = "t"\nformat_version = 2\n'
+            '[regions.r]\nsha256 = "ab"\n'
+        )
         monkeypatch.setenv("SR_PACKS_URL", "https://example.test/")
         lock = load_lock(p)
         assert lock is not None and lock.enabled

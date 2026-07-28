@@ -10,10 +10,16 @@ One archive per region, rather than one for everything, so a deployment
 downloads only the regions it serves and adding a region does not invalidate
 the others' digests.
 
-Archives are byte-reproducible: entries are sorted, and mtime/uid/gid/mode are
-normalized in both the tar entries and the gzip header. Rebuilding the same
-pack therefore yields the same sha256, so the digests in packs.lock can be
-re-derived and checked rather than merely trusted.
+Archiving is deterministic: entries are sorted, and mtime/uid/gid/mode are
+normalized in both the tar entries and the gzip header. Packaging the *same*
+pack directory twice therefore yields byte-identical output.
+
+That does NOT make the pipeline end-to-end reproducible. `ingestion/pack.py`
+stamps `created_utc` into every manifest, so two builds from identical OSM data
+produce different pack bytes and different digests. The digests in packs.lock
+can only come from the run that actually published the artifacts — they cannot
+be re-derived by rebuilding. (Honouring SOURCE_DATE_EPOCH in the manifest would
+close that gap, at the cost of real provenance information.)
 """
 from __future__ import annotations
 

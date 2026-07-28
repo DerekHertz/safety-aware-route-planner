@@ -65,8 +65,13 @@ class PacksLock:
 
     @property
     def enabled(self) -> bool:
-        """Fetching is opt-in: an empty base_url means local disk only."""
-        return bool(self.base_url)
+        """Fetching needs a bucket AND at least one published region.
+
+        A base_url with no regions is the half-configured state you get between
+        creating the bucket and landing the first publish, and it should read as
+        "not set up yet" rather than "set up, but your region is missing".
+        """
+        return bool(self.base_url) and bool(self.regions)
 
     def url_for(self, region: str) -> str:
         base = self.base_url if self.base_url.endswith("/") else self.base_url + "/"

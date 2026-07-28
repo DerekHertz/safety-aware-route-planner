@@ -24,11 +24,16 @@
 
 # Public base URL of the bucket, with trailing slash. Empty = fetching off.
 # Override per-deployment with the SR_PACKS_URL environment variable.
-base_url = ""
+# Note this is the r2.dev subdomain, which maps to the bucket itself — the
+# bucket name does not appear in the path.
+base_url = "https://pub-0316308e85f3439ab800d022c77d67e7.r2.dev"
 
 # Immutable release directory inside the bucket. Artifacts are addressed as
 # {base_url}{tag}/{region}.tar.gz. Never overwrite a published tag — bump it,
 # so a rollback is just reverting this file.
+#
+# Empty until a build-packs run actually publishes. With no regions listed
+# below, fetching stays disabled regardless of base_url.
 tag = ""
 
 # Must equal pyref.graph.PACK_FORMAT_VERSION. Checked at startup: a mismatch
@@ -40,7 +45,11 @@ format_version = 2
 
 # One entry per published region. `sha256` is over the .tar.gz artifact.
 #
-# [regions.berkeley_oakland]
-# sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
-# bytes = 2690000
+# These MUST come from the build-packs run that actually uploaded them, and
+# cannot be re-derived by rebuilding: ingestion/pack.py stamps `created_utc`
+# into every manifest, so two builds of identical OSM data produce different
+# pack bytes and different digests. Copy the stanza from the run whose publish
+# and verification steps both went green.
+#
+# berkeley_small = { sha256 = "...", bytes = 215291 }
 [regions]

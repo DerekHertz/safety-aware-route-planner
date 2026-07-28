@@ -166,6 +166,13 @@ jobs:
 
       # R2 speaks the S3 API; the AWS CLI is preinstalled on ubuntu runners.
       # Uploaded with a long max-age because a tag directory is immutable.
+      #
+      # Everything here is defensive for one reason: `aws s3 cp --recursive`
+      # exits 0 and prints nothing when it copies nothing (e.g. an empty source
+      # directory). A silent no-op that reports success is the worst possible
+      # outcome, because packs.lock then pins digests for objects that do not
+      # exist and the API fails at boot. So: upload one file at a time, and
+      # verify afterwards from both sides.
       - name: Publish to bucket
         if: inputs.publish && steps.creds.outputs.have == 'true'
         env:
@@ -176,8 +183,87 @@ jobs:
           BUCKET: ${{ vars.SR_PACKS_BUCKET }}
           TAG: ${{ steps.cfg.outputs.tag }}
         run: |
-          aws s3 cp dist/packs/ "s3://$BUCKET/$TAG/" \
-            --recursive --endpoint-url "$ENDPOINT" \
-            --content-type application/gzip \
-            --cache-control "public, max-age=31536000, immutable"
-          echo "Published to \`$TAG/\`" >> "$GITHUB_STEP_SUMMARY"
+          set -euo pipefail
+          command -v aws >/dev/null || { echo "::error::aws CLI not found"; exit 1; }
+
+          # Pasting a secret into the GitHub UI (or piping it with `echo`)
+          # very easily captures a trailing newline. The AWS signer embeds the
+          # access key id directly into the Authorization header
+          # (Credential=<key>/<date>/auto/s3/aws4_request), so one stray newline
+          # produces "Invalid header value" on every signed request — with the
+          # key masked in the log, which makes it look like anything but
+          # whitespace. None of these values may legitimately contain
+          # whitespace, so strip it and say so.
+          for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY ENDPOINT BUCKET; do
+            before="${!var}"
+            after="$(printf %s "$before" | tr -d '[:space:]')"
+            if [ "$before" != "$after" ]; then
+              echo "::warning::$var contained whitespace (usually a trailing newline from how the secret was pasted). Trimming it for this run — re-set it with: printf %s 'VALUE' | gh secret set $var"
+              export "$var=$after"
+            fi
+            if [ -z "$after" ]; then
+              echo "::error::$var is empty."; exit 1
+            fi
+          done
+
+          echo "Local artifacts to publish:"
+          ls -l dist/packs/
+          shopt -s nullglob
+          files=(dist/packs/*.tar.gz)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "::error::dist/packs/ contains no .tar.gz — nothing to publish."
+            exit 1
+          fi
+
+          for f in "${files[@]}"; do
+            key="$TAG/$(basename "$f")"
+            echo "uploading $f -> s3://$BUCKET/$key"
+            aws s3 cp "$f" "s3://$BUCKET/$key" \
+              --endpoint-url "$ENDPOINT" \
+              --content-type application/gzip \
+              --cache-control "public, max-age=31536000, immutable"
+          done
+
+          echo "Objects now under $TAG/ (server-side listing):"
+          aws s3 ls "s3://$BUCKET/$TAG/" --endpoint-url "$ENDPOINT"
+          for f in "${files[@]}"; do
+            n="$(basename "$f")"
+            aws s3api head-object --bucket "$BUCKET" --key "$TAG/$n" \
+              --endpoint-url "$ENDPOINT" >/dev/null \
+              || { echo "::error::$n missing from the bucket after upload"; exit 1; }
+          done
+
+      # Verifies the exact thing the runtime depends on: a public, anonymous
+      # GET of the published URL. Catches "uploaded but Public Access is off",
+      # which a server-side listing cannot detect.
+      - name: Verify published packs are publicly readable
+        if: inputs.publish && steps.creds.outputs.have == 'true'
+        env:
+          BASE_URL: ${{ vars.SR_PACKS_BASE_URL }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+          REGIONS: ${{ steps.cfg.outputs.regions }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BASE_URL:-}" ]; then
+            echo "::error::SR_PACKS_BASE_URL is not set, so the published packs cannot be verified."
+            exit 1
+          fi
+          base="${BASE_URL%/}"
+          fail=0
+          IFS=',' read -ra rs <<< "$REGIONS"
+          for r in "${rs[@]}"; do
+            r="$(echo "$r" | xargs)"
+            url="$base/$TAG/$r.tar.gz"
+            code=$(curl -s -o /dev/null -w '%{http_code}' -L "$url")
+            if [ "$code" = "200" ]; then
+              echo "  OK   $url"
+            else
+              echo "  FAIL $url -> HTTP $code"
+              fail=1
+            fi
+          done
+          if [ "$fail" = "1" ]; then
+            echo "::error::Published objects are not publicly readable. Enable Public Access on the bucket and confirm SR_PACKS_BASE_URL matches its r2.dev domain."
+            exit 1
+          fi
+          echo "Published to \`$TAG/\` and verified publicly readable." >> "$GITHUB_STEP_SUMMARY"
