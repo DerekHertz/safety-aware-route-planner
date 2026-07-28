@@ -186,6 +186,26 @@ jobs:
           set -euo pipefail
           command -v aws >/dev/null || { echo "::error::aws CLI not found"; exit 1; }
 
+          # Pasting a secret into the GitHub UI (or piping it with `echo`)
+          # very easily captures a trailing newline. The AWS signer embeds the
+          # access key id directly into the Authorization header
+          # (Credential=<key>/<date>/auto/s3/aws4_request), so one stray newline
+          # produces "Invalid header value" on every signed request — with the
+          # key masked in the log, which makes it look like anything but
+          # whitespace. None of these values may legitimately contain
+          # whitespace, so strip it and say so.
+          for var in AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY ENDPOINT BUCKET; do
+            before="${!var}"
+            after="$(printf %s "$before" | tr -d '[:space:]')"
+            if [ "$before" != "$after" ]; then
+              echo "::warning::$var contained whitespace (usually a trailing newline from how the secret was pasted). Trimming it for this run — re-set it with: printf %s 'VALUE' | gh secret set $var"
+              export "$var=$after"
+            fi
+            if [ -z "$after" ]; then
+              echo "::error::$var is empty."; exit 1
+            fi
+          done
+
           echo "Local artifacts to publish:"
           ls -l dist/packs/
           shopt -s nullglob

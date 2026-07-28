@@ -119,10 +119,14 @@ the API reads local disk only. To enable it:
 3. Paste that stanza into `packs.lock` and open a PR. Rolling forward is
    merging it; rolling back is reverting it.
 
-Archives are byte-reproducible (sorted entries, normalized mtime/uid/mode, and
-a fixed gzip header), so a rebuild can be checked against the published digest
-rather than merely trusted. `scripts/package_packs.py` does the packaging and
-can be run locally.
+Archiving is deterministic — sorted entries, normalized mtime/uid/mode, fixed
+gzip header — so packaging the same pack directory twice gives byte-identical
+output. The *pipeline* is not reproducible end to end, though:
+`ingestion/pack.py` stamps `created_utc` into every manifest, so two builds of
+identical OSM data yield different pack bytes and different digests. The
+digests in `packs.lock` therefore have to come from the run that published the
+artifacts; they cannot be re-derived by rebuilding.
+`scripts/package_packs.py` does the packaging and can be run locally.
 
 To pull published packs into a fresh checkout without building from Overpass:
 
