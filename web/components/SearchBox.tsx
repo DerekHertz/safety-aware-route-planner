@@ -11,7 +11,12 @@ interface Props {
   onTextChange: (text: string) => void;
 }
 
-export default function SearchBox({ placeholder, value, onPick, onTextChange }: Props) {
+export default function SearchBox({
+  placeholder,
+  value,
+  onPick,
+  onTextChange,
+}: Props) {
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [open, setOpen] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);

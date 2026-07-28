@@ -73,7 +73,6 @@ class GraphBuilder:
         pack = build_pack(self.G, self.cfg, region,
                           observed_controls=observed_controls)
         for (u, v, median) in getattr(self, "_median_overrides", []):
-            import numpy as np
             mask = ((pack.edge_tail == u) & (pack.edge_head == v)) | \
                    ((pack.edge_tail == v) & (pack.edge_head == u))
             pack.edge_median[mask] = 1 if median else 0

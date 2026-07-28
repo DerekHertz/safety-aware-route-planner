@@ -1,0 +1,73 @@
+# Tooling configuration for the Python side of the repo.
+#
+# NOTE: core/pyproject.toml is a separate, real package definition for the
+# sr_core C++ extension. This file configures lint/type/test only — the
+# project itself is not pip-installable and is run from the repo root.
+
+# NOTE: `ruff format` is deliberately NOT part of CI.
+# Running it would rewrite 1,454 lines across 42 of 51 files. This codebase
+# is hand-aligned on purpose, and in pyref/search.py and pyref/costs.py the
+# layout carries meaning: parity rule P5 requires each floating-point
+# operation to sit in its own statement, and the aligned continuations are
+# how that stays reviewable. A reformat would also erase `git blame` across
+# the whole project for zero behavioural gain.
+# `ruff check` (below) enforces the things that actually matter, including
+# E501 for line length. To adopt the formatter later, run `ruff format .` as
+# a single isolated commit and add it to .git-blame-ignore-revs.
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["web", "data", ".venv", "core/build"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "UP",  # pyupgrade
+]
+
+[tool.ruff.lint.per-file-ignores]
+# `sr_core = pytest.importorskip("sr_core")` MUST run before the pyref
+# imports so the whole module is skipped on a machine with no compiler.
+# That is deliberately a statement between import blocks, which is exactly
+# what E402 flags. Do not "fix" this by moving the imports up.
+"tests/test_parity_cpp.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["api", "core", "ingestion", "pyref", "sim", "tests"]
+
+[tool.mypy]
+# 3.12, NOT 3.11, even though the project supports 3.11+.
+# numpy 2.5's bundled stubs use PEP 695 `type` statements, which mypy
+# refuses to parse when targeting 3.11 ("Type statement is only supported in
+# Python 3.12 and greater"), and it aborts before checking anything. Nothing
+# in this repo uses 3.12-only syntax — that is enforced separately by the
+# 3.11 leg of the pytest matrix — so type-checking at 3.12 costs no real
+# coverage. Run mypy on 3.12 in CI.
+python_version = "3.12"
+files = ["api", "pyref", "sim", "ingestion"]
+# Starting lenient: the codebase has never been type-checked, so this
+# catches real errors without demanding annotations everywhere. Tighten
+# disallow_untyped_defs once the obvious issues are gone.
+disallow_untyped_defs = false
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+# Third-party packages that ship no type information, plus the C++
+# extension (a compiled .pyd/.so with no stubs, and absent entirely on a
+# machine that hasn't built it).
+module = ["scipy.*", "osmnx.*", "networkx.*", "sr_core"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# -ra surfaces skip reasons in the log. The suite has two conditional
+# skips that silently shrink coverage (the sr_core importorskip and the
+# real-pack guard in test_parity_cpp.py), so never let them be invisible.
+addopts = "-ra"

@@ -10,11 +10,13 @@ from pyref.graph import Maneuver
 from pyref.metrics import compute_metrics
 from pyref.search import topo_of
 from tests.helpers.fixtures import (
-    find_turn, make_costs, route_between_nodes, stop_sign_left_city,
+    find_turn,
+    make_costs,
+    route_between_nodes,
+    stop_sign_left_city,
     unprotected_left_city,
 )
 from tests.helpers.toy_graphs import find_edge
-
 
 CFG = Config.load()
 

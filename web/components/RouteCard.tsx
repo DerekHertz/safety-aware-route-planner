@@ -29,13 +29,16 @@ export default function RouteCard({ route, units, selected, onSelect }: Props) {
         <span className="dist">{formatDistance(route.distance_m, units)}</span>
       </div>
       <div className="route-card-unsafe">
-        {u.total === 0 && <span className="unsafe-none">No flagged maneuvers</span>}
+        {u.total === 0 && (
+          <span className="unsafe-none">No flagged maneuvers</span>
+        )}
         {u.unprotected_left > 0 && (
           <span
             className="unsafe-count"
             title="Left turns onto a busy street with nothing holding back the traffic you cross"
           >
-            ⟲ {u.unprotected_left} unprotected left{u.unprotected_left === 1 ? "" : "s"}
+            ⟲ {u.unprotected_left} unprotected left
+            {u.unprotected_left === 1 ? "" : "s"}
           </span>
         )}
         {u.uncontrolled_crossing > 0 && (
@@ -43,11 +46,15 @@ export default function RouteCard({ route, units, selected, onSelect }: Props) {
             className="unsafe-count"
             title="Crossings of a busy street with nothing holding back the traffic you cross"
           >
-            ✕ {u.uncontrolled_crossing} uncontrolled crossing{u.uncontrolled_crossing === 1 ? "" : "s"}
+            ✕ {u.uncontrolled_crossing} uncontrolled crossing
+            {u.uncontrolled_crossing === 1 ? "" : "s"}
           </span>
         )}
         {route.detour_pct > 0.005 && (
-          <span className="detour-cost" title="Extra time versus the fastest route">
+          <span
+            className="detour-cost"
+            title="Extra time versus the fastest route"
+          >
             +{Math.round(route.detour_pct * 100)}% longer
           </span>
         )}

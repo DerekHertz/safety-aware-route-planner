@@ -37,11 +37,13 @@ def report(pack: GraphPack) -> str:
                  f"({100.0 * float(observed.mean() if pack.num_edges else 0.0):.1f}%)")
 
     two_way = int((pack.edge_reverse >= 0).sum())
-    lines.append(f"two-way paired edges: {two_way:,} ({100.0 * two_way / max(pack.num_edges, 1):.1f}%)")
+    lines.append(f"two-way paired edges: {two_way:,} "
+                 f"({100.0 * two_way / max(pack.num_edges, 1):.1f}%)")
     lines.append(f"must-stop approaches: {int(pack.edge_must_stop.sum()):,}")
     lines.append(f"median-divided edges: {int(pack.edge_median.sum()):,}")
-    lines.append(f"U-turn transitions allowed (dead ends): "
-                 f"{int(((pack.turn_maneuver == Maneuver.UTURN) & (pack.turn_allowed == 1)).sum()):,}")
+    uturns_allowed = int(((pack.turn_maneuver == Maneuver.UTURN)
+                          & (pack.turn_allowed == 1)).sum())
+    lines.append(f"U-turn transitions allowed (dead ends): {uturns_allowed:,}")
     lines.append(f"disallowed transitions: {int((pack.turn_allowed == 0).sum()):,}")
     stats = m.get("stats", {})
     lines.append(f"speed defaulted: {stats.get('pct_speed_defaulted')}%  "

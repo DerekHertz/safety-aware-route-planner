@@ -21,7 +21,7 @@ class AppState:
     router: Router
 
     @classmethod
-    def load(cls) -> "AppState":
+    def load(cls) -> AppState:
         cfg = Config.load(os.environ.get("SR_CONFIG", DEFAULT_CONFIG_PATH))
         pack_dir = os.environ.get("SR_PACK_DIR")
         if pack_dir is None:

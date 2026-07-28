@@ -49,8 +49,8 @@ def parse_maxspeed_kph(value: Any) -> float | None:
     if value is None:
         return None
     if isinstance(value, (list, tuple)):
-        vals = [parse_maxspeed_kph(v) for v in value]
-        vals = [v for v in vals if v is not None]
+        parsed = [parse_maxspeed_kph(v) for v in value]
+        vals = [v for v in parsed if v is not None]
         return max(vals) if vals else None
     if isinstance(value, (int, float)):
         return float(value)
@@ -69,8 +69,8 @@ def parse_lanes_per_direction(value: Any, oneway: bool) -> float | None:
     if value is None:
         return None
     if isinstance(value, (list, tuple)):
-        vals = [parse_lanes_per_direction(v, oneway) for v in value]
-        vals = [v for v in vals if v is not None]
+        parsed = [parse_lanes_per_direction(v, oneway) for v in value]
+        vals = [v for v in parsed if v is not None]
         return max(vals) if vals else None
     m = _NUM_RE.search(str(value))
     if not m:

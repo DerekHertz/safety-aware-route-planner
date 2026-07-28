@@ -7,6 +7,7 @@ time-of-day profile lookup; `free_flow` is the profile-independent baseline
 """
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass
 
 import numpy as np
@@ -30,8 +31,7 @@ def _base_volume(pack: GraphPack, cfg: Config) -> np.ndarray:
     return by_class[pack.edge_road_class]
 
 
-def at_time(pack: GraphPack, cfg: Config,
-            departure: "datetime.datetime") -> Snapshot:
+def at_time(pack: GraphPack, cfg: Config, departure: datetime.datetime) -> Snapshot:
     """The real departure-time snapshot: profile multipliers by road class,
     applied per edge. Frozen for the whole query (spec)."""
     from sim.profiles import multipliers_at

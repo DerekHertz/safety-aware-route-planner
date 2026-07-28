@@ -21,7 +21,7 @@ class Config:
     source_path: Path
 
     @classmethod
-    def load(cls, path: str | Path = DEFAULT_CONFIG_PATH) -> "Config":
+    def load(cls, path: str | Path = DEFAULT_CONFIG_PATH) -> Config:
         path = Path(path)
         with open(path, "rb") as f:
             raw = tomllib.load(f)

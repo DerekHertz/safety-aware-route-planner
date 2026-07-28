@@ -1,7 +1,6 @@
 """API contract lock: exact JSON key sets on a toy pack served through the
 real FastAPI app (SR_PACK_DIR override). A future mobile client relies on
 this shape — if a key changes, this test must be updated CONSCIOUSLY."""
-import os
 
 import pytest
 from fastapi.testclient import TestClient

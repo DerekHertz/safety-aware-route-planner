@@ -4,7 +4,10 @@ import pytest
 
 from pyref.graph import Maneuver
 from tests.helpers.fixtures import (
-    line3, grid3x3, make_costs, route_between_nodes,
+    grid3x3,
+    line3,
+    make_costs,
+    route_between_nodes,
 )
 from tests.helpers.toy_graphs import find_edge
 
@@ -46,8 +49,8 @@ def test_unreachable_returns_none():
     # the grid, so this is actually reachable — assert it found SOMETHING sane
     assert r_empty is None or r_empty.total_cost > 0
 
-    from pyref.search import shortest_path, topo_of
     from pyref.costs import arc_cost
+    from pyref.search import shortest_path, topo_of
     r = shortest_path(topo_of(pack), arc_cost(pack, qc, 0.0), None,
                       seeds=[(0, float(qc.edge_time_s[0]))], dests=[])
     assert r is None
@@ -68,8 +71,8 @@ def test_disallowed_uturn_forces_dead_end_detour():
     and turning around there — 3 extra edges instead of 1 forbidden U-turn."""
     pack, a, m, c = line3()
     qc = make_costs(pack)
-    from pyref.search import shortest_path, topo_of
     from pyref.costs import arc_cost
+    from pyref.search import shortest_path, topo_of
     e_am = find_edge(pack, a, m)
     e_ma = find_edge(pack, m, a)
     r = shortest_path(topo_of(pack), arc_cost(pack, qc, 0.0), None,
@@ -83,8 +86,8 @@ def test_disallowed_uturn_forces_dead_end_detour():
 def test_dead_end_uturn_taken_when_needed():
     pack, a, m, c = line3()
     qc = make_costs(pack)
-    from pyref.search import shortest_path, topo_of
     from pyref.costs import arc_cost
+    from pyref.search import shortest_path, topo_of
     e_mc = find_edge(pack, m, c)
     e_cm = find_edge(pack, c, m)
     # from m->c, come back c->m: c IS a dead end, U-turn allowed

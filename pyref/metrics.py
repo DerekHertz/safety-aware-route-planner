@@ -39,7 +39,8 @@ def compute_metrics(pack: GraphPack, qc: QueryCosts, result: PathResult,
     distance = float(np.sum(lengths * share))
     eta = float(np.sum(times * share))
 
-    kinds = qc.turn_unsafe_type[result.turn_ids] if len(result.turn_ids) else np.array([], dtype=np.uint8)
+    kinds = (qc.turn_unsafe_type[result.turn_ids] if len(result.turn_ids)
+             else np.array([], dtype=np.uint8))
     return RouteMetrics(
         distance_m=distance,
         eta_s=eta,
