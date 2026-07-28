@@ -11,4 +11,4 @@ pytest==9.1.1
 # so an editable/no-isolation build (`pip install --no-build-isolation
 # -e ./core`) works too — which is how you iterate on the C++ core locally.
 pybind11>=2.12
-setuptools>=68
+setuptools>=83.0.0
