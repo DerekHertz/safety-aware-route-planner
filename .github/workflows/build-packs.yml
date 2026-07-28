@@ -1,0 +1,183 @@
+# Build graph packs from OpenStreetMap and publish them for deployments to
+# fetch. Manual dispatch ONLY — this hits Overpass, which is a donated public
+# service, so it must never run per-push or per-PR.
+#
+# Output: one reproducible <region>.tar.gz per region, plus the packs.lock
+# stanza pinning their digests. Open a PR with that stanza to roll the
+# deployment forward; revert it to roll back.
+name: build-packs
+
+on:
+  workflow_dispatch:
+    inputs:
+      regions:
+        description: Comma-separated regions. Blank = every preset in config/config.toml.
+        required: false
+        default: ""
+      tag:
+        description: Release directory in the bucket. Blank = packs-v<format>-<date>.
+        required: false
+        default: ""
+      publish:
+        description: Upload to the bucket. Off = build and attach artifacts only.
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # Never run two pack builds at once: they would race on the Overpass cache
+  # and could publish two different artifacts under one tag.
+  group: build-packs
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      # Read constants without importing anything, so this runs before installs
+      # and cannot be broken by a dependency problem.
+      - name: Resolve versions and regions
+        id: cfg
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import os, re, tomllib, datetime, pathlib
+          src = pathlib.Path("ingestion/download.py").read_text()
+          ingest = re.search(r"^INGEST_SCHEMA_VERSION\s*=\s*(\d+)", src, re.M).group(1)
+          src = pathlib.Path("pyref/graph.py").read_text()
+          fmt = re.search(r"^PACK_FORMAT_VERSION\s*=\s*(\d+)", src, re.M).group(1)
+
+          cfg = tomllib.loads(pathlib.Path("config/config.toml").read_text())
+          presets = list(cfg["region"]["presets"])
+          regions = os.environ.get("IN_REGIONS", "").strip() or ",".join(presets)
+
+          tag = os.environ.get("IN_TAG", "").strip()
+          if not tag:
+              tag = f"packs-v{fmt}-{datetime.date.today():%Y%m%d}"
+
+          print(f"ingest_version={ingest}")
+          print(f"format_version={fmt}")
+          print(f"regions={regions}")
+          print(f"tag={tag}")
+          PY
+        env:
+          IN_REGIONS: ${{ inputs.regions }}
+          IN_TAG: ${{ inputs.tag }}
+
+      # ingestion/download.py caches the Overpass response and the resulting
+      # GraphML here, keyed by INGEST_SCHEMA_VERSION. Reusing that cache is what
+      # keeps repeat runs (a new region, a rebuilt pack) off Overpass entirely.
+      - name: Cache OSM downloads
+        uses: actions/cache@v4
+        with:
+          path: data/cache
+          key: osm-v${{ steps.cfg.outputs.ingest_version }}-${{ hashFiles('config/config.toml') }}
+          restore-keys: |
+            osm-v${{ steps.cfg.outputs.ingest_version }}-
+
+      - name: Install ingestion dependencies
+        run: pip install -r requirements-ingest.txt
+
+      # build_pack already prints ingestion/sanity.py's report (counts,
+      # histograms, defaulting rates) at the end of each build, so capture that
+      # rather than running sanity separately — it is a library function, not a
+      # CLI.
+      # pipefail matters: without it `tee` would swallow a build failure.
+      - name: Build packs
+        env:
+          REGIONS: ${{ steps.cfg.outputs.regions }}
+        run: |
+          set -o pipefail
+          IFS=',' read -ra rs <<< "$REGIONS"
+          for r in "${rs[@]}"; do
+            r="$(echo "$r" | xargs)"
+            echo "::group::building $r"
+            python -m ingestion.build_pack --region "$r" 2>&1 | tee "build-$r.log"
+            echo "::endgroup::"
+          done
+
+      - name: Sanity report
+        if: always()
+        run: |
+          {
+            echo "## Pack build reports"
+            for f in build-*.log; do
+              [ -e "$f" ] || continue
+              r="${f#build-}"; r="${r%.log}"
+              echo "<details><summary><code>$r</code></summary>"
+              echo
+              echo '```'
+              cat "$f"
+              echo '```'
+              echo "</details>"
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package
+        id: pkg
+        env:
+          REGIONS: ${{ steps.cfg.outputs.regions }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+          BASE_URL: ${{ vars.SR_PACKS_BASE_URL }}
+        run: |
+          python scripts/package_packs.py \
+            --regions "$REGIONS" --out dist/packs \
+            --tag "$TAG" --base-url "$BASE_URL" | tee package.log
+          {
+            echo "## packs.lock stanza"
+            echo
+            echo 'Paste into `packs.lock` and open a PR to roll the deployment forward.'
+            echo
+            echo '```toml'
+            sed -n '/--- paste into packs.lock ---/,$p' package.log | tail -n +2
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Always attached, so a run with publishing off is still useful and so a
+      # published artifact can be diffed against a rebuild.
+      - name: Attach artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: packs-${{ steps.cfg.outputs.tag }}
+          path: dist/packs/
+          retention-days: 14
+
+      - name: Check bucket credentials
+        id: creds
+        env:
+          KEY: ${{ secrets.R2_ACCESS_KEY_ID }}
+        run: |
+          if [ -n "$KEY" ]; then echo "have=true" >> "$GITHUB_OUTPUT";
+          else
+            echo "have=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::R2 secrets not set — built packs are attached as a workflow artifact but not published. See packs.lock for setup."
+          fi
+
+      # R2 speaks the S3 API; the AWS CLI is preinstalled on ubuntu runners.
+      # Uploaded with a long max-age because a tag directory is immutable.
+      - name: Publish to bucket
+        if: inputs.publish && steps.creds.outputs.have == 'true'
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.SR_PACKS_BUCKET }}
+          TAG: ${{ steps.cfg.outputs.tag }}
+        run: |
+          aws s3 cp dist/packs/ "s3://$BUCKET/$TAG/" \
+            --recursive --endpoint-url "$ENDPOINT" \
+            --content-type application/gzip \
+            --cache-control "public, max-age=31536000, immutable"
+          echo "Published to \`$TAG/\`" >> "$GITHUB_STEP_SUMMARY"
