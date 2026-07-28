@@ -20,9 +20,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # 3.11 is the floor declared by core/pyproject.toml and the README.
-          - { os: ubuntu-latest, python: "3.11" }
+          # 3.12 is the project floor. It is not a preference: numpy >= 2.5 and
+          # scipy >= 1.18 both declare requires-python >= 3.12, so the pinned
+          # runtime cannot install below it. (The first CI run caught exactly
+          # this — the README claimed 3.11+ and pip disagreed.)
           - { os: ubuntu-latest, python: "3.12" }
+          # Forward-compat canary. Nothing ships on 3.13 yet; this is here to
+          # find out about breakage on our schedule rather than someone else's.
+          - { os: ubuntu-latest, python: "3.13" }
           # Windows is NOT optional. core/setup.py selects MSVC-specific flags
           # (/fp:precise, deliberately not /fp:fast) that its own comment calls
           # "required for bitwise parity with pyref", and that configuration has

@@ -6,4 +6,8 @@ build-backend = "setuptools.build_meta"
 name = "sr-core"
 version = "0.1.0"
 description = "Safety-aware route planner C++17 core (pybind11)"
-requires-python = ">=3.11"
+# 3.12 is the effective floor for the whole project: numpy >= 2.5 and
+# scipy >= 1.18 both declare requires-python >= 3.12, and the runtime pins
+# them. The extension itself would build on 3.11, but shipping a claim the
+# dependency set cannot honour is worse than narrowing it.
+requires-python = ">=3.12"

@@ -62,7 +62,8 @@ Key design points:
 
 ## Build & run
 
-Prereqs: Python 3.11+, Node 18+, MSVC (for the optional C++ core).
+Prereqs: Python 3.12+, Node 20.9+, MSVC (for the optional C++ core).
+The 3.12 floor comes from the pinned numpy and scipy, which both require it.
 
 ```powershell
 powershell -File scripts\build_all.ps1   # venv, deps, packs, sr_core, tests
