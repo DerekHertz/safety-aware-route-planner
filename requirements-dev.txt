@@ -10,5 +10,5 @@ pytest==9.1.1
 # core/pyproject.toml, so they are not strictly required here. They are listed
 # so an editable/no-isolation build (`pip install --no-build-isolation
 # -e ./core`) works too — which is how you iterate on the C++ core locally.
-pybind11>=2.12
+pybind11>=3.0.4
 setuptools>=68
