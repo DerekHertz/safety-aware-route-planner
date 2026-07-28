@@ -1,9 +1,24 @@
-// API contract types — kept in sync BY HAND with api/schemas.py (the
-// server is the source of truth; a future mobile client reuses this shape).
+// API contract types — mirroring api/schemas.py, which is the source of truth
+// (a future mobile client reuses this shape).
+//
+// Field names and optionality are enforced against the server's OpenAPI schema
+// by .github/workflows/schema-sync.yml. TYPES are deliberately not compared:
+// the server declares `geometry: dict` and `kind: str` where TypeScript narrows
+// to LineString and RouteKind, and that divergence is intentional.
 
 export interface LatLon {
   lat: number;
   lon: number;
+}
+
+/** Request body for POST /route. Optional fields fall back to server defaults:
+ *  `departure_time` to "now", `detour_budget_pct` to the config value. */
+export interface RouteRequest {
+  origin: LatLon;
+  destination: LatLon;
+  departure_time?: string | null;
+  safety_enabled?: boolean;
+  detour_budget_pct?: number | null;
 }
 
 export type RouteKind = "fast" | "balanced" | "safe";

@@ -17,7 +17,7 @@
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 extend-exclude = ["web", "data", ".venv", "core/build"]
 
 [tool.ruff.lint]
@@ -40,13 +40,9 @@ select = [
 known-first-party = ["api", "core", "ingestion", "pyref", "sim", "tests"]
 
 [tool.mypy]
-# 3.12, NOT 3.11, even though the project supports 3.11+.
-# numpy 2.5's bundled stubs use PEP 695 `type` statements, which mypy
-# refuses to parse when targeting 3.11 ("Type statement is only supported in
-# Python 3.12 and greater"), and it aborts before checking anything. Nothing
-# in this repo uses 3.12-only syntax — that is enforced separately by the
-# 3.11 leg of the pytest matrix — so type-checking at 3.12 costs no real
-# coverage. Run mypy on 3.12 in CI.
+# Matches the project floor. numpy 2.5's bundled stubs also use PEP 695 `type`
+# statements, which mypy refuses to parse below 3.12 — it aborts before
+# checking anything at all.
 python_version = "3.12"
 files = ["api", "pyref", "sim", "ingestion"]
 # Starting lenient: the codebase has never been type-checked, so this

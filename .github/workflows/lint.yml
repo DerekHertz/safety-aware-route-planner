@@ -1,0 +1,65 @@
+# Fast feedback: style and types only, no compilation and no packs.
+# Kept separate from test.yml so this finishes in well under a minute while
+# the matrix is still building the C++ extension.
+name: lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # The project floor, set by numpy/scipy requiring >= 3.12.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements*.txt
+
+      # Stdlib only, so it runs before any install and fails fast.
+      - name: Check for committed credentials
+        run: python scripts/check_no_secrets.py
+
+      # requirements-lint.txt deliberately omits osmnx and its geo stack.
+      - run: pip install -r requirements-lint.txt
+
+      - run: ruff check --output-format=github .
+
+      - run: mypy
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm run format:check
+
+      # `next typegen` first: tsconfig.json includes next-env.d.ts and
+      # .next/types/**, both gitignored, so tsc alone fails on a fresh
+      # checkout. typegen generates them without a full build.
+      - run: npm run typecheck
