@@ -1,0 +1,46 @@
+# Pinned graph-pack artifacts.
+#
+# Graph packs are build outputs, not source: `data/` is gitignored, building a
+# pack hits Overpass, and the API cannot start without one. This file is how a
+# checkout, a CI run, and a deployed container all agree on *which* prebuilt
+# packs to use.
+#
+# Read by:
+#   - api/packs_fetch.py        (downloads missing packs at startup)
+#   - .github/actions/fetch-packs (populates data/packs/ for CI)
+#   - .github/workflows/build-packs.yml (writes the stanza to paste back here)
+#
+# TO POPULATE THIS FILE:
+#   1. Create a public-read R2 (or S3) bucket. Packs are derived from public
+#      OpenStreetMap data — there is nothing secret in them, so the runtime
+#      fetches over plain HTTPS with no credentials and no secrets on the
+#      server. Only the upload side (CI) needs keys.
+#   2. Set `base_url` below to the bucket's public URL.
+#   3. Run the `build-packs` workflow (manual dispatch). It prints a ready-made
+#      `[regions]` block; paste it here and open a PR.
+#
+# While `base_url` is empty, pack fetching is DISABLED and the API reads only
+# from local disk — which is exactly what you want for local development.
+
+# Public base URL of the bucket, with trailing slash. Empty = fetching off.
+# Override per-deployment with the SR_PACKS_URL environment variable.
+base_url = ""
+
+# Immutable release directory inside the bucket. Artifacts are addressed as
+# {base_url}{tag}/{region}.tar.gz. Never overwrite a published tag — bump it,
+# so a rollback is just reverting this file.
+tag = ""
+
+# Must equal pyref.graph.PACK_FORMAT_VERSION. Checked at startup: a mismatch
+# means the published artifacts predate a pack-layout change and would fail
+# obscurely inside GraphPack.load(), so we fail early with a clear message
+# instead. Bump this in the same PR that bumps PACK_FORMAT_VERSION and
+# republishes the packs.
+format_version = 2
+
+# One entry per published region. `sha256` is over the .tar.gz artifact.
+#
+# [regions.berkeley_oakland]
+# sha256 = "0000000000000000000000000000000000000000000000000000000000000000"
+# bytes = 2690000
+[regions]

@@ -1,0 +1,72 @@
+name: Fetch graph packs
+description: >
+  Populate data/packs/ from the artifacts pinned in packs.lock, so jobs that
+  need a real pack (notably the C++ parity suite) can run. Caches by lock-file
+  hash, so the bucket is hit once per packs.lock revision rather than per job.
+
+inputs:
+  regions:
+    description: Comma-separated region names to fetch.
+    required: true
+  dest:
+    description: Pack root directory.
+    required: false
+    default: data/packs
+  optional:
+    description: >
+      When "true" (the default), a missing or unconfigured bucket logs a warning
+      and succeeds. That is what keeps CI green before any packs are published;
+      tests needing a real pack skip instead. Set "false" once packs.lock has a
+      base_url, to make a broken bucket a hard failure.
+    required: false
+    default: "true"
+
+outputs:
+  present:
+    description: '"true" if the requested packs are on disk afterwards.'
+    value: ${{ steps.check.outputs.present }}
+
+runs:
+  using: composite
+  steps:
+    # Requires httpx, i.e. requirements.txt already installed by the caller.
+    # Deliberately reuses api/packs_fetch.py rather than reimplementing the
+    # download in shell: one tested code path, no drift between CI and runtime.
+    - name: Restore cached packs
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ inputs.dest }}
+        key: packs-${{ hashFiles('packs.lock') }}-${{ inputs.regions }}
+
+    - name: Download packs
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        SR_REGIONS_IN: ${{ inputs.regions }}
+        SR_DEST_IN: ${{ inputs.dest }}
+        SR_OPTIONAL_IN: ${{ inputs.optional }}
+      run: |
+        args=(--regions "$SR_REGIONS_IN" --dest "$SR_DEST_IN")
+        [ "$SR_OPTIONAL_IN" = "true" ] && args+=(--optional)
+        python -m api.packs_fetch "${args[@]}"
+
+    - name: Report what landed
+      id: check
+      shell: bash
+      env:
+        SR_REGIONS_IN: ${{ inputs.regions }}
+        SR_DEST_IN: ${{ inputs.dest }}
+      run: |
+        present=true
+        IFS=',' read -ra regions <<< "$SR_REGIONS_IN"
+        for r in "${regions[@]}"; do
+          r="$(echo "$r" | xargs)"
+          if [ -f "$SR_DEST_IN/$r/manifest.json" ]; then
+            echo "  present: $r"
+          else
+            echo "  MISSING: $r"
+            present=false
+          fi
+        done
+        echo "present=$present" >> "$GITHUB_OUTPUT"

@@ -91,6 +91,45 @@ carry `INGEST_SCHEMA_VERSION` (`ingestion/download.py`) — bump it whenever tag
 retention or simplification changes, or a stale cache will keep feeding the
 old data into new code.
 
+### Pack distribution
+
+Packs are build outputs, not source: `data/` is gitignored, and the API cannot
+start without one. `packs.lock` pins which prebuilt artifacts a checkout, a CI
+run, and a deployed container should all use.
+
+At startup the API downloads any missing pack (`api/packs_fetch.py`), verifies
+it against the digest in `packs.lock`, and unpacks it atomically. This is a
+no-op when the pack is already on disk, so **local development never touches
+the network** — and neither does the test suite, which pins `SR_PACK_DIR` at a
+generated toy pack.
+
+While `base_url` in `packs.lock` is empty, fetching is disabled entirely and
+the API reads local disk only. To enable it:
+
+1. Create a **public-read** R2 (or S3) bucket. Packs derive from public
+   OpenStreetMap data, so there is nothing secret in them: the runtime fetches
+   over plain HTTPS with no credentials, and only CI — which uploads — needs
+   keys. Set the repo variable `SR_PACKS_BASE_URL` and the secrets
+   `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` plus the
+   variable `SR_PACKS_BUCKET`.
+2. Run the **build-packs** workflow (manual dispatch — it hits Overpass, so it
+   never runs per-push). It builds each region, publishes reproducible
+   `<region>.tar.gz` artifacts under an immutable tag, and prints the
+   `packs.lock` stanza.
+3. Paste that stanza into `packs.lock` and open a PR. Rolling forward is
+   merging it; rolling back is reverting it.
+
+Archives are byte-reproducible (sorted entries, normalized mtime/uid/mode, and
+a fixed gzip header), so a rebuild can be checked against the published digest
+rather than merely trusted. `scripts/package_packs.py` does the packaging and
+can be run locally.
+
+To pull published packs into a fresh checkout without building from Overpass:
+
+```bash
+python -m api.packs_fetch --regions berkeley_small,berkeley_oakland
+```
+
 ## API contract (frozen — a future mobile client reuses it)
 
 `POST /route` `{origin:{lat,lon}, destination:{lat,lon}, departure_time,
