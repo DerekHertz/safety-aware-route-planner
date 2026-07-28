@@ -31,10 +31,7 @@ base_url = "https://pub-0316308e85f3439ab800d022c77d67e7.r2.dev"
 # Immutable release directory inside the bucket. Artifacts are addressed as
 # {base_url}{tag}/{region}.tar.gz. Never overwrite a published tag — bump it,
 # so a rollback is just reverting this file.
-#
-# Empty until a build-packs run actually publishes. With no regions listed
-# below, fetching stays disabled regardless of base_url.
-tag = ""
+tag = "packs-v2-20260728"
 
 # Must equal pyref.graph.PACK_FORMAT_VERSION. Checked at startup: a mismatch
 # means the published artifacts predate a pack-layout change and would fail
@@ -51,5 +48,6 @@ format_version = 2
 # pack bytes and different digests. Copy the stanza from the run whose publish
 # and verification steps both went green.
 #
-# berkeley_small = { sha256 = "...", bytes = 215291 }
 [regions]
+berkeley_small = { sha256 = "98bae4afb3834b804aa4fcb95d29658f5c6f493e59f84fb6b8eb4601b544d73b", bytes = 215292 }
+berkeley_oakland = { sha256 = "08457c2f3c3b32778a96dfd9ce91851be9f4e7c81c7aa02c1f37e9bebad37660", bytes = 2688707 }
