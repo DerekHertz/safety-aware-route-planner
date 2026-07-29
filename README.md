@@ -135,6 +135,77 @@ To pull published packs into a fresh checkout without building from Overpass:
 python -m api.packs_fetch --regions berkeley_small,berkeley_oakland
 ```
 
+## Running it (including on a phone)
+
+### The container
+
+```bash
+docker build -t sr-api .
+docker run -p 8000:8080 sr-api
+```
+
+`Dockerfile` is multi-stage: the builder installs g++ and produces an `sr_core`
+wheel, and the runtime stage carries no compiler, no `ingestion/`, and no osmnx
+— that package and its geo stack are build-time only, and excluding them keeps
+the image at ~520 MB instead of well over a gigabyte. The build **fails** if
+`sr_core` cannot be imported, because `pyref/engine.py` otherwise falls back to
+the pure-Python engine with only a warning, and that is a ~20× latency
+regression whose only symptom is slow responses.
+
+Packs are not baked in — the container downloads them at boot from the bucket
+pinned in `packs.lock` (see *Pack distribution*), so adding a region is an
+upload and a restart rather than an image rebuild.
+
+`/health` reports readiness, not just liveness: 503 until a pack is actually
+loaded, and it includes `engine` so a silent downgrade to the pure-Python path
+is visible from outside without reading logs.
+
+```json
+{"status":"ok","packs_loaded":1,"region":"berkeley_oakland","num_edges":20678,"engine":"cpp"}
+```
+
+### On a phone, via a tunnel
+
+Geolocation needs a **secure context**, so GPS origin tracking will not work
+over plain http from a phone — you need HTTPS even for local testing. A tunnel
+is the cheapest way to get it, and needs no hosting account.
+
+The front-end proxies `/api/*` to the backend (`rewrites` in
+`web/next.config.ts`), so **one** tunnel to port 3000 serves the whole app. That
+matters more than it looks: `NEXT_PUBLIC_API_URL` is inlined at *build* time, so
+pointing the browser straight at the API would mean rebuilding the front-end
+every time a tunnel handed out a new hostname. Going through the proxy also
+means no CORS configuration at all.
+
+```bash
+# terminal 1 — API on :8000
+docker run -p 8000:8080 sr-api
+
+# terminal 2 — web on :3000, proxying /api to the container
+npm --prefix web run dev
+
+# terminal 3 — public HTTPS URL for :3000
+cloudflared tunnel --url http://localhost:3000
+```
+
+Open the printed `https://….trycloudflare.com` on the phone. `API_PROXY_TARGET`
+overrides the proxy destination if the API is somewhere other than
+`http://localhost:8000`.
+
+### If you deploy it later
+
+Nothing here is host-specific — it is a container that reads its configuration
+from the environment (`SR_CORS_ORIGINS`, `SR_CORS_ORIGIN_REGEX`,
+`SR_PACKS_URL`, `SR_NOMINATIM_CONTACT`). Two constraints carry over to any host:
+
+- **HTTPS is mandatory**, for the geolocation reason above.
+- **Run exactly one process, and do not use `--workers`.** The Nominatim rate
+  limiter in `api/geocode.py` is a module-level lock plus a timestamp, so it
+  only serialises within a single process. Each extra process or replica
+  multiplies the request rate against a service whose policy allows roughly one
+  per second. Platforms that autoscale by default need an explicit max of 1.
+  Scaling out means moving that limiter somewhere shared first.
+
 ## API contract (frozen — a future mobile client reuses it)
 
 `POST /route` `{origin:{lat,lon}, destination:{lat,lon}, departure_time,
