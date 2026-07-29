@@ -18,6 +18,8 @@ import {
   DEFAULT_UNITS,
   UNITS_STORAGE_KEY,
   UnitSystem,
+  formatDistance,
+  formatDuration,
   isUnitSystem,
 } from "@/lib/units";
 import {
@@ -25,6 +27,11 @@ import {
   insideBbox,
   useGeolocation,
 } from "@/lib/useGeolocation";
+import {
+  COMPACT_QUERY,
+  SHEET_PEEK_PX,
+  useMediaQuery,
+} from "@/lib/useMediaQuery";
 
 // MapLibre touches `window` at import time — client-only bundle
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -59,10 +66,27 @@ export default function Home() {
   const [coverageNote, setCoverageNote] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState(true);
   const [flyTo, setFlyTo] = useState<LatLon | null>(null);
+  // Mobile only (the sheet styling is behind a max-width query); harmless on
+  // desktop, where .sidebar is a static column and the class does nothing.
+  const [sheetOpen, setSheetOpen] = useState(false);
   const reqSeq = useRef(0);
   const seededRef = useRef(false);
 
   const geo = useGeolocation(true);
+  const isCompact = useMediaQuery(COMPACT_QUERY);
+
+  // Keep routes clear of the sheet when fitting the viewport. Held constant
+  // rather than tracking the expanded height: MapLibre cannot honour padding
+  // larger than the container, and once the sheet is open there is no map worth
+  // fitting into anyway — the user collapses it to look, and finds the route
+  // framed correctly.
+  const fitPadding = useMemo(
+    () =>
+      isCompact
+        ? { top: 60, left: 24, right: 24, bottom: SHEET_PEEK_PX + 24 }
+        : 60,
+    [isCompact],
+  );
 
   // --- unit preference (read in an effect so SSR and client markup agree) ---
   useEffect(() => {
@@ -133,6 +157,10 @@ export default function Home() {
       );
       if (seq !== reqSeq.current) return; // stale response
       setRoutes(resp.routes);
+      // Results are the reason to look at the panel, so raise it. Done here in
+      // the response handler rather than in an effect watching `routes`: this
+      // is a reaction to an event, not derived state.
+      if (resp.routes.length > 0) setSheetOpen(true);
       setSelected((prev) =>
         prev && resp.routes.some((r) => r.kind === prev)
           ? prev
@@ -159,6 +187,7 @@ export default function Home() {
   // --- manual overrides always win over live GPS -----------------------
   const setPoint = useCallback((which: "origin" | "destination", p: LatLon) => {
     const label = `${p.lat.toFixed(5)}, ${p.lon.toFixed(5)}`;
+    setSheetOpen(false);
     if (which === "origin") {
       setFollowMode(false); // a deliberate choice must not be overwritten
       setOrigin(p);
@@ -209,11 +238,53 @@ export default function Home() {
     [meta],
   );
 
+  // Label on the collapsed sheet. It is the only thing visible when the panel
+  // is down, so it should say what the app is currently doing rather than
+  // "Show panel".
+  const routeSummary = useMemo(() => {
+    if (loading) return "Routing…";
+    if (error) return "Routing failed — tap for details";
+    const chosen = routes.find((r) => r.kind === selected) ?? routes[0];
+    if (!chosen) {
+      if (!origin) return "Set a starting point";
+      if (!destination) return "Set a destination";
+      return "Show panel";
+    }
+    return `${formatDuration(chosen.eta_s)} · ${formatDistance(chosen.distance_m, units)} · ${
+      chosen.unsafe.total === 0
+        ? "no unsafe maneuvers"
+        : `${chosen.unsafe.total} unsafe`
+    }`;
+  }, [loading, error, routes, selected, origin, destination, units]);
+
   return (
     <main className="layout">
-      <aside className="sidebar">
+      <aside
+        className={`sidebar${sheetOpen ? " expanded" : ""}`}
+        // Focusing a field must expand the sheet: the geocoder's suggestion
+        // list drops downward, and while collapsed that is off the bottom of
+        // the screen. onFocusCapture rather than wiring onFocus through every
+        // input.
+        //
+        // Restricted to INPUT deliberately. Focus fires BEFORE click, so
+        // reacting to any focus made the handle unusable: focusing it set the
+        // sheet open, then its own onClick toggled it straight back shut and
+        // nothing appeared to happen.
+        onFocusCapture={(e) => {
+          if ((e.target as HTMLElement).tagName === "INPUT") setSheetOpen(true);
+        }}
+      >
+        <button
+          type="button"
+          className="sheet-handle"
+          aria-expanded={sheetOpen}
+          aria-controls="route-panel"
+          onClick={() => setSheetOpen((v) => !v)}
+        >
+          {sheetOpen ? "Hide panel" : routeSummary}
+        </button>
         <h1>Safety-Aware Routes</h1>
-        <p className="hint">
+        <p className="hint intro">
           Search, click the map, or use your current location. Covered area:{" "}
           {regionLabel}.
         </p>
@@ -318,7 +389,7 @@ export default function Home() {
         {loading && <div className="status">Routing…</div>}
         {error && <div className="status error">{error}</div>}
 
-        <div className="cards">
+        <div className="cards" id="route-panel">
           {routes.map((r) => (
             <RouteCard
               key={r.kind}
@@ -349,6 +420,7 @@ export default function Home() {
           onSetPoint={setPoint}
           originIsLive={originIsLive}
           flyTo={flyTo}
+          fitPadding={fitPadding}
         />
       </div>
     </main>

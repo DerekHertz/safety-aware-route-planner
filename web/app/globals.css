@@ -31,7 +31,9 @@ body {
 
 .layout {
   display: flex;
-  height: 100vh;
+  /* dvh, not vh: mobile browsers report vh as the TALL viewport, so the
+     bottom of the layout sits behind the URL bar until it collapses. */
+  height: 100dvh;
 }
 
 .sidebar {
@@ -148,10 +150,6 @@ body {
   color: var(--muted);
 }
 
-.locate:hover {
-  background: #f1f5f9;
-}
-
 .locate.active {
   border-color: #2563eb;
   color: #2563eb;
@@ -218,10 +216,6 @@ body {
   cursor: pointer;
 }
 
-.search-results button:hover {
-  background: #f1f5f9;
-}
-
 .controls-row {
   display: flex;
   align-items: center;
@@ -272,10 +266,6 @@ body {
   cursor: pointer;
 }
 
-.reset:hover {
-  background: #f1f5f9;
-}
-
 .status {
   font-size: 0.85rem;
   color: var(--muted);
@@ -315,10 +305,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.route-card:hover {
-  background: #f8fafc;
 }
 
 .route-card.selected {
@@ -425,4 +411,197 @@ body {
 .segmented button:disabled {
   cursor: not-allowed;
   opacity: 0.45;
+}
+
+/* ===========================================================================
+   Pointer-dependent affordances.
+   Unguarded :hover leaves a sticky highlight on touch, because a tap counts as
+   a hover until you tap elsewhere.
+   =========================================================================== */
+@media (hover: hover) and (pointer: fine) {
+  .locate:hover,
+  .reset:hover,
+  .search-results button:hover {
+    background: #f1f5f9;
+  }
+
+  .route-card:hover {
+    background: #f8fafc;
+  }
+}
+
+/* ===========================================================================
+   Bottom sheet — the sidebar's mobile form.
+
+   Two states, toggled by a tap, animated with a transform. Deliberately NOT a
+   drag handler: a draggable sheet sitting on top of a MapLibre canvas has to
+   arbitrate touchmove against the map's own pan and pinch handlers and against
+   the sheet's internal scrolling, and getting that right is days of work for
+   an affordance a tap already provides. The structure below would support
+   adding drag later without rewriting anything.
+   =========================================================================== */
+:root {
+  /* Handle + both search fields: enough to start a route without expanding. */
+  --sheet-peek: 158px;
+}
+
+.sheet-handle {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .layout {
+    flex-direction: column;
+    position: relative;
+  }
+
+  /* Map fills the viewport; the sheet floats over it. */
+  .map-wrap {
+    position: absolute;
+    inset: 0;
+  }
+
+  .sidebar {
+    position: absolute;
+    inset: auto 0 0 0;
+    width: auto;
+    min-width: 0;
+    height: 85dvh;
+    z-index: 10;
+    border-right: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 16px 16px 0 0;
+    background: var(--background);
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.16);
+    padding: 0 16px 16px;
+    /* Clears the home indicator on a notched device; viewportFit: "cover" in
+       layout.tsx is what makes env() resolve to anything. */
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateY(calc(100% - var(--sheet-peek)));
+    transition: transform 0.25s ease;
+    overscroll-behavior: contain;
+  }
+
+  .sidebar.expanded {
+    transform: translateY(0);
+    overflow-y: auto;
+  }
+
+  /* Collapsed: no scrolling, or content scrolls away below the fold where it
+     cannot be seen. */
+  .sidebar:not(.expanded) {
+    overflow: hidden;
+  }
+
+  .sheet-handle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    /* Span the sheet's full width despite the padding. */
+    margin: 0 -16px 4px;
+    padding: 10px 16px;
+    min-height: 44px;
+    width: calc(100% + 32px);
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    background: var(--background);
+    color: var(--muted);
+    font-size: 0.8rem;
+    cursor: pointer;
+  }
+
+  .sheet-handle::before {
+    content: "";
+    width: 36px;
+    height: 4px;
+    border-radius: 999px;
+    background: #cbd5e1;
+  }
+
+  /* The peek exists so a route can be started without expanding, which means
+     it must show both search fields and nothing else. Measured: the title and
+     intro pushed the origin field to y=798 and the destination to y=854 on a
+     375x812 screen — i.e. both off the bottom of the sheet.
+
+     The title is redundant on mobile (it is the PWA name and the tab title),
+     so it goes; the coverage note is still worth having, so it moves to the
+     end of the expanded sheet rather than being dropped. */
+  .sidebar h1 {
+    display: none;
+  }
+
+  .hint.intro {
+    order: 10;
+  }
+
+  /* iOS Safari zooms the whole page when a focused input's font is under 16px.
+     Every tap on the search box did that. This is the fix — locking zoom via
+     the viewport tag would "work" too, at the cost of accessibility. */
+  .searchbox input,
+  .controls-row input[type="datetime-local"] {
+    font-size: 16px;
+  }
+
+  /* 44px minimum touch targets. */
+  .locate {
+    width: 44px;
+    height: 44px;
+  }
+
+  .unit-toggle button,
+  .segmented button,
+  .search-results button,
+  .reset {
+    min-height: 44px;
+  }
+
+  .segmented button {
+    font-size: 0.78rem;
+    padding: 8px 4px;
+  }
+
+  .map-error button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* The desktop layout reserves 60px on the right for NavigationControl, which
+     is not rendered on touch. */
+  .map-error {
+    right: 10px;
+    top: max(10px, env(safe-area-inset-top));
+  }
+
+  /* OpenStreetMap data is ODbL: attribution is a licence obligation, not
+     decoration, so it has to clear the collapsed sheet.
+
+     Scoped under .map-wrap for specificity. maplibre-gl.css sets
+     `bottom: 0` on these with a single class, and it is imported from
+     MapView.tsx — i.e. after this file in the bundle — so a matching
+     single-class selector here loses and the attribution ends up hidden
+     behind the sheet. Measured at bottom:0px before this was scoped. */
+  .map-wrap .maplibregl-ctrl-bottom-right,
+  .map-wrap .maplibregl-ctrl-bottom-left {
+    bottom: calc(var(--sheet-peek) + 4px);
+  }
+
+  /* The suggestion list drops downward; cap it so it cannot run under the
+     on-screen keyboard. */
+  .search-results {
+    max-height: 40dvh;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+
+  .gps-puck {
+    animation: none;
+  }
 }

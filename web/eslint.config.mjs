@@ -23,32 +23,36 @@ export default defineConfig([
   // ---------------------------------------------------------------------
   // Grandfathered violations — a ratchet, not an exemption.
   //
-  // eslint-config-next 16 turns on the React-Compiler-era `react-hooks`
-  // rules, which flag 7 pre-existing sites in these four files:
-  //   - set-state-in-effect: app/page.tsx (3), components/SearchBox.tsx,
-  //     lib/useGeolocation.ts — effects that seed state synchronously.
-  //   - refs: components/MapView.tsx (2) — the "latest ref" pattern at
-  //     MapView.tsx:68-72, deliberately written so map event handlers see
-  //     current props without re-registering. Writing a ref during render is
-  //     unsound under concurrent rendering (a discarded render can still
-  //     mutate it), so this is a genuine finding, not a false positive.
+  // eslint-config-next 16 enables the React-Compiler-era `react-hooks` rules.
+  // They originally flagged 7 sites; 2 are now fixed and the rest are held
+  // here at `warn` so they stay visible without blocking CI. Every other file
+  // still ERRORS on these rules, so no new violations can land.
   //
-  // Downgraded to `warn` HERE ONLY so they stay visible on every lint run
-  // without blocking CI. Any other file still fails on these rules, so no
-  // new violations can land. Fix these when the mobile/PWA work rewrites
-  // page.tsx and MapView.tsx — rewriting working map interaction code purely
-  // to satisfy a newly-added linter is the wrong order of operations.
+  // FIXED, and deliberately no longer listed:
+  //   - react-hooks/refs in components/MapView.tsx. The "latest ref" pattern
+  //     wrote refs during render, which is genuinely unsound under concurrent
+  //     rendering: a discarded or replayed render would publish state that was
+  //     never committed. Those writes moved into an effect. The rule is now
+  //     enforced repo-wide.
+  //
+  // REMAINING, reviewed and intentional:
+  //   - app/page.tsx x3, components/SearchBox.tsx, lib/useGeolocation.ts —
+  //     all `set-state-in-effect`. Each is an effect synchronising with an
+  //     external system that has no React-native equivalent: the Geolocation
+  //     watch, localStorage read-after-hydration, and clearing stale geocoder
+  //     results. Restructuring them is possible (useSyncExternalStore, as
+  //     lib/useMediaQuery.ts now does) but it means rewriting the live GPS
+  //     path, which is exactly the code being field-tested. Not worth the risk
+  //     for a lint warning; revisit when that path changes for its own reasons.
   // ---------------------------------------------------------------------
   {
     files: [
       "app/page.tsx",
-      "components/MapView.tsx",
       "components/SearchBox.tsx",
       "lib/useGeolocation.ts",
     ],
     rules: {
       "react-hooks/set-state-in-effect": "warn",
-      "react-hooks/refs": "warn",
     },
   },
 ]);
