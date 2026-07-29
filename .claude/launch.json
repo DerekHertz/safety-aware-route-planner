@@ -13,6 +13,13 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "web", "run", "dev"],
       "port": 3000
+    },
+    {
+      "//": "Serve the production build. Use this when exposing the app over a tunnel for phone testing: the dev server's HMR websocket lives on /_next/webpack-hmr, Next blocks it cross-origin by default, and the blocked upgrade makes cloudflared log 'malformed HTTP response' on a loop. Whitelisting via allowedDevOrigins would work but the tunnel hostname changes every session. Requires `npm --prefix web run build` first.",
+      "name": "web-prod",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "web", "run", "start"],
+      "port": 3000
     }
   ]
 }
