@@ -181,8 +181,9 @@ means no CORS configuration at all.
 # terminal 1 — API on :8000
 docker run -p 8000:8080 sr-api
 
-# terminal 2 — web on :3000, proxying /api to the container
-npm --prefix web run dev
+# terminal 2 — web on :3000, proxying /api to the container.
+# The PRODUCTION build, not `run dev` — see below.
+npm --prefix web run build && npm --prefix web run start
 
 # terminal 3 — public HTTPS URL for :3000
 cloudflared tunnel --url http://localhost:3000
@@ -191,6 +192,25 @@ cloudflared tunnel --url http://localhost:3000
 Open the printed `https://….trycloudflare.com` on the phone. `API_PROXY_TARGET`
 overrides the proxy destination if the API is somewhere other than
 `http://localhost:8000`.
+
+**Serve the production build, not `next dev`.** The dev server's hot-reload
+websocket lives at `/_next/webpack-hmr`, and Next blocks cross-origin access to
+dev resources by default — so over a tunnel the upgrade is refused and
+`cloudflared` logs
+
+```
+unable to reach the origin service … malformed HTTP response
+```
+
+on a loop. The app still works; it is hot reload failing noisily. Adding the
+tunnel host to `allowedDevOrigins` would silence it, but quick-tunnel hostnames
+change every session, so you would be editing config each time. A production
+build has no HMR client at all, starts faster on a phone, and is closer to what
+would actually ship.
+
+On Windows the cloudflared MSI installs to
+`C:\Program Files (x86)\cloudflared\` **without** adding itself to PATH, so
+either call it by full path or add that directory to your user PATH.
 
 ### If you deploy it later
 

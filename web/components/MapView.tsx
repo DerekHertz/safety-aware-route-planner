@@ -51,6 +51,13 @@ interface Props {
   originIsLive?: boolean;
   /** Recenter the map on this point when it changes identity. */
   flyTo?: LatLon | null;
+  /**
+   * Viewport inset, in CSS pixels, for fitBounds and flyTo. On mobile the
+   * bottom sheet floats over the map, so without a bottom inset the route is
+   * fitted into an area the sheet is covering.
+   */
+  fitPadding?:
+    number | { top: number; bottom: number; left: number; right: number };
 }
 
 const emptyFC = (): FeatureCollection => ({
@@ -67,6 +74,7 @@ export default function MapView({
   onSetPoint,
   originIsLive = false,
   flyTo = null,
+  fitPadding = 60,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -74,11 +82,22 @@ export default function MapView({
   const destMarker = useRef<Marker | null>(null);
   const layersReady = useRef(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  // refs so map event handlers see current state without re-registering
+
+  // Refs so the map's event handlers see current props without being torn down
+  // and re-registered on every render.
+  //
+  // Written in an effect rather than during render: a render can be discarded
+  // or replayed under concurrent rendering, and mutating a ref from one would
+  // publish state that was never committed. Handlers here all fire from user
+  // interaction, i.e. long after commit, so post-commit assignment is soon
+  // enough. This effect is declared FIRST so it runs before the effects below
+  // that call syncRoutes().
   const stateRef = useRef({ origin, destination, onSetPoint, onSelect });
-  stateRef.current = { origin, destination, onSetPoint, onSelect };
   const routesRef = useRef({ routes, selected });
-  routesRef.current = { routes, selected };
+  useEffect(() => {
+    stateRef.current = { origin, destination, onSetPoint, onSelect };
+    routesRef.current = { routes, selected };
+  });
 
   /** Push current route data into the map sources. Safe to call any time —
    *  no-ops until the layers exist. */
@@ -246,8 +265,15 @@ export default function MapView({
       style: STYLE_URL,
       center: [-122.268, 37.845], // Berkeley/Oakland
       zoom: 12.5,
+      // Compact on small screens: the attribution is an ODbL obligation, so it
+      // must stay reachable, but the expanded form eats a phone's width.
+      attributionControl: { compact: true },
     });
-    map.addControl(new NavigationControl(), "top-right");
+    // Zoom buttons only where there is a precise pointer. On touch they are
+    // 29px targets duplicating a pinch gesture, and they crowd a small screen.
+    if (window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+      map.addControl(new NavigationControl(), "top-right");
+    }
     mapRef.current = map;
 
     // Surface failures instead of swallowing them. Without this, a broken
@@ -347,11 +373,11 @@ export default function MapView({
             [Math.min(...lons), Math.min(...lats)],
             [Math.max(...lons), Math.max(...lats)],
           ],
-          { padding: 60, duration: 400 },
+          { padding: fitPadding, duration: 400 },
         );
       }
     }
-  }, [routes, selected, syncRoutes]);
+  }, [routes, selected, syncRoutes, fitPadding]);
 
   // explicit recenter request (e.g. first GPS fix, or the locate button)
   useEffect(() => {
@@ -361,8 +387,11 @@ export default function MapView({
       center: [flyTo.lon, flyTo.lat],
       zoom: Math.max(map.getZoom(), 14),
       duration: 800,
+      // Same reason as fitBounds: without the inset the puck can land under
+      // the sheet, so "locate me" appears to do nothing.
+      padding: typeof fitPadding === "number" ? undefined : fitPadding,
     });
-  }, [flyTo]);
+  }, [flyTo, fitPadding]);
 
   // endpoint markers
   useEffect(() => {
