@@ -6,7 +6,14 @@ import {
   RouteResponse,
 } from "./types";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// Default to the same-origin proxy (see the rewrite in next.config.ts) rather
+// than an absolute localhost URL. Same-origin means no CORS, and — because
+// NEXT_PUBLIC_* is inlined at build time — it means a tunnel handing out a new
+// hostname needs no rebuild.
+//
+// Set NEXT_PUBLIC_API_URL to an absolute URL to bypass the proxy and talk to a
+// deployed API directly.
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "/api";
 
 export async function fetchRoutes(
   origin: LatLon,
