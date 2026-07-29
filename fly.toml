@@ -1,0 +1,76 @@
+# Fly.io deployment for the API. The front-end deploys separately.
+#
+# First-time setup (once, from a machine with flyctl):
+#   fly apps create safety-aware-route-planner-api
+#   fly secrets set SR_NOMINATIM_CONTACT="safety-aware-route-planner/0.1 (+mailto:you@example.com)"
+#   fly deploy
+#
+# There is NO volume. Graph packs are immutable build artefacts, not state:
+# api/packs_fetch.py downloads them from object storage at boot and verifies
+# them against packs.lock. That makes adding a region an upload plus a restart
+# instead of an image rebuild, and keeps deploys stateless.
+
+app = "safety-aware-route-planner-api"
+primary_region = "sjc"
+
+[build]
+
+[env]
+  # Not secret; these are just deployment facts.
+  #
+  # SR_CORS_ORIGINS must list the front-end's origin once it exists — the API
+  # rejects everything else. Set it when the web deployment lands:
+  #   fly deploy   (after uncommenting, or via `fly secrets set`)
+  # SR_CORS_ORIGINS = "https://<your-app>.vercel.app"
+  #
+  # SR_CORS_ORIGIN_REGEX covers hosts that mint a hostname per preview build.
+  # ANCHOR IT to your own project and scope. A pattern like
+  # `https://.*\.vercel\.app` would let every site on the platform call this API.
+  # SR_CORS_ORIGIN_REGEX = "^https://<project>-[a-z0-9-]+-<scope>\\.vercel\\.app$"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+
+  # Non-negotiable, not a preference: the browser Geolocation API only works in
+  # a secure context, so GPS origin tracking silently dies over plain http.
+
+  # Suspend rather than stop when idle. Suspend preserves the filesystem, so a
+  # resumed machine still has its downloaded packs and skips the boot fetch;
+  # a full stop would re-download them on every cold start.
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # KEEP THIS APP AT EXACTLY ONE MACHINE.
+  #
+  # The Nominatim rate limiter in api/geocode.py is a module-level asyncio.Lock
+  # plus a timestamp, so it only serialises within a single process. Every
+  # additional machine (or uvicorn worker) multiplies the request rate against
+  # a service whose usage policy allows roughly one per second, which risks an
+  # IP block. Scaling out requires moving that limiter somewhere shared first.
+  [http_service.concurrency]
+    type = "requests"
+    hard_limit = 40
+    soft_limit = 20
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "15s"
+    timeout = "3s"
+    # Covers interpreter start (~1s), the pack download from object storage
+    # (~2.7 MB), and the KD-tree build. /health returns 503 until the pack is
+    # actually loaded, so this window is the only thing preventing a restart
+    # loop on a cold machine.
+    grace_period = "30s"
+
+[[vm]]
+  # 2 vCPU is useful rather than decorative: the C++ search releases the GIL and
+  # the route handler is sync, so FastAPI runs it in a threadpool and the search
+  # genuinely parallelises within one process.
+  size = "shared-cpu-2x"
+  # Measured steady state is ~110 MB for one Berkeley-sized pack (90 MB
+  # interpreter and libraries, ~16 MB per pack), so this is roughly 9x headroom
+  # and leaves room for the multi-region work.
+  memory = "1gb"

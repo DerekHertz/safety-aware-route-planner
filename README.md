@@ -135,6 +135,52 @@ To pull published packs into a fresh checkout without building from Overpass:
 python -m api.packs_fetch --regions berkeley_small,berkeley_oakland
 ```
 
+## Deploying the API
+
+The API ships as a container. `Dockerfile` is multi-stage: the builder installs
+g++ and produces an `sr_core` wheel, and the runtime stage carries no compiler,
+no `ingestion/`, and no osmnx — that package and its geo stack are build-time
+only, and excluding them roughly quarters the image. The build **fails** if
+`sr_core` cannot be imported, because `pyref/engine.py` otherwise falls back to
+the pure-Python engine with only a warning, and in production that is a ~20×
+latency regression with no other symptom.
+
+```bash
+docker build -t sr-api .
+docker run -p 8080:8080 sr-api
+```
+
+Packs are not baked in — the container downloads them at boot from the bucket
+pinned in `packs.lock` (see *Pack distribution* above), so adding a region is an
+upload and a restart rather than an image rebuild. There is no volume; packs are
+immutable artefacts, not state.
+
+`fly.toml` targets Fly.io. First-time setup:
+
+```bash
+fly apps create safety-aware-route-planner-api
+fly secrets set SR_NOMINATIM_CONTACT="safety-aware-route-planner/0.1 (+mailto:you@example.com)"
+fly deploy
+```
+
+After that, `.github/workflows/deploy-api.yml` deploys on merge to `main` and
+smoke-tests the live URL — checking not just that `/health` answers, but that it
+reports `"engine":"cpp"` and that `POST /route` returns routes.
+
+Two constraints worth knowing before changing the deployment:
+
+- **HTTPS is mandatory.** The browser Geolocation API only works in a secure
+  context, so GPS origin tracking silently stops working over plain http.
+- **Keep the app at exactly one machine, and do not use `--workers`.** The
+  Nominatim rate limiter in `api/geocode.py` is a module-level lock plus a
+  timestamp, so it only serialises within a single process. Each extra process
+  multiplies the request rate against a service whose policy allows roughly one
+  per second. Scaling out means moving that limiter somewhere shared first.
+
+`/health` reports readiness rather than mere liveness: it returns 503 until a
+pack is actually loaded, and includes `engine` so a silent downgrade to the
+pure-Python path is visible without reading logs.
+
 ## API contract (frozen — a future mobile client reuses it)
 
 `POST /route` `{origin:{lat,lon}, destination:{lat,lon}, departure_time,

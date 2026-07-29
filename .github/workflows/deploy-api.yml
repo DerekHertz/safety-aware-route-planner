@@ -1,0 +1,83 @@
+# Deploy the API to Fly on merge to main.
+#
+# Gating is via branch protection rather than `needs:` — make lint, test and
+# schema-sync required status checks on main, and a red build cannot reach
+# here in the first place. That keeps the dependency in one place instead of
+# duplicating it across workflows.
+name: deploy-api
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "pyref/**"
+      - "sim/**"
+      - "core/**"
+      - "config/**"
+      - "requirements.txt"
+      - "packs.lock"
+      - "Dockerfile"
+      - ".dockerignore"
+      - "fly.toml"
+      - ".github/workflows/deploy-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api
+  # Never cancel a deploy in flight — interrupting one mid-rollout is how you
+  # end up with an app in an unknown state.
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    # Gives you a manual-approval gate later without touching this file.
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy --remote-only --wait-timeout 300
+
+      # Deploying successfully is not the same as working. These hit the real
+      # public URL and check the things that actually break in production.
+      - name: Smoke test
+        env:
+          APP_URL: https://safety-aware-route-planner-api.fly.dev
+        run: |
+          set -euo pipefail
+
+          echo "== /health =="
+          health=$(curl -fsS --retry 5 --retry-delay 5 --retry-all-errors "$APP_URL/health")
+          echo "$health"
+
+          # A pack must actually be loaded; /health reports 503 until it is.
+          echo "$health" | grep -q '"status":"ok"' \
+            || { echo "::error::API is not reporting ready"; exit 1; }
+
+          # The pure-Python fallback is a ~20x latency regression that nothing
+          # else surfaces. If the image shipped without a working sr_core, say
+          # so loudly rather than quietly serving slow routes.
+          echo "$health" | grep -q '"engine":"cpp"' \
+            || { echo "::error::sr_core is not active — the API fell back to the pure-Python engine"; exit 1; }
+
+          echo "== POST /route =="
+          route=$(curl -fsS -X POST "$APP_URL/route" \
+            -H 'Content-Type: application/json' \
+            -d '{"origin":{"lat":37.8715,"lon":-122.2680},
+                 "destination":{"lat":37.8044,"lon":-122.2712},
+                 "safety_enabled":true}')
+          echo "$route" | head -c 200; echo
+
+          echo "$route" | grep -q '"routes"' \
+            || { echo "::error::/route did not return any routes"; exit 1; }
+
+          echo "Deployed and serving."

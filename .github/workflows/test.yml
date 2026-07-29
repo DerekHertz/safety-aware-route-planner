@@ -96,3 +96,53 @@ jobs:
 
       - name: Assert build assets
         run: node scripts/assert-build-assets.mjs
+
+  docker:
+    name: docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Built and exercised on every PR, because the alternative is finding out
+      # at deploy time. The image is loaded into the local daemon rather than
+      # pushed — nothing is published from a PR.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: sr-api:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Building is not the same as working. This boots the real image, which
+      # downloads packs from object storage exactly as production does.
+      - name: Boot the image and check it serves
+        run: |
+          set -euo pipefail
+          docker run -d --name sr-ci -p 8080:8080 sr-api:ci
+
+          for i in $(seq 1 45); do
+            if curl -sf http://localhost:8080/health >/dev/null; then break; fi
+            sleep 2
+          done
+
+          health=$(curl -fsS http://localhost:8080/health)
+          echo "$health"
+
+          # The pure-Python fallback only warns, and in production reads as
+          # nothing but latency. A shipped image must have a working sr_core.
+          echo "$health" | grep -q '"engine":"cpp"' \
+            || { docker logs sr-ci; echo "::error::image fell back to the pure-Python engine"; exit 1; }
+
+          curl -fsS -X POST http://localhost:8080/route \
+            -H 'Content-Type: application/json' \
+            -d '{"origin":{"lat":37.8715,"lon":-122.2680},
+                 "destination":{"lat":37.8044,"lon":-122.2712},
+                 "safety_enabled":true}' \
+            | grep -q '"routes"' \
+            || { docker logs sr-ci; echo "::error::image did not serve a route"; exit 1; }
+
+          echo "image size: $(docker image inspect sr-api:ci --format '{{.Size}}' | numfmt --to=iec)"
+          docker rm -f sr-ci >/dev/null

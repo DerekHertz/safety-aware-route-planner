@@ -105,7 +105,25 @@ def test_unsnappable_origin_is_422(client):
 
 
 def test_health(client):
-    assert client.get("/health").json() == {"status": "ok"}
+    """Readiness, not just liveness.
+
+    Deliberately widened from the original `{"status": "ok"}`: that answered
+    unconditionally without touching app.state, so a process whose pack failed
+    to load still reported healthy and then 500'd on every request — useless as
+    a platform health check. It now dereferences the state it needs, and
+    reports `engine` so a silent downgrade to the pure-Python path (a ~20x
+    latency regression that has no other symptom) is visible from the outside.
+
+    /health is operational, not part of the frozen /route contract. Readiness
+    semantics are what deployment depends on, so those are asserted; the
+    informational fields are checked for presence, not exact values.
+    """
+    body = client.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["packs_loaded"] == 1
+    assert body["engine"] in {"cpp", "pyref"}
+    assert body["region"] == "toy"
+    assert body["num_edges"] > 0
 
 
 def test_meta_shape(client):

@@ -1,0 +1,28 @@
+# Everything is excluded by default and re-included explicitly below. An
+# allowlist rather than a denylist, because the expensive mistakes here are
+# things nobody remembered to exclude: data/cache alone is ~27 MB of GraphML
+# that the API never reads, and web/node_modules is far larger.
+*
+
+# Runtime source. Note ingestion/ is deliberately absent — it is the only
+# consumer of osmnx (and with it geopandas, shapely, pyproj, pandas), and pack
+# building happens in CI, never in the API container.
+!api/
+!pyref/
+!sim/
+!config/
+
+# The C++ extension is compiled in the builder stage.
+!core/
+
+# Read at startup by api/packs_fetch.py to know which packs to pull.
+!packs.lock
+!requirements.txt
+
+# Re-exclude compiled and cached artefacts that the rules above would sweep in.
+**/__pycache__/
+**/*.py[cod]
+**/*.pyd
+**/*.so
+core/build/
+core/*.egg-info/
