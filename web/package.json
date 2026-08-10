@@ -12,12 +12,17 @@
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "test": "vitest run"
   },
   "engines": {
     "node": ">=20.9.0"
   },
   "dependencies": {
+    "@turf/distance": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
+    "@turf/line-slice-along": "^7.4.0",
+    "@turf/nearest-point-on-line": "^7.4.0",
     "maplibre-gl": "^6.0.0",
     "next": "16.2.11",
     "react": "19.2.4",
@@ -30,6 +35,7 @@
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.2.11",
     "prettier": "^3.9.6",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

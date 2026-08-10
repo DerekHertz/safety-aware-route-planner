@@ -44,6 +44,14 @@ class UnsafePoint(BaseModel):
     type: str                 # "unprotected_left" | "uncontrolled_crossing"
 
 
+class Maneuver(BaseModel):
+    type: str                 # "left" | "right" | "uturn"
+    angle_deg: float
+    offset_m: float
+    lon: float
+    lat: float
+
+
 class RouteAlternative(BaseModel):
     kind: str                 # "fast" | "balanced" | "safe"
     geometry: dict            # GeoJSON LineString
@@ -52,6 +60,7 @@ class RouteAlternative(BaseModel):
     unsafe: UnsafeCounts
     segments: list[Segment]
     unsafe_points: list[UnsafePoint]
+    maneuvers: list[Maneuver]
     detour_pct: float         # extra time vs the fastest route in this response
 
 

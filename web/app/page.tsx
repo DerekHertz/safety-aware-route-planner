@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import NavHud from "@/components/NavHud";
 import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
@@ -27,11 +28,13 @@ import {
   insideBbox,
   useGeolocation,
 } from "@/lib/useGeolocation";
+import { useHeading } from "@/lib/useHeading";
 import {
   COMPACT_QUERY,
   SHEET_PEEK_PX,
   useMediaQuery,
 } from "@/lib/useMediaQuery";
+import { useRouteProgress } from "@/lib/useRouteProgress";
 
 // MapLibre touches `window` at import time — client-only bundle
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -66,6 +69,14 @@ export default function Home() {
   const [coverageNote, setCoverageNote] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState(true);
   const [flyTo, setFlyTo] = useState<LatLon | null>(null);
+  // Continuously recenters/rotates the camera on the live fix. Independent of
+  // followMode (which only controls whether GPS feeds `origin`) so a manual
+  // map pan can drop the camera without abandoning live tracking.
+  const [cameraFollow, setCameraFollow] = useState(true);
+  // Active turn-by-turn mode: swaps the route-selection panel for NavHud and
+  // switches the reroute trigger from raw movement to actually leaving the
+  // route (see useRouteProgress).
+  const [navigating, setNavigating] = useState(false);
   // Mobile only (the sheet styling is behind a max-width query); harmless on
   // desktop, where .sidebar is a static column and the class does nothing.
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -73,7 +84,18 @@ export default function Home() {
   const seededRef = useRef(false);
 
   const geo = useGeolocation(true);
+  const heading = useHeading(geo.position);
   const isCompact = useMediaQuery(COMPACT_QUERY);
+
+  const activeRoute = useMemo(
+    () => routes.find((r) => r.kind === selected) ?? null,
+    [routes, selected],
+  );
+  const progress = useRouteProgress(
+    navigating ? activeRoute : null,
+    geo.position,
+    geo.accuracy,
+  );
 
   // Keep routes clear of the sheet when fitting the viewport. Held constant
   // rather than tracking the expanded height: MapLibre cannot honour padding
@@ -87,6 +109,26 @@ export default function Home() {
         : 60,
     [isCompact],
   );
+
+  // Dev-only debug handle: lets the console (or an automated driver) read
+  // the current routes/state without a real UI selector for everything.
+  // Assigns a plain window property — no React setState involved, so this
+  // is not the effect-syncing pattern the hooks lint rule cares about.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    (window as unknown as { __srDebug?: unknown }).__srDebug = {
+      routes,
+      selected,
+      origin,
+      destination,
+      navigating,
+      progress,
+      geoPosition: geo.position,
+      geoAccuracy: geo.accuracy,
+      cameraFollow,
+      heading,
+    };
+  });
 
   // --- unit preference (read in an effect so SSR and client markup agree) ---
   useEffect(() => {
@@ -126,7 +168,15 @@ export default function Home() {
     setCoverageNote(null);
     const next = geo.position;
     setOrigin((prev) => {
-      // Ignore sub-threshold jitter so we don't re-route constantly.
+      if (navigating && activeRoute) {
+        // Navigating: `origin` (and therefore the reroute request) only
+        // moves once useRouteProgress's hysteresis says we've actually left
+        // the route — not on every fix while still on it. The puck itself
+        // still tracks the raw fix continuously; see `originMarkerPosition`.
+        return progress?.offRoute ? next : (prev ?? next);
+      }
+      // Not navigating: ignore sub-threshold jitter so we don't re-route
+      // constantly while just planning.
       if (prev && distanceMeters(prev, next) < REROUTE_MIN_MOVE_M) return prev;
       return next;
     });
@@ -135,7 +185,15 @@ export default function Home() {
       seededRef.current = true;
       setFlyTo(next);
     }
-  }, [geo.position, followMode, meta, metaSettled]);
+  }, [
+    geo.position,
+    followMode,
+    meta,
+    metaSettled,
+    navigating,
+    activeRoute,
+    progress,
+  ]);
 
   useEffect(() => {
     if (geo.error) setCoverageNote(geo.error);
@@ -215,6 +273,7 @@ export default function Home() {
     seededRef.current = false;
     setCoverageNote(null);
     setFollowMode(true);
+    setCameraFollow(true);
     geo.refresh();
     if (geo.position) setFlyTo({ ...geo.position });
   };
@@ -230,9 +289,21 @@ export default function Home() {
     setError(null);
     setLoading(false);
     setFollowMode(false);
+    setNavigating(false);
   };
 
   const originIsLive = followMode && !!geo.position;
+  // Only follow the camera while the origin actually IS the live fix — no
+  // point chasing GPS around if the user placed the origin elsewhere.
+  const followTarget = originIsLive ? geo.position : null;
+  const onUserGesture = useCallback(() => setCameraFollow(false), []);
+  const recenter = () => setCameraFollow(true);
+
+  const startNavigating = () => {
+    setCameraFollow(true);
+    setNavigating(true);
+  };
+  const exitNavigating = () => setNavigating(false);
   const regionLabel = useMemo(
     () => (meta ? meta.region.replace(/_/g, " ") : "Berkeley / North Oakland"),
     [meta],
@@ -242,6 +313,11 @@ export default function Home() {
   // is down, so it should say what the app is currently doing rather than
   // "Show panel".
   const routeSummary = useMemo(() => {
+    if (navigating && activeRoute) {
+      const remainingS = progress?.remainingS ?? activeRoute.eta_s;
+      const remainingM = progress?.remainingM ?? activeRoute.distance_m;
+      return `${formatDuration(remainingS)} · ${formatDistance(remainingM, units)} remaining`;
+    }
     if (loading) return "Routing…";
     if (error) return "Routing failed — tap for details";
     const chosen = routes.find((r) => r.kind === selected) ?? routes[0];
@@ -255,7 +331,18 @@ export default function Home() {
         ? "no unsafe maneuvers"
         : `${chosen.unsafe.total} unsafe`
     }`;
-  }, [loading, error, routes, selected, origin, destination, units]);
+  }, [
+    navigating,
+    activeRoute,
+    progress,
+    loading,
+    error,
+    routes,
+    selected,
+    origin,
+    destination,
+    units,
+  ]);
 
   return (
     <main className="layout">
@@ -284,130 +371,155 @@ export default function Home() {
           {sheetOpen ? "Hide panel" : routeSummary}
         </button>
         <h1>Safety-Aware Routes</h1>
-        <p className="hint intro">
-          Search, click the map, or use your current location. Covered area:{" "}
-          {regionLabel}.
-        </p>
-
-        <div className="origin-row">
-          <SearchBox
-            placeholder="Origin — search or click map"
-            value={originText}
-            onTextChange={setOriginText}
-            onPick={pickGeocode("origin")}
+        {navigating && activeRoute ? (
+          <NavHud
+            route={activeRoute}
+            progress={progress}
+            units={units}
+            onExit={exitNavigating}
           />
-          <button
-            type="button"
-            className={`locate${originIsLive ? " active" : ""}`}
-            onClick={locateMe}
-            title="Use my current location"
-            aria-label="Use my current location"
-          >
-            ⌖
-          </button>
-        </div>
+        ) : (
+          <>
+            <p className="hint intro">
+              Search, click the map, or use your current location. Covered area:{" "}
+              {regionLabel}.
+            </p>
 
-        <SearchBox
-          placeholder="Destination"
-          value={destText}
-          onTextChange={setDestText}
-          onPick={pickGeocode("destination")}
-        />
-
-        <div className="controls-row">
-          <label>
-            Departure
-            <input
-              type="datetime-local"
-              value={departure}
-              onChange={(e) => setDeparture(e.target.value)}
-            />
-          </label>
-        </div>
-
-        <div className="controls-row toggle-row">
-          <label className="toggle">
-            <input
-              type="checkbox"
-              checked={safety}
-              onChange={(e) => setSafety(e.target.checked)}
-            />
-            <span>Safety optimization</span>
-          </label>
-          <div className="unit-toggle" role="group" aria-label="Distance units">
-            <button
-              type="button"
-              className={units === "imperial" ? "on" : ""}
-              onClick={() => changeUnits("imperial")}
-            >
-              mi
-            </button>
-            <button
-              type="button"
-              className={units === "metric" ? "on" : ""}
-              onClick={() => changeUnits("metric")}
-            >
-              km
-            </button>
-          </div>
-        </div>
-
-        <div className="controls-row detour-row">
-          <span className="detour-label">
-            Detour for a safer crossing
-            <span className="hint-inline">
-              How far out of your way to reach a light or an all-way stop
-            </span>
-          </span>
-          <div
-            className="segmented"
-            role="group"
-            aria-label="Detour budget for a safer crossing"
-          >
-            {DETOUR_BUDGET_OPTIONS.map((opt) => (
+            <div className="origin-row">
+              <SearchBox
+                placeholder="Origin — search or click map"
+                value={originText}
+                onTextChange={setOriginText}
+                onPick={pickGeocode("origin")}
+              />
               <button
-                key={opt.value}
                 type="button"
-                className={detourBudget === opt.value ? "on" : ""}
-                aria-pressed={detourBudget === opt.value}
-                onClick={() => setDetourBudget(opt.value)}
-                disabled={!safety}
+                className={`locate${originIsLive ? " active" : ""}`}
+                onClick={locateMe}
+                title="Use my current location"
+                aria-label="Use my current location"
               >
-                {opt.label}
+                ⌖
               </button>
-            ))}
-          </div>
-        </div>
+            </div>
 
-        <div className="controls-row">
-          <button type="button" className="reset" onClick={reset}>
-            Reset
-          </button>
-        </div>
-
-        {coverageNote && <div className="status note">{coverageNote}</div>}
-        {loading && <div className="status">Routing…</div>}
-        {error && <div className="status error">{error}</div>}
-
-        <div className="cards" id="route-panel">
-          {routes.map((r) => (
-            <RouteCard
-              key={r.kind}
-              route={r}
-              units={units}
-              selected={selected === r.kind}
-              onSelect={() => setSelected(r.kind)}
+            <SearchBox
+              placeholder="Destination"
+              value={destText}
+              onTextChange={setDestText}
+              onPick={pickGeocode("destination")}
             />
-          ))}
-        </div>
-        {routes.length > 0 && selected && (
-          <p className="hint">
-            The selected route is colored by maneuver safety tier (green / amber
-            / red). Red markers flag unsafe maneuvers: L = unprotected left, X =
-            uncontrolled crossing. Only maneuvers where the map data actually
-            records the traffic control are flagged — a signalized left, or an
-            intersection OpenStreetMap says nothing about, shows amber instead.
-          </p>
+
+            <div className="controls-row">
+              <label>
+                Departure
+                <input
+                  type="datetime-local"
+                  value={departure}
+                  onChange={(e) => setDeparture(e.target.value)}
+                />
+              </label>
+            </div>
+
+            <div className="controls-row toggle-row">
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={safety}
+                  onChange={(e) => setSafety(e.target.checked)}
+                />
+                <span>Safety optimization</span>
+              </label>
+              <div
+                className="unit-toggle"
+                role="group"
+                aria-label="Distance units"
+              >
+                <button
+                  type="button"
+                  className={units === "imperial" ? "on" : ""}
+                  onClick={() => changeUnits("imperial")}
+                >
+                  mi
+                </button>
+                <button
+                  type="button"
+                  className={units === "metric" ? "on" : ""}
+                  onClick={() => changeUnits("metric")}
+                >
+                  km
+                </button>
+              </div>
+            </div>
+
+            <div className="controls-row detour-row">
+              <span className="detour-label">
+                Detour for a safer crossing
+                <span className="hint-inline">
+                  How far out of your way to reach a light or an all-way stop
+                </span>
+              </span>
+              <div
+                className="segmented"
+                role="group"
+                aria-label="Detour budget for a safer crossing"
+              >
+                {DETOUR_BUDGET_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    className={detourBudget === opt.value ? "on" : ""}
+                    aria-pressed={detourBudget === opt.value}
+                    onClick={() => setDetourBudget(opt.value)}
+                    disabled={!safety}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="controls-row">
+              <button type="button" className="reset" onClick={reset}>
+                Reset
+              </button>
+              {activeRoute && originIsLive && (
+                <button
+                  type="button"
+                  className="start-nav"
+                  onClick={startNavigating}
+                >
+                  Start navigating
+                </button>
+              )}
+            </div>
+
+            {coverageNote && <div className="status note">{coverageNote}</div>}
+            {loading && <div className="status">Routing…</div>}
+            {error && <div className="status error">{error}</div>}
+
+            <div className="cards" id="route-panel">
+              {routes.map((r) => (
+                <RouteCard
+                  key={r.kind}
+                  route={r}
+                  units={units}
+                  selected={selected === r.kind}
+                  onSelect={() => setSelected(r.kind)}
+                />
+              ))}
+            </div>
+            {routes.length > 0 && selected && (
+              <p className="hint">
+                The selected route is colored by maneuver safety tier (green /
+                amber / red). Red markers flag unsafe maneuvers: L = unprotected
+                left, X = uncontrolled crossing. Only maneuvers where the map
+                data actually records the traffic control are flagged — a
+                signalized left, or an intersection OpenStreetMap says nothing
+                about, shows amber instead.
+              </p>
+            )}
+          </>
         )}
       </aside>
       <div className="map-wrap">
@@ -421,7 +533,23 @@ export default function Home() {
           originIsLive={originIsLive}
           flyTo={flyTo}
           fitPadding={fitPadding}
+          cameraFollow={cameraFollow}
+          followTarget={followTarget}
+          heading={heading}
+          onUserGesture={onUserGesture}
+          originMarkerPosition={followTarget ?? origin}
         />
+        {originIsLive && !cameraFollow && (
+          <button
+            type="button"
+            className="recenter-btn"
+            onClick={recenter}
+            title="Recenter on my location"
+            aria-label="Recenter on my location"
+          >
+            ⌖
+          </button>
+        )}
       </div>
     </main>
   );

@@ -6,7 +6,7 @@ import numpy as np
 
 from pyref.costs import TIER_SAFE, QueryCosts
 from pyref.geo import haversine_m
-from pyref.graph import GraphPack
+from pyref.graph import GraphPack, Maneuver
 from pyref.search import PathResult
 
 
@@ -72,6 +72,46 @@ def route_segments(pack: GraphPack, qc: QueryCosts, result: PathResult,
             "geometry": {"type": "LineString",
                          "coordinates": _edge_coords(pack, e, fs, fe)},
             "tier": names[tier],
+        })
+    return out
+
+
+def route_maneuvers(pack: GraphPack, result: PathResult,
+                    frac_origin: float = 0.0, frac_dest: float = 1.0) -> list[dict]:
+    """Turn-by-turn maneuvers (non-STRAIGHT only) with offsets cumulative
+    along route_geometry's exact coordinate sequence, so a client can
+    correlate "Turn left in 120 ft" against the rendered polyline."""
+    edges = result.edges(pack.turn_out_edge)
+    coords: list[list[float]] = []
+    cum = 0.0
+    edge_end_cum: list[float] = []
+    for i, e in enumerate(edges):
+        fs = frac_origin if i == 0 else 0.0
+        fe = frac_dest if i == len(edges) - 1 else 1.0
+        if i == 0 and len(edges) == 1:
+            fs, fe = frac_origin, frac_dest
+        pts = _edge_coords(pack, e, fs, fe)
+        if coords and pts and coords[-1] == pts[0]:
+            pts = pts[1:]
+        for p in pts:
+            if coords:
+                prev = coords[-1]
+                cum += float(haversine_m(prev[1], prev[0], p[1], p[0]))
+            coords.append(p)
+        edge_end_cum.append(cum)
+
+    out = []
+    for i, t in enumerate(result.turn_ids):
+        man = Maneuver(int(pack.turn_maneuver[t]))
+        if man == Maneuver.STRAIGHT:
+            continue
+        node = int(pack.edge_head[pack.turn_in_edge[t]])
+        out.append({
+            "type": man.name.lower(),
+            "angle_deg": float(pack.turn_angle_deg[t]),
+            "offset_m": edge_end_cum[i],
+            "lon": float(pack.node_lon[node]),
+            "lat": float(pack.node_lat[node]),
         })
     return out
 

@@ -46,6 +46,7 @@ class RouteOut:
     unsafe: dict
     segments: list[dict]
     unsafe_points: list[dict]
+    maneuvers: list[dict]
     detour_pct: float = 0.0   # extra time vs the fastest route in this response
 
 
@@ -156,4 +157,5 @@ class Router:
                     "total": m.unsafe_total},
             segments=geo_out.route_segments(pack, qc, result, oc.frac, dc.frac),
             unsafe_points=geo_out.unsafe_points(pack, qc, result),
+            maneuvers=geo_out.route_maneuvers(pack, result, oc.frac, dc.frac),
         )

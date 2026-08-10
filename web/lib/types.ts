@@ -47,6 +47,16 @@ export interface UnsafePoint {
   type: UnsafeType;
 }
 
+export type ManeuverType = "left" | "right" | "uturn";
+
+export interface Maneuver {
+  type: ManeuverType;
+  angle_deg: number;
+  offset_m: number;
+  lon: number;
+  lat: number;
+}
+
 export interface RouteAlternative {
   kind: RouteKind;
   geometry: LineString;
@@ -55,6 +65,7 @@ export interface RouteAlternative {
   unsafe: UnsafeCounts;
   segments: Segment[];
   unsafe_points: UnsafePoint[];
+  maneuvers: Maneuver[];
   /** Extra time versus the fastest route in the same response, as a fraction. */
   detour_pct: number;
 }
