@@ -62,14 +62,49 @@ Key design points:
 
 ## Build & run
 
-Prereqs: Python 3.12+, Node 20.9+, MSVC (for the optional C++ core).
+Prereqs: Python 3.12+, Node 20.9+, MSVC (for the optional C++ core on Windows).
 The 3.12 floor comes from the pinned numpy and scipy, which both require it.
 
-```powershell
-powershell -File scripts\build_all.ps1   # venv, deps, packs, sr_core, tests
+**Run every command below from the repository root** (the directory
+containing this README). `npm --prefix web install` resolves `web/` relative
+to your current directory, so running it from anywhere else — including from
+inside `web/` itself — fails with `ENOENT: … web/package.json`.
+
+The C++ core and a locally-built graph pack are **not** required for everyday
+front-end/API work: `sr_core` falls back to the pure-Python engine with a
+warning if it isn't built, and the API downloads a prebuilt pack
+automatically on first request (see *Pack distribution* below). Use the quick
+start below unless you're changing `core/` or `ingestion/`.
+
+### Quick start (macOS / Linux)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-Then, in two terminals:
+Then, in two terminals, from the repository root:
+
+```bash
+# terminal 1 — API on :8000 (fetches the pack automatically on first request)
+.venv/bin/python -m uvicorn api.main:app --port 8000
+```
+
+```bash
+# terminal 2 — web on :3000
+npm --prefix web install
+npm --prefix web run dev                  # http://localhost:3000
+```
+
+### Quick start (Windows)
+
+```powershell
+python -m venv .venv
+.venv\Scripts\pip.exe install -r requirements.txt
+```
+
+Then, in two terminals, from the repository root:
 
 ```powershell
 .venv\Scripts\python.exe -m uvicorn api.main:app --port 8000
@@ -78,6 +113,16 @@ Then, in two terminals:
 ```powershell
 npm --prefix web install
 npm --prefix web run dev                  # http://localhost:3000
+```
+
+### Full dev setup (C++ core, local packs, tests)
+
+Windows has a one-shot script; there is no macOS/Linux equivalent yet, so
+mirror its steps manually with `requirements-dev.txt`, `pip install ./core`,
+and `python -m ingestion.build_pack --region <name>`.
+
+```powershell
+powershell -File scripts\build_all.ps1   # venv, deps, packs, sr_core, tests
 ```
 
 The engine implementation is chosen by `[engine] impl` in
