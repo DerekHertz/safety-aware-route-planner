@@ -43,7 +43,7 @@ def test_route_contract_shape(client):
     for r in data["routes"]:
         assert set(r.keys()) == {"kind", "geometry", "distance_m", "eta_s",
                                  "unsafe", "segments", "unsafe_points",
-                                 "detour_pct"}
+                                 "maneuvers", "detour_pct"}
         assert r["kind"] in ("fast", "balanced", "safe")
         assert r["geometry"]["type"] == "LineString"
         assert len(r["geometry"]["coordinates"]) >= 2
@@ -55,6 +55,10 @@ def test_route_contract_shape(client):
         for pt in r["unsafe_points"]:
             assert set(pt.keys()) == {"lon", "lat", "type"}
             assert pt["type"] in ("unprotected_left", "uncontrolled_crossing")
+        for man in r["maneuvers"]:
+            assert set(man.keys()) == {"type", "angle_deg", "offset_m",
+                                       "lon", "lat"}
+            assert man["type"] in ("left", "right", "uturn")
 
 
 def test_route_scenario_through_api(client):

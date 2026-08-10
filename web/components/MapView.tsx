@@ -58,6 +58,25 @@ interface Props {
    */
   fitPadding?:
     number | { top: number; bottom: number; left: number; right: number };
+  /** Continuously recenter/rotate the camera on `followTarget` while true.
+   *  Suppresses the route-fit-bounds behavior, which would otherwise fight
+   *  it on every reroute. */
+  cameraFollow?: boolean;
+  /** Point to keep centered while `cameraFollow` is true — typically the
+   *  live GPS fix. */
+  followTarget?: LatLon | null;
+  /** Camera bearing, in degrees, while following. `null`/`undefined` leaves
+   *  the current bearing alone (e.g. while stationary). */
+  heading?: number | null;
+  /** Fired when the user drags, zooms, or rotates the map by hand — the
+   *  caller should drop `cameraFollow` in response, matching the standard
+   *  "pan away, then recenter" nav-app pattern. */
+  onUserGesture?: () => void;
+  /** Where to draw the origin marker — defaults to `origin`. Lets a caller
+   *  show the puck at the raw live GPS fix even while `origin` itself (used
+   *  for routing requests) is deliberately pinned, e.g. while on-route and
+   *  navigating, to avoid rerouting on every fix. */
+  originMarkerPosition?: LatLon | null;
 }
 
 const emptyFC = (): FeatureCollection => ({
@@ -75,6 +94,11 @@ export default function MapView({
   originIsLive = false,
   flyTo = null,
   fitPadding = 60,
+  cameraFollow = false,
+  followTarget = null,
+  heading = null,
+  onUserGesture,
+  originMarkerPosition = origin,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -92,10 +116,10 @@ export default function MapView({
   // interaction, i.e. long after commit, so post-commit assignment is soon
   // enough. This effect is declared FIRST so it runs before the effects below
   // that call syncRoutes().
-  const stateRef = useRef({ origin, destination, onSetPoint, onSelect });
+  const stateRef = useRef({ origin, destination, onSetPoint, onSelect, onUserGesture });
   const routesRef = useRef({ routes, selected });
   useEffect(() => {
-    stateRef.current = { origin, destination, onSetPoint, onSelect };
+    stateRef.current = { origin, destination, onSetPoint, onSelect, onUserGesture };
     routesRef.current = { routes, selected };
   });
 
@@ -331,6 +355,16 @@ export default function MapView({
     };
     document.addEventListener("visibilitychange", onVisible);
 
+    // A user-initiated pan/zoom/rotate should drop camera-follow, same as any
+    // other nav app — "originalEvent" is what distinguishes a real gesture
+    // from our own programmatic easeTo/flyTo/fitBounds calls, which don't set it.
+    const onGesture = (e: { originalEvent?: unknown }) => {
+      if (e.originalEvent) stateRef.current.onUserGesture?.();
+    };
+    map.on("dragstart", onGesture);
+    map.on("zoomstart", onGesture);
+    map.on("rotatestart", onGesture);
+
     map.on("click", (ev) => {
       // clicks on route/marker layers are handled above; only set endpoints
       // for plain map clicks
@@ -359,11 +393,13 @@ export default function MapView({
     };
   }, [initLayers]);
 
-  // routes/selection -> layers, and fit the viewport to the new routes
+  // routes/selection -> layers, and fit the viewport to the new routes.
+  // Skipped while cameraFollow is on: otherwise every reroute yanks the
+  // camera back out to a route-fit, fighting the follow behavior below.
   useEffect(() => {
     syncRoutes();
     const map = mapRef.current;
-    if (map && routes.length > 0) {
+    if (map && !cameraFollow && routes.length > 0) {
       const coords = routes.flatMap((r) => r.geometry.coordinates);
       if (coords.length) {
         const lons = coords.map((c) => c[0]);
@@ -377,7 +413,7 @@ export default function MapView({
         );
       }
     }
-  }, [routes, selected, syncRoutes, fitPadding]);
+  }, [routes, selected, syncRoutes, fitPadding, cameraFollow]);
 
   // explicit recenter request (e.g. first GPS fix, or the locate button)
   useEffect(() => {
@@ -392,6 +428,21 @@ export default function MapView({
       padding: typeof fitPadding === "number" ? undefined : fitPadding,
     });
   }, [flyTo, fitPadding]);
+
+  // continuous camera follow: recenter + rotate to heading on every live fix.
+  // Flat pitch, no 3D tilt (see the navigation plan) — `heading ?? current
+  // bearing` so a stationary fix (heading null) doesn't snap back to north.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !cameraFollow || !followTarget) return;
+    map.easeTo({
+      center: [followTarget.lon, followTarget.lat],
+      bearing: heading ?? map.getBearing(),
+      pitch: 0,
+      duration: 900,
+      easing: (t) => t,
+    });
+  }, [cameraFollow, followTarget, heading]);
 
   // endpoint markers
   useEffect(() => {
@@ -422,7 +473,10 @@ export default function MapView({
         if (wantsPuck) {
           const el = document.createElement("div");
           el.className = "gps-puck";
-          marker = new Marker({ element: el });
+          // "map" alignment: the puck's rotation is relative to true north,
+          // matching `heading`, rather than to the screen (which would spin
+          // it back upright every time the camera itself rotates).
+          marker = new Marker({ element: el, rotationAlignment: "map" });
         } else {
           marker = new Marker({ color, draggable: true });
           marker.on("dragend", () => {
@@ -435,10 +489,14 @@ export default function MapView({
       } else {
         ref.current.setLngLat([point.lon, point.lat]);
       }
+      if (wantsPuck && ref.current) {
+        ref.current.getElement().classList.toggle("gps-puck--heading", heading != null);
+        ref.current.setRotation(heading ?? 0);
+      }
     };
-    sync(originMarker, origin, "#0f766e", "origin", originIsLive);
+    sync(originMarker, originMarkerPosition, "#0f766e", "origin", originIsLive);
     sync(destMarker, destination, "#b91c1c", "destination", false);
-  }, [origin, destination, originIsLive]);
+  }, [originMarkerPosition, destination, originIsLive, heading]);
 
   return (
     <div className="map-root">

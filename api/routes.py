@@ -40,6 +40,7 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
             "unsafe": r.unsafe,
             "segments": r.segments,
             "unsafe_points": r.unsafe_points,
+            "maneuvers": r.maneuvers,
             "detour_pct": r.detour_pct,
         }
         for r in routes

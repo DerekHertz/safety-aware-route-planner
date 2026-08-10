@@ -11,6 +11,47 @@ export interface GeoState {
   settled: boolean;
 }
 
+// --- dev-only simulated GPS track --------------------------------------
+//
+// Real navigation can't be exercised on a desktop dev machine by walking
+// around, and Chrome DevTools' geolocation override only offers a single
+// static point. This lets the console (or an automated driver) feed a
+// sequence of fixes on a timer instead, so camera-follow, off-route
+// detection, turn-by-turn, and alerts can all be watched end-to-end.
+// Stripped in production builds — never reachable outside `next dev`.
+export interface MockGeoPoint extends LatLon {
+  accuracy?: number;
+}
+export interface MockGeoOptions {
+  /** Milliseconds between fixes. Default 1000. */
+  intervalMs?: number;
+  /** Restart from the first point after the last one. Default false. */
+  loop?: boolean;
+}
+declare global {
+  interface Window {
+    __srMockGeo?: {
+      start: (points: MockGeoPoint[], opts?: MockGeoOptions) => void;
+      stop: () => void;
+    };
+  }
+}
+const MOCK_START_EVENT = "sr:mock-geo-start";
+const MOCK_STOP_EVENT = "sr:mock-geo-stop";
+
+if (process.env.NODE_ENV !== "production" && typeof window !== "undefined") {
+  window.__srMockGeo ??= {
+    start(points, opts) {
+      window.dispatchEvent(
+        new CustomEvent(MOCK_START_EVENT, { detail: { points, opts } }),
+      );
+    },
+    stop() {
+      window.dispatchEvent(new CustomEvent(MOCK_STOP_EVENT));
+    },
+  };
+}
+
 /**
  * Continuous position tracking via watchPosition (the user chose live
  * tracking over a one-shot fix).
@@ -72,6 +113,56 @@ export function useGeolocation(
       }
     };
   }, [enabled, onOk, onFail]);
+
+  // Dev-only: a mock track (started via window.__srMockGeo.start(...) from
+  // the console) overrides real fixes on its own timer. See the module-level
+  // comment above for why this exists.
+  useEffect(() => {
+    if (process.env.NODE_ENV === "production") return;
+    if (typeof window === "undefined") return;
+    let timer: number | null = null;
+    const clear = () => {
+      if (timer !== null) {
+        window.clearInterval(timer);
+        timer = null;
+      }
+    };
+    const onStart = (ev: Event) => {
+      clear();
+      const { points, opts } = (ev as CustomEvent).detail as {
+        points: MockGeoPoint[];
+        opts?: MockGeoOptions;
+      };
+      if (!points?.length) return;
+      const intervalMs = opts?.intervalMs ?? 1000;
+      const loop = opts?.loop ?? false;
+      let i = 0;
+      const emit = () => {
+        const p = points[i];
+        setState({
+          position: { lat: p.lat, lon: p.lon },
+          accuracy: p.accuracy ?? 5,
+          error: null,
+          settled: true,
+        });
+        i += 1;
+        if (i >= points.length) {
+          if (loop) i = 0;
+          else clear();
+        }
+      };
+      emit();
+      timer = window.setInterval(emit, intervalMs);
+    };
+    const onStop = () => clear();
+    window.addEventListener(MOCK_START_EVENT, onStart);
+    window.addEventListener(MOCK_STOP_EVENT, onStop);
+    return () => {
+      clear();
+      window.removeEventListener(MOCK_START_EVENT, onStart);
+      window.removeEventListener(MOCK_STOP_EVENT, onStop);
+    };
+  }, []);
 
   const refresh = useCallback(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;

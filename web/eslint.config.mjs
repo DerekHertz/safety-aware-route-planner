@@ -44,12 +44,27 @@ export default defineConfig([
   //     lib/useMediaQuery.ts now does) but it means rewriting the live GPS
   //     path, which is exactly the code being field-tested. Not worth the risk
   //     for a lint warning; revisit when that path changes for its own reasons.
+  //   - lib/useRouteProgress.ts — same category as useGeolocation.ts above:
+  //     it tracks off-route hysteresis and one-time proximity alerts as each
+  //     new live GPS fix arrives, which is memory of a sequence of external
+  //     events, not a pure function of the latest props. `useMemo` with refs
+  //     mutated during render was tried and rejected — `react-hooks/refs`
+  //     categorically forbids reading/writing ref.current during render in
+  //     this config, so there is no ref-during-render escape hatch here.
+  //   - lib/useSpeech.ts — same localStorage-read-after-hydration case as the
+  //     `units` preference in app/page.tsx: the voice-enabled flag must
+  //     default to `false` in useState (so SSR markup matches the first
+  //     client render) and then sync from localStorage in a mount effect,
+  //     which is itself the external-system synchronisation this rule can't
+  //     represent as a pure render.
   // ---------------------------------------------------------------------
   {
     files: [
       "app/page.tsx",
       "components/SearchBox.tsx",
       "lib/useGeolocation.ts",
+      "lib/useRouteProgress.ts",
+      "lib/useSpeech.ts",
     ],
     rules: {
       "react-hooks/set-state-in-effect": "warn",
