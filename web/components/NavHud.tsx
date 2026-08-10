@@ -43,7 +43,9 @@ export default function NavHud({ route, progress, units, onExit }: Props) {
   const remainingM = progress?.remainingM ?? route.distance_m;
   const remainingS = progress?.remainingS ?? route.eta_s;
   const upcoming = progress?.nextManeuver ?? null;
-  const untilManeuverM = upcoming ? upcoming.offset_m - (progress?.offsetM ?? 0) : null;
+  const untilManeuverM = upcoming
+    ? upcoming.offset_m - (progress?.offsetM ?? 0)
+    : null;
 
   const speech = useSpeech();
 
@@ -96,7 +98,11 @@ export default function NavHud({ route, progress, units, onExit }: Props) {
   }
 
   useEffect(() => {
-    if (announcedOffset == null || !upcoming || upcoming.offset_m !== announcedOffset) {
+    if (
+      announcedOffset == null ||
+      !upcoming ||
+      upcoming.offset_m !== announcedOffset
+    ) {
       return;
     }
     const distM = untilManeuverM != null ? Math.max(0, untilManeuverM) : 0;

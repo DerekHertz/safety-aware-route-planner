@@ -47,7 +47,10 @@ export function densifyRoute(
     const steps = Math.max(1, Math.round(segM / stepM));
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
-      out.push({ lon: lon1 + t * (lon2 - lon1), lat: lat1 + t * (lat2 - lat1) });
+      out.push({
+        lon: lon1 + t * (lon2 - lon1),
+        lat: lat1 + t * (lat2 - lat1),
+      });
     }
   }
   const [lastLon, lastLat] = coordinates[coordinates.length - 1];

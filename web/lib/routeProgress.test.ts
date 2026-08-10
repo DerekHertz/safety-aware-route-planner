@@ -15,10 +15,10 @@ const LON = -122.42;
 const LAT_START = 37.77;
 const STEP_DEG = 0.001; // ~111.3m per step
 const POINT_COUNT = 10;
-const ROUTE: [number, number][] = Array.from({ length: POINT_COUNT }, (_, i) => [
-  LON,
-  LAT_START + i * STEP_DEG,
-]);
+const ROUTE: [number, number][] = Array.from(
+  { length: POINT_COUNT },
+  (_, i) => [LON, LAT_START + i * STEP_DEG],
+);
 const METERS_PER_STEP = 111.3 * (STEP_DEG / 0.001);
 
 describe("projectOnRoute", () => {
@@ -34,8 +34,7 @@ describe("projectOnRoute", () => {
   it("returns ~50m offRouteM for a point 50m off the line", () => {
     // ~50m east of the route, at roughly the midpoint latitude.
     const midLat = LAT_START + 4 * STEP_DEG;
-    const metersPerDegLon =
-      111_320 * Math.cos((midLat * Math.PI) / 180);
+    const metersPerDegLon = 111_320 * Math.cos((midLat * Math.PI) / 180);
     const offsetLon = 50 / metersPerDegLon;
     const pos = { lon: LON + offsetLon, lat: midLat };
     const result = projectOnRoute(ROUTE, pos);
@@ -89,9 +88,21 @@ describe("nextManeuver", () => {
 
 describe("projectUnsafePoints + alertsAhead", () => {
   it("includes points within the lookahead window, excludes those outside or already passed", () => {
-    const within = { lon: ROUTE[5][0], lat: ROUTE[5][1], type: "unprotected_left" };
-    const tooFar = { lon: ROUTE[9][0], lat: ROUTE[9][1], type: "unprotected_left" };
-    const alreadyPassed = { lon: ROUTE[1][0], lat: ROUTE[1][1], type: "uncontrolled_crossing" };
+    const within = {
+      lon: ROUTE[5][0],
+      lat: ROUTE[5][1],
+      type: "unprotected_left",
+    };
+    const tooFar = {
+      lon: ROUTE[9][0],
+      lat: ROUTE[9][1],
+      type: "unprotected_left",
+    };
+    const alreadyPassed = {
+      lon: ROUTE[1][0],
+      lat: ROUTE[1][1],
+      type: "uncontrolled_crossing",
+    };
 
     const projected = projectUnsafePoints(
       [within, tooFar, alreadyPassed],

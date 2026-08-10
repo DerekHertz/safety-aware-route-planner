@@ -185,7 +185,15 @@ export default function Home() {
       seededRef.current = true;
       setFlyTo(next);
     }
-  }, [geo.position, followMode, meta, metaSettled, navigating, activeRoute, progress]);
+  }, [
+    geo.position,
+    followMode,
+    meta,
+    metaSettled,
+    navigating,
+    activeRoute,
+    progress,
+  ]);
 
   useEffect(() => {
     if (geo.error) setCoverageNote(geo.error);
@@ -373,8 +381,8 @@ export default function Home() {
         ) : (
           <>
             <p className="hint intro">
-              Search, click the map, or use your current location. Covered
-              area: {regionLabel}.
+              Search, click the map, or use your current location. Covered area:{" "}
+              {regionLabel}.
             </p>
 
             <div className="origin-row">
@@ -504,11 +512,11 @@ export default function Home() {
             {routes.length > 0 && selected && (
               <p className="hint">
                 The selected route is colored by maneuver safety tier (green /
-                amber / red). Red markers flag unsafe maneuvers: L =
-                unprotected left, X = uncontrolled crossing. Only maneuvers
-                where the map data actually records the traffic control are
-                flagged — a signalized left, or an intersection OpenStreetMap
-                says nothing about, shows amber instead.
+                amber / red). Red markers flag unsafe maneuvers: L = unprotected
+                left, X = uncontrolled crossing. Only maneuvers where the map
+                data actually records the traffic control are flagged — a
+                signalized left, or an intersection OpenStreetMap says nothing
+                about, shows amber instead.
               </p>
             )}
           </>

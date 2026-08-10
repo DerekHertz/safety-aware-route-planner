@@ -116,10 +116,22 @@ export default function MapView({
   // interaction, i.e. long after commit, so post-commit assignment is soon
   // enough. This effect is declared FIRST so it runs before the effects below
   // that call syncRoutes().
-  const stateRef = useRef({ origin, destination, onSetPoint, onSelect, onUserGesture });
+  const stateRef = useRef({
+    origin,
+    destination,
+    onSetPoint,
+    onSelect,
+    onUserGesture,
+  });
   const routesRef = useRef({ routes, selected });
   useEffect(() => {
-    stateRef.current = { origin, destination, onSetPoint, onSelect, onUserGesture };
+    stateRef.current = {
+      origin,
+      destination,
+      onSetPoint,
+      onSelect,
+      onUserGesture,
+    };
     routesRef.current = { routes, selected };
   });
 
@@ -490,7 +502,9 @@ export default function MapView({
         ref.current.setLngLat([point.lon, point.lat]);
       }
       if (wantsPuck && ref.current) {
-        ref.current.getElement().classList.toggle("gps-puck--heading", heading != null);
+        ref.current
+          .getElement()
+          .classList.toggle("gps-puck--heading", heading != null);
         ref.current.setRotation(heading ?? 0);
       }
     };

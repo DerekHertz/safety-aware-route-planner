@@ -97,8 +97,7 @@ export function useRouteProgress(
     const noisy = accuracy != null && accuracy > MAX_ACCURACY_M;
     const nearEndpoint =
       offsetM < ENDPOINT_GRACE_M || remainingM < ENDPOINT_GRACE_M;
-    const withinStartGrace =
-      Date.now() - startTsRef.current < START_GRACE_MS;
+    const withinStartGrace = Date.now() - startTsRef.current < START_GRACE_MS;
     const suppressed = noisy || nearEndpoint || withinStartGrace;
 
     if (suppressed) {
@@ -111,14 +110,16 @@ export function useRouteProgress(
 
     const upcoming = nextManeuver(route.maneuvers, offsetM);
 
-    const alerts = alertsAhead(projectedUnsafe, offsetM, ALERT_LOOKAHEAD_M).filter(
-      (a) => {
-        const key = `${route.kind}:${a.point.type}:${a.offsetM}`;
-        if (firedRef.current.has(key)) return false;
-        firedRef.current.add(key);
-        return true;
-      },
-    );
+    const alerts = alertsAhead(
+      projectedUnsafe,
+      offsetM,
+      ALERT_LOOKAHEAD_M,
+    ).filter((a) => {
+      const key = `${route.kind}:${a.point.type}:${a.offsetM}`;
+      if (firedRef.current.has(key)) return false;
+      firedRef.current.add(key);
+      return true;
+    });
 
     setState({
       offsetM,
