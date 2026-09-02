@@ -52,6 +52,23 @@ class Maneuver(BaseModel):
     lat: float
 
 
+class Preference(BaseModel):
+    """The reproducible description of what a route was optimized for (ADR-0004):
+    the human-meaningful safety-level label PLUS the resolved reproducer params.
+    A nav consumer replays these to reroute at the SAME safety level (ADR-0002)
+    instead of silently falling back to a time-only route.
+
+    `lambda` is a Python keyword, so the field is `lambda_` with a wire alias;
+    FastAPI serializes response models by alias, so the JSON/TS key is `lambda`.
+    """
+    level: str                # "fast" | "balanced" | "safe" (== RouteAlternative.kind)
+    lambda_: float = Field(alias="lambda")   # the safety weight that produced it
+    detour_budget_pct: float  # RESOLVED (config default when the request omitted it)
+    departure_time: datetime.datetime        # the departure basis the route used
+
+    model_config = {"populate_by_name": True}
+
+
 class RouteAlternative(BaseModel):
     kind: str                 # "fast" | "balanced" | "safe"
     geometry: dict            # GeoJSON LineString
@@ -62,6 +79,8 @@ class RouteAlternative(BaseModel):
     unsafe_points: list[UnsafePoint]
     maneuvers: list[Maneuver]
     detour_pct: float         # extra time vs the fastest route in this response
+    preference: Preference    # how to reproduce/reroute this route (ADR-0004)
+    schema_version: int       # artifact contract version; bumped on breaking change
 
 
 class RouteResponse(BaseModel):

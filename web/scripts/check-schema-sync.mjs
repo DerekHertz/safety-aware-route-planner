@@ -37,6 +37,7 @@ const PAIRS = {
   Segment: "Segment",
   UnsafePoint: "UnsafePoint",
   Maneuver: "Maneuver",
+  Preference: "Preference",
   RouteAlternative: "RouteAlternative",
   RouteResponse: "RouteResponse",
   GeocodeResult: "GeocodeResult",
