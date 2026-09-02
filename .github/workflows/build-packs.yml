@@ -79,7 +79,7 @@ jobs:
       # GraphML here, keyed by INGEST_SCHEMA_VERSION. Reusing that cache is what
       # keeps repeat runs (a new region, a rebuilt pack) off Overpass entirely.
       - name: Cache OSM downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: data/cache
           key: osm-v${{ steps.cfg.outputs.ingest_version }}-${{ hashFiles('config/config.toml') }}
