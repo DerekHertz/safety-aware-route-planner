@@ -24,15 +24,21 @@ Robust-core milestone status (ADR-0008), plus the reroute line built on it:
 - [x] **Contract schema-versioned + contract-tested.** `tests/test_route_artifact_v1.py`,
       enforced by the `schema-sync` workflow.
 - [x] **Reroute v1** — `POST /reroute`, replan one carried level (ADR-0008). PR #33.
-      _Backend + the type-mirror only; the web client does not call it yet._
-- [ ] **Web consumes `/reroute`** — replace the fake reroute in `web/app/page.tsx`
-      (today it re-calls `POST /route` from the new origin and reselects, which is
-      the silent safety-level swap ADR-0008 describes). **Coupled to the nav
-      rebuild below** — don't wire `/reroute` into the parked nav; rebuild nav as
-      a clean artifact consumer that calls it.
+      _Backend + the type-mirror only._
+- [~] **Web consumes `/reroute`** — the **client half has landed**: `fetchReroute`
+      in `web/lib/api.ts` (tested in `web/lib/api.test.ts`) POSTs the carried
+      `preference` and returns the single same-level artifact. It is **not yet
+      called by the UI** — the fake reroute in `web/app/page.tsx` (re-calls
+      `POST /route` from the new origin and reselects, the silent safety-level
+      swap ADR-0008 describes) is still in place. Wiring `fetchReroute` in **is**
+      the nav rebuild below. Do NOT bolt it onto the parked nav.
 - [ ] **Remove `page.tsx` nav-state overloading; quarantine live nav behind a
-      flag** (robust-core milestone item 3). This is the nav rebuild ADR-0008
-      calls for. Largest remaining TypeScript feature.
+      flag** (robust-core milestone item 3, ADR-0008). Largest remaining TS
+      feature — **DEFERRED pending more usage/context.** When resumed: on
+      `offRoute` while navigating, call `fetchReroute(activeRoute.preference)`
+      and **replace the active route in place** (no reselection → same level by
+      construction); stop overloading `origin`/`selected`/`followMode` so the
+      planner and navigator don't share mutable state; add an arrival lifecycle.
 - [x] **Safety scenario suite green** (milestone item 4) — already passing.
 
 After the milestone: nav gets un-parked and rebuilt as a clean consumer

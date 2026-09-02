@@ -2,6 +2,9 @@ import {
   GeocodeResult,
   LatLon,
   PackMeta,
+  Preference,
+  RerouteRequest,
+  RerouteResponse,
   RouteRequest,
   RouteResponse,
 } from "./types";
@@ -39,6 +42,30 @@ export async function fetchRoutes(
   if (!resp.ok) {
     const detail = await resp.json().catch(() => null);
     throw new Error(detail?.detail ?? `routing failed (${resp.status})`);
+  }
+  return resp.json();
+}
+
+/** Replan from `origin` to the original `destination` at the SAME safety level,
+ *  by replaying a prior artifact's `preference` (ADR-0008). The server recomputes
+ *  only that one level and returns a single artifact — never the fast/balanced/
+ *  safe set — so a reroute can't silently swap the traveler's safety level. */
+export async function fetchReroute(
+  origin: LatLon,
+  destination: LatLon,
+  preference: Preference,
+): Promise<RerouteResponse> {
+  // Typed, like fetchRoutes above, so the schema-sync check has the request
+  // side of the contract to compare against.
+  const body: RerouteRequest = { origin, destination, preference };
+  const resp = await fetch(`${API_BASE}/reroute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => null);
+    throw new Error(detail?.detail ?? `reroute failed (${resp.status})`);
   }
   return resp.json();
 }
