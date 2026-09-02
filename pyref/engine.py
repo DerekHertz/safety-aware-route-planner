@@ -26,6 +26,12 @@ class RoutingError(Exception):
     """User-facing routing problem (bad snap, no path...)."""
 
 
+# The route-artifact contract version (ADR-0004). Lives with the engine because
+# the engine emits the artifact; api/schemas.py just mirrors it onto the wire.
+# Bump this only on a deliberate breaking change to the artifact shape.
+ROUTE_SCHEMA_VERSION = 1
+
+
 def _with_detour_pct(routes: list[RouteOut]) -> list[RouteOut]:
     """Fill in each route's extra time relative to the fastest one returned,
     so the UI can show what a safer route actually costs."""
@@ -47,7 +53,9 @@ class RouteOut:
     segments: list[dict]
     unsafe_points: list[dict]
     maneuvers: list[dict]
+    preference: dict          # {level, lambda, detour_budget_pct, departure_time}
     detour_pct: float = 0.0   # extra time vs the fastest route in this response
+    schema_version: int = ROUTE_SCHEMA_VERSION
 
 
 class Router:
@@ -93,6 +101,22 @@ class Router:
         pack = self.pack
         sc = cfg["search"]
 
+        # Resolve the detour budget ONCE, here, so the value carried in every
+        # route's preference is the concrete one the search used — never null,
+        # even when the request omitted it (ADR-0004: the artifact is
+        # self-describing). compute_alternatives applies the same fallback.
+        budget = (float(cfg["alternatives"]["detour_budget_pct"])
+                  if detour_budget_pct is None else detour_budget_pct)
+        # The lambda a route's preference carries is the one its safety LEVEL
+        # maps to (ADR-0004: "the lambda it maps to"), not the sweep lambda that
+        # happened to survive dedup. After relabelling, a route labelled "safe"
+        # may have been produced by the balanced sweep run; the contract still
+        # reports lambda_safe, so label and lambda cannot drift apart.
+        alt = cfg["alternatives"]
+        lam_by_kind = {"fast": float(alt["lambda_fast"]),
+                       "balanced": float(alt["lambda_balanced"]),
+                       "safe": float(alt["lambda_safe"])}
+
         o_cands = self.snap_index.snap(origin_lat, origin_lon,
                                        k=int(sc["snap_k"]), max_m=float(sc["snap_max_m"]))
         d_cands = self.snap_index.snap(dest_lat, dest_lon,
@@ -116,7 +140,9 @@ class Router:
                 res = PathResult(turn_ids=np.array([], dtype=np.int32),
                                  first_edge=e, dest_edge=e,
                                  total_cost=(dc.frac - oc.frac) * float(qc.edge_time_s[e]))
-                return [self._describe("fast", res, qc, oc, dc)]
+                return [self._describe("fast", res, qc, oc, dc,
+                                       lam=lam_by_kind["fast"], budget=budget,
+                                       departure=departure)]
 
         seeds = [(int(c.edge), (1.0 - c.frac) * float(qc.edge_time_s[c.edge]))
                  for c in o_cands]
@@ -132,7 +158,10 @@ class Router:
             raise RoutingError("no route found between these points")
         routes = [self._describe(a.kind, a.result, qc,
                                  o_by_edge[a.result.first_edge],
-                                 d_by_edge[a.result.dest_edge]) for a in alts]
+                                 d_by_edge[a.result.dest_edge],
+                                 lam=lam_by_kind[a.kind], budget=budget,
+                                 departure=departure)
+                  for a in alts]
         return _with_detour_pct(routes)
 
     def _alternatives(self, qc, seeds, dests, h, safety_enabled,
@@ -143,7 +172,9 @@ class Router:
             detour_budget_pct=detour_budget_pct)
 
     def _describe(self, kind: str, result: PathResult, qc,
-                  oc: SnapCandidate, dc: SnapCandidate) -> RouteOut:
+                  oc: SnapCandidate, dc: SnapCandidate, *,
+                  lam: float, budget: float,
+                  departure: datetime.datetime) -> RouteOut:
         pack = self.pack
         m = compute_metrics(pack, qc, result,
                             frac_origin=oc.frac, frac_dest=dc.frac)
@@ -158,4 +189,9 @@ class Router:
             segments=geo_out.route_segments(pack, qc, result, oc.frac, dc.frac),
             unsafe_points=geo_out.unsafe_points(pack, qc, result),
             maneuvers=geo_out.route_maneuvers(pack, result, oc.frac, dc.frac),
+            # the label mirrors kind so the artifact is self-describing when
+            # a consumer holds one route out of the response array (ADR-0004).
+            preference={"level": kind, "lambda": lam,
+                        "detour_budget_pct": budget,
+                        "departure_time": departure},
         )

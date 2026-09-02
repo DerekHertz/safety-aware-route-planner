@@ -42,6 +42,8 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
             "unsafe_points": r.unsafe_points,
             "maneuvers": r.maneuvers,
             "detour_pct": r.detour_pct,
+            "preference": r.preference,
+            "schema_version": r.schema_version,
         }
         for r in routes
     ]})

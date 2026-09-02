@@ -57,6 +57,17 @@ export interface Maneuver {
   lat: number;
 }
 
+/** The reproducible description of what a route was optimized for (ADR-0004):
+ *  the safety-level label plus the resolved reproducer params. A nav consumer
+ *  replays these to reroute at the SAME safety level (ADR-0002). `lambda` is the
+ *  weight the level maps to — an internal knob; the UI shows `level`. */
+export interface Preference {
+  level: RouteKind;
+  lambda: number;
+  detour_budget_pct: number;
+  departure_time: string;
+}
+
 export interface RouteAlternative {
   kind: RouteKind;
   geometry: LineString;
@@ -68,6 +79,9 @@ export interface RouteAlternative {
   maneuvers: Maneuver[];
   /** Extra time versus the fastest route in the same response, as a fraction. */
   detour_pct: number;
+  preference: Preference;
+  /** Route-artifact contract version; bumped only on a breaking shape change. */
+  schema_version: number;
 }
 
 /** How far out of the way the router may go for a safer crossing, as a
