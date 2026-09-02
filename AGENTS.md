@@ -1,5 +1,10 @@
 # AGENTS.md
 
+## Starting a session
+
+**Resuming / "what's next?"** → read `docs/agents/handoff.md` first: it has the
+Now/Next feature list and where the plan lives.
+
 ## Agent skills
 
 ### Issue tracker
