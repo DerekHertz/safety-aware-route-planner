@@ -147,7 +147,7 @@ jobs:
       # Always attached, so a run with publishing off is still useful and so a
       # published artifact can be diffed against a rebuild.
       - name: Attach artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packs-${{ steps.cfg.outputs.tag }}
           path: dist/packs/
