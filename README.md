@@ -290,6 +290,13 @@ safety_enabled, detour_budget_pct}` →
 `detour_budget_pct` (request, optional — config default when omitted) and
 `detour_pct` (response) are the additive fields; everything else is unchanged.
 
+`POST /reroute` `{origin:{lat,lon}, destination:{lat,lon}, preference}` →
+`{ "route": { ...one route artifact... } }`. Replans from the current position
+to the original destination carrying a prior artifact's `preference`, and
+recomputes **only that one safety level** (ADR-0008) — so a nav consumer stays
+at its chosen level instead of silently swapping onto whichever level is fastest
+from the new position. Additive endpoint; the `/route` contract is unchanged.
+
 `GET /geocode?q=...` proxies Nominatim (rate-limited, identified UA, cached)
 bounded to the pack bbox. Set `SR_NOMINATIM_CONTACT` to override the
 User-Agent contact string per deployment.

@@ -165,6 +165,57 @@ def compute_alternatives(pack: GraphPack, qc: QueryCosts, topo: TurnTopo,
     return kept
 
 
+def compute_single(pack: GraphPack, qc: QueryCosts, topo: TurnTopo,
+                   seeds: list[tuple[int, float]],
+                   dests: list[tuple[int, float]],
+                   h: np.ndarray | None,
+                   cfg: Config,
+                   *,
+                   level: str,
+                   lam: float,
+                   detour_budget_pct: float | None = None,
+                   run=None) -> PathResult | None:
+    """Recompute ONE safety level at a carried lambda — the reroute path
+    (ADR-0008 "Reroute v1 semantics"). No sweep, no dedup: a reroute returns a
+    single route at the carried level, so the forced-diversity machinery in
+    compute_alternatives (which only exists to keep three *shown* alternatives
+    distinct) is deliberately skipped. This yields the true optimum at `lam`,
+    unperturbed by the other alternatives that no longer exist here.
+
+    The detour budget is still honored for the `safe` level exactly as the sweep
+    honors it: a hard-avoid run forces "go two blocks to the light" when lambda
+    alone would still take the unprotected maneuver. The fast baseline the budget
+    is measured against is computed internally and never returned.
+
+    Returns None when no path exists between the snapped endpoints.
+    """
+    if run is None:
+        def run(ac_, h_, s_, d_):
+            return shortest_path(topo, ac_, h_, s_, d_)
+    if detour_budget_pct is None:
+        detour_budget_pct = float(cfg["alternatives"]["detour_budget_pct"])
+
+    ac = arc_cost(pack, qc, lam)
+    result = run(ac, h, seeds, dests)
+    if result is None:
+        return None
+
+    def unsafe_count(r: PathResult) -> int:
+        return int(np.count_nonzero(qc.turn_unsafe_type[r.turn_ids]))
+
+    if level == "safe" and detour_budget_pct > 0 and unsafe_count(result) > 0:
+        baseline = run(arc_cost(pack, qc, 0.0), h, seeds, dests)
+        if baseline is not None:
+            travel_time_s = travel_time_fn(pack, qc, seeds, dests)
+            clean = _avoid_within_budget(
+                pack, qc, cfg, run, h, seeds, dests, lam,
+                travel_time_s(baseline), detour_budget_pct,
+                unsafe_count(result), travel_time_s)
+            if clean is not None:
+                result, _ = clean
+    return result
+
+
 def _avoid_within_budget(pack: GraphPack, qc: QueryCosts, cfg: Config, run,
                          h, seeds, dests, lam: float, fast_time_s: float,
                          budget_pct: float, baseline_unsafe: int,

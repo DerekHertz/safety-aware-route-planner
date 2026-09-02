@@ -40,6 +40,8 @@ const PAIRS = {
   Preference: "Preference",
   RouteAlternative: "RouteAlternative",
   RouteResponse: "RouteResponse",
+  RerouteRequest: "RerouteRequest",
+  RerouteResponse: "RerouteResponse",
   GeocodeResult: "GeocodeResult",
   // Names differ on purpose: the server calls it MetaResponse, the client
   // PackMeta.

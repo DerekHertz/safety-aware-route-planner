@@ -87,6 +87,22 @@ class RouteResponse(BaseModel):
     routes: list[RouteAlternative]
 
 
+class RerouteRequest(BaseModel):
+    """Reroute v1 (ADR-0008): replan from the current position to the original
+    destination, carrying a prior artifact's `preference` so the replacement
+    stays at the SAME safety level. The service recomputes only that one level.
+    """
+    origin: LatLon           # the current position, mid-trip
+    destination: LatLon      # the original, unchanged destination
+    preference: Preference   # carried verbatim off the artifact being followed
+
+
+class RerouteResponse(BaseModel):
+    """A reroute yields ONE artifact at the carried level — not the fast/
+    balanced/safe list a first plan returns."""
+    route: RouteAlternative
+
+
 class MetaResponse(BaseModel):
     """Pack coverage info. Additive — not part of the frozen /route contract."""
     region: str
