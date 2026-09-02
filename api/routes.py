@@ -1,14 +1,37 @@
-"""POST /route — the core endpoint."""
+"""POST /route — the core endpoint — and POST /reroute (ADR-0008)."""
 from __future__ import annotations
 
 import datetime
 
 from fastapi import APIRouter, HTTPException, Request
 
-from api.schemas import RouteRequest, RouteResponse
+from api.schemas import (
+    RerouteRequest,
+    RerouteResponse,
+    RouteRequest,
+    RouteResponse,
+)
 from pyref.engine import RoutingError
 
 router = APIRouter()
+
+
+def _artifact(r) -> dict:
+    """The wire shape of one route artifact (ADR-0004). RouteOut carries the
+    nested pieces as plain dicts; pydantic coerces them at the boundary."""
+    return {
+        "kind": r.kind,
+        "geometry": r.geometry,
+        "distance_m": r.distance_m,
+        "eta_s": r.eta_s,
+        "unsafe": r.unsafe,
+        "segments": r.segments,
+        "unsafe_points": r.unsafe_points,
+        "maneuvers": r.maneuvers,
+        "detour_pct": r.detour_pct,
+        "preference": r.preference,
+        "schema_version": r.schema_version,
+    }
 
 
 @router.post("/route", response_model=RouteResponse)
@@ -31,19 +54,24 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
     # `unsafe`/`segments`/`unsafe_points` as plain dicts, and pydantic coerces
     # them into the nested models here. Identical result, but it types the
     # loose input honestly instead of claiming these are already models.
-    return RouteResponse.model_validate({"routes": [
-        {
-            "kind": r.kind,
-            "geometry": r.geometry,
-            "distance_m": r.distance_m,
-            "eta_s": r.eta_s,
-            "unsafe": r.unsafe,
-            "segments": r.segments,
-            "unsafe_points": r.unsafe_points,
-            "maneuvers": r.maneuvers,
-            "detour_pct": r.detour_pct,
-            "preference": r.preference,
-            "schema_version": r.schema_version,
-        }
-        for r in routes
-    ]})
+    return RouteResponse.model_validate({"routes": [_artifact(r) for r in routes]})
+
+
+@router.post("/reroute", response_model=RerouteResponse, response_model_by_alias=True)
+def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
+    # sync on purpose, like /route: FastAPI runs it in a worker thread so the
+    # CPU-bound search never blocks the event loop.
+    state = request.app.state.app_state
+    pref = body.preference
+    try:
+        art = state.router.reroute(
+            body.origin.lat, body.origin.lon,
+            body.destination.lat, body.destination.lon,
+            level=pref.level,
+            lam=pref.lambda_,
+            detour_budget_pct=pref.detour_budget_pct,
+            departure=pref.departure_time,
+        )
+    except RoutingError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return RerouteResponse.model_validate({"route": _artifact(art)})

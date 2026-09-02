@@ -99,6 +99,21 @@ export interface RouteResponse {
   routes: RouteAlternative[];
 }
 
+/** Request body for POST /reroute (ADR-0008): replan from the current position
+ *  to the original destination, carrying a prior artifact's `preference` so the
+ *  replacement stays at the SAME safety level. The server recomputes only that
+ *  one level — never the full fast/balanced/safe set. */
+export interface RerouteRequest {
+  origin: LatLon;
+  destination: LatLon;
+  preference: Preference;
+}
+
+/** A reroute yields ONE artifact at the carried level, not a `routes` list. */
+export interface RerouteResponse {
+  route: RouteAlternative;
+}
+
 export interface GeocodeResult {
   name: string;
   lat: number;

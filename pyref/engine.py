@@ -12,7 +12,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from pyref import geometry as geo_out
-from pyref.alternatives import Alternative, compute_alternatives
+from pyref.alternatives import Alternative, compute_alternatives, compute_single
 from pyref.config import Config
 from pyref.costs import compute_costs, heuristic
 from pyref.graph import GraphPack
@@ -58,6 +58,19 @@ class RouteOut:
     schema_version: int = ROUTE_SCHEMA_VERSION
 
 
+@dataclass
+class _Plan:
+    """The snapped, time-resolved search inputs for one query — the shared
+    output of Router._resolve, consumed by both route() and reroute()."""
+    qc: object
+    o_by_edge: dict
+    d_by_edge: dict
+    seeds: list[tuple[int, float]]
+    dests: list[tuple[int, float]]
+    h: np.ndarray | None
+    same_edge: PathResult | None   # set when origin/dest share one directed edge
+
+
 class Router:
     def __init__(self, pack: GraphPack, cfg: Config):
         self.pack = pack
@@ -92,30 +105,20 @@ class Router:
                               dest_edge=int(dest_edge), total_cost=float(total))
         return shortest_path(self.topo, ac, h, seeds, dests)
 
-    def route(self, origin_lat: float, origin_lon: float,
-              dest_lat: float, dest_lon: float,
-              departure: datetime.datetime,
-              safety_enabled: bool = True,
-              detour_budget_pct: float | None = None) -> list[RouteOut]:
+    def _resolve(self, origin_lat: float, origin_lon: float,
+                 dest_lat: float, dest_lon: float,
+                 departure: datetime.datetime) -> _Plan:
+        """Snap both endpoints, build the time-resolved costs, and prepare the
+        search inputs (seeds/dests/heuristic). Shared by route() and reroute()
+        so a reroute snaps and costs a query identically to a first plan.
+
+        Detects the same-edge short-circuit (origin and destination on one
+        directed edge, destination downstream) and carries its ready PathResult
+        so the caller can label it at whatever safety level it needs.
+        """
         cfg = self.cfg
         pack = self.pack
         sc = cfg["search"]
-
-        # Resolve the detour budget ONCE, here, so the value carried in every
-        # route's preference is the concrete one the search used — never null,
-        # even when the request omitted it (ADR-0004: the artifact is
-        # self-describing). compute_alternatives applies the same fallback.
-        budget = (float(cfg["alternatives"]["detour_budget_pct"])
-                  if detour_budget_pct is None else detour_budget_pct)
-        # The lambda a route's preference carries is the one its safety LEVEL
-        # maps to (ADR-0004: "the lambda it maps to"), not the sweep lambda that
-        # happened to survive dedup. After relabelling, a route labelled "safe"
-        # may have been produced by the balanced sweep run; the contract still
-        # reports lambda_safe, so label and lambda cannot drift apart.
-        alt = cfg["alternatives"]
-        lam_by_kind = {"fast": float(alt["lambda_fast"]),
-                       "balanced": float(alt["lambda_balanced"]),
-                       "safe": float(alt["lambda_safe"])}
 
         o_cands = self.snap_index.snap(origin_lat, origin_lon,
                                        k=int(sc["snap_k"]), max_m=float(sc["snap_max_m"]))
@@ -132,17 +135,15 @@ class Router:
         o_by_edge = {c.edge: c for c in o_cands}
         d_by_edge = {c.edge: c for c in d_cands}
 
-        # same-edge short-circuit: origin and destination on one directed
-        # edge with the destination downstream — no search needed
+        same_edge = None
         for e, oc in o_by_edge.items():
             dc = d_by_edge.get(e)
             if dc is not None and oc.frac <= dc.frac:
-                res = PathResult(turn_ids=np.array([], dtype=np.int32),
-                                 first_edge=e, dest_edge=e,
-                                 total_cost=(dc.frac - oc.frac) * float(qc.edge_time_s[e]))
-                return [self._describe("fast", res, qc, oc, dc,
-                                       lam=lam_by_kind["fast"], budget=budget,
-                                       departure=departure)]
+                same_edge = PathResult(
+                    turn_ids=np.array([], dtype=np.int32),
+                    first_edge=e, dest_edge=e,
+                    total_cost=(dc.frac - oc.frac) * float(qc.edge_time_s[e]))
+                break
 
         seeds = [(int(c.edge), (1.0 - c.frac) * float(qc.edge_time_s[c.edge]))
                  for c in o_cands]
@@ -151,18 +152,91 @@ class Router:
         h = None
         if cfg["search"]["algo"] == "astar":
             h = heuristic(pack, qc, d_cands[0].lat, d_cands[0].lon)
+        return _Plan(qc=qc, o_by_edge=o_by_edge, d_by_edge=d_by_edge,
+                     seeds=seeds, dests=dests, h=h, same_edge=same_edge)
 
-        alts = self._alternatives(qc, seeds, dests, h, safety_enabled,
-                                  detour_budget_pct)
+    def route(self, origin_lat: float, origin_lon: float,
+              dest_lat: float, dest_lon: float,
+              departure: datetime.datetime,
+              safety_enabled: bool = True,
+              detour_budget_pct: float | None = None) -> list[RouteOut]:
+        cfg = self.cfg
+        # Resolve the detour budget ONCE, here, so the value carried in every
+        # route's preference is the concrete one the search used — never null,
+        # even when the request omitted it (ADR-0004: the artifact is
+        # self-describing). compute_alternatives applies the same fallback.
+        budget = (float(cfg["alternatives"]["detour_budget_pct"])
+                  if detour_budget_pct is None else detour_budget_pct)
+        # The lambda a route's preference carries is the one its safety LEVEL
+        # maps to (ADR-0004: "the lambda it maps to"), not the sweep lambda that
+        # happened to survive dedup. After relabelling, a route labelled "safe"
+        # may have been produced by the balanced sweep run; the contract still
+        # reports lambda_safe, so label and lambda cannot drift apart.
+        alt = cfg["alternatives"]
+        lam_by_kind = {"fast": float(alt["lambda_fast"]),
+                       "balanced": float(alt["lambda_balanced"]),
+                       "safe": float(alt["lambda_safe"])}
+
+        plan = self._resolve(origin_lat, origin_lon, dest_lat, dest_lon, departure)
+
+        if plan.same_edge is not None:
+            res = plan.same_edge
+            return [self._describe("fast", res, plan.qc,
+                                   plan.o_by_edge[res.first_edge],
+                                   plan.d_by_edge[res.dest_edge],
+                                   lam=lam_by_kind["fast"], budget=budget,
+                                   departure=departure)]
+
+        alts = self._alternatives(plan.qc, plan.seeds, plan.dests, plan.h,
+                                  safety_enabled, detour_budget_pct)
         if not alts:
             raise RoutingError("no route found between these points")
-        routes = [self._describe(a.kind, a.result, qc,
-                                 o_by_edge[a.result.first_edge],
-                                 d_by_edge[a.result.dest_edge],
+        routes = [self._describe(a.kind, a.result, plan.qc,
+                                 plan.o_by_edge[a.result.first_edge],
+                                 plan.d_by_edge[a.result.dest_edge],
                                  lam=lam_by_kind[a.kind], budget=budget,
                                  departure=departure)
                   for a in alts]
         return _with_detour_pct(routes)
+
+    def reroute(self, origin_lat: float, origin_lon: float,
+                dest_lat: float, dest_lon: float,
+                *, level: str, lam: float, detour_budget_pct: float,
+                departure: datetime.datetime) -> RouteOut:
+        """Reroute v1 (ADR-0008): replan from the current position to the
+        original destination, recomputing ONLY the carried safety level. Returns
+        a single artifact so a nav consumer stays at its chosen level instead of
+        silently swapping onto whichever level happens to be fastest from the
+        new position (the failure ADR-0002's carried-preference rule prevents).
+
+        `level`, `lam` and `detour_budget_pct` come straight off the artifact's
+        carried preference; `departure` is the preference's departure basis, so
+        the reroute reproduces the same time-of-day conditions.
+        """
+        plan = self._resolve(origin_lat, origin_lon, dest_lat, dest_lon, departure)
+
+        if plan.same_edge is not None:
+            res = plan.same_edge
+            return self._describe(level, res, plan.qc,
+                                  plan.o_by_edge[res.first_edge],
+                                  plan.d_by_edge[res.dest_edge],
+                                  lam=lam, budget=detour_budget_pct,
+                                  departure=departure)
+
+        result = compute_single(
+            self.pack, plan.qc, self.topo, plan.seeds, plan.dests, plan.h,
+            self.cfg, level=level, lam=lam,
+            detour_budget_pct=detour_budget_pct,
+            run=lambda ac, hh, s, d: self._shortest_path(ac, hh, s, d))
+        if result is None:
+            raise RoutingError("no route found between these points")
+        # detour_pct is defined relative to the fastest route in a RESPONSE; a
+        # reroute returns one route, so it is the fastest by definition (0.0).
+        return self._describe(level, result, plan.qc,
+                              plan.o_by_edge[result.first_edge],
+                              plan.d_by_edge[result.dest_edge],
+                              lam=lam, budget=detour_budget_pct,
+                              departure=departure)
 
     def _alternatives(self, qc, seeds, dests, h, safety_enabled,
                       detour_budget_pct) -> list[Alternative]:
