@@ -22,7 +22,9 @@ const ARTIFACT = {
 
 function mockFetchOnce(status: number, body: unknown) {
   const json = vi.fn().mockResolvedValue(body);
-  const fetchMock = vi.fn().mockResolvedValue({ ok: status < 400, status, json });
+  const fetchMock = vi
+    .fn()
+    .mockResolvedValue({ ok: status < 400, status, json });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
