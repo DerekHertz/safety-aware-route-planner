@@ -14,7 +14,7 @@ import numpy as np
 from pyref import geometry as geo_out
 from pyref.alternatives import Alternative, compute_alternatives, compute_single
 from pyref.config import Config
-from pyref.costs import compute_costs, heuristic
+from pyref.costs import QueryCosts, compute_costs, heuristic
 from pyref.graph import GraphPack
 from pyref.metrics import compute_metrics
 from pyref.search import PathResult, shortest_path, topo_of
@@ -62,7 +62,7 @@ class RouteOut:
 class _Plan:
     """The snapped, time-resolved search inputs for one query — the shared
     output of Router._resolve, consumed by both route() and reroute()."""
-    qc: object
+    qc: QueryCosts
     o_by_edge: dict
     d_by_edge: dict
     seeds: list[tuple[int, float]]
