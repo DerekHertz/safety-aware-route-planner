@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { KIND_COLORS } from "./MapView";
+import { NavPhase } from "@/lib/navigation";
 import { ManeuverType, RouteAlternative, UnsafeType } from "@/lib/types";
 import { UnitSystem, formatDistance, formatDuration } from "@/lib/units";
 import { useSpeech } from "@/lib/useSpeech";
@@ -11,6 +12,10 @@ interface Props {
   route: RouteAlternative;
   progress: RouteProgressState | null;
   units: UnitSystem;
+  /** `arrived` swaps the live readout for a "you have arrived" panel. */
+  phase: NavPhase;
+  /** A reroute is in flight — show a "recalculating" status. */
+  rerouting: boolean;
   onExit: () => void;
 }
 
@@ -38,7 +43,14 @@ const ALERT_BANNER_MS = 6000;
 /** Replaces the route-selection panel while actively navigating: a
  *  persistent readout of remaining distance/time, rather than the static
  *  per-alternative summary `RouteCard` shows before a route is chosen. */
-export default function NavHud({ route, progress, units, onExit }: Props) {
+export default function NavHud({
+  route,
+  progress,
+  units,
+  phase,
+  rerouting,
+  onExit,
+}: Props) {
   const color = KIND_COLORS[route.kind];
   const remainingM = progress?.remainingM ?? route.distance_m;
   const remainingS = progress?.remainingS ?? route.eta_s;
@@ -114,6 +126,29 @@ export default function NavHud({ route, progress, units, onExit }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [announcedOffset]);
 
+  // Terminal arrival state — all hooks above have run, so an early return here
+  // is safe. Replaces the live readout with a done panel (ADR-0008: nav gains an
+  // arrival lifecycle it previously lacked).
+  if (phase === "arrived") {
+    return (
+      <div className="nav-hud" style={{ borderLeftColor: color }}>
+        <div className="nav-hud-top">
+          <div className="nav-hud-readout">
+            <span className="nav-hud-eta">You have arrived</span>
+          </div>
+          <button
+            type="button"
+            className="nav-hud-exit"
+            onClick={onExit}
+            aria-label="Finish navigation"
+          >
+            Done
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="nav-hud" style={{ borderLeftColor: color }}>
       <div
@@ -168,8 +203,12 @@ export default function NavHud({ route, progress, units, onExit }: Props) {
           Exit
         </button>
       </div>
-      {progress?.offRoute && (
-        <div className="nav-hud-status">Off route — recalculating…</div>
+      {rerouting ? (
+        <div className="nav-hud-status">Recalculating…</div>
+      ) : (
+        progress?.offRoute && (
+          <div className="nav-hud-status">Off route — recalculating…</div>
+        )
       )}
     </div>
   );
