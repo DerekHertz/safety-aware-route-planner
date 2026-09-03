@@ -138,7 +138,11 @@ export function useGeolocation(
       const loop = opts?.loop ?? false;
       let i = 0;
       const emit = () => {
-        const p = points[i];
+        // Clamp the index: on a single-point (or just-exhausted) track the
+        // end-of-track clear() below is a no-op on the first, synchronous emit
+        // — `timer` isn't assigned until after emit() returns — so the interval
+        // fires once more and would otherwise index past the end.
+        const p = points[Math.min(i, points.length - 1)];
         setState({
           position: { lat: p.lat, lon: p.lon },
           accuracy: p.accuracy ?? 5,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ARRIVAL_RADIUS_M, decideNavAction } from "./navigation";
+import { ARRIVAL_RADIUS_M, hasArrived, shouldReroute } from "./navigation";
 import { RouteProgressState } from "./useRouteProgress";
 
 // A toy progress reading: on-route, plenty of distance left. Individual tests
@@ -17,55 +17,41 @@ function progress(over: Partial<RouteProgressState> = {}): RouteProgressState {
   };
 }
 
-describe("decideNavAction", () => {
-  it("returns 'none' when there is no progress yet", () => {
-    expect(decideNavAction("navigating", null, false)).toBe("none");
+describe("hasArrived", () => {
+  it("is true within the arrival radius of the destination", () => {
+    expect(hasArrived(ARRIVAL_RADIUS_M - 1)).toBe(true);
   });
 
-  it("returns 'reroute' when navigating and off-route", () => {
+  it("is false at or beyond the arrival radius", () => {
+    expect(hasArrived(ARRIVAL_RADIUS_M)).toBe(false);
+    expect(hasArrived(200)).toBe(false);
+  });
+});
+
+describe("shouldReroute", () => {
+  it("reroutes when navigating and off-route with none in flight", () => {
     expect(
-      decideNavAction("navigating", progress({ offRoute: true }), false),
-    ).toBe("reroute");
+      shouldReroute("navigating", progress({ offRoute: true }), false),
+    ).toBe(true);
   });
 
-  it("returns 'none' off-route while a reroute is already in flight", () => {
+  it("does not reroute while a reroute is already in flight", () => {
     expect(
-      decideNavAction("navigating", progress({ offRoute: true }), true),
-    ).toBe("none");
+      shouldReroute("navigating", progress({ offRoute: true }), true),
+    ).toBe(false);
   });
 
-  it("returns 'arrive' within the arrival radius", () => {
-    expect(
-      decideNavAction(
-        "navigating",
-        progress({ remainingM: ARRIVAL_RADIUS_M - 1 }),
-        false,
-      ),
-    ).toBe("arrive");
+  it("does not reroute once arrived, even if off-route", () => {
+    expect(shouldReroute("arrived", progress({ offRoute: true }), false)).toBe(
+      false,
+    );
   });
 
-  it("prefers arrival over reroute when both would apply", () => {
-    // Off-route AND within the arrival radius: don't replan onto the doorstep.
-    expect(
-      decideNavAction(
-        "navigating",
-        progress({ offRoute: true, remainingM: ARRIVAL_RADIUS_M - 1 }),
-        false,
-      ),
-    ).toBe("arrive");
+  it("does not reroute while on-route", () => {
+    expect(shouldReroute("navigating", progress(), false)).toBe(false);
   });
 
-  it("takes no action once already arrived, even if off-route", () => {
-    expect(
-      decideNavAction(
-        "arrived",
-        progress({ offRoute: true, remainingM: ARRIVAL_RADIUS_M - 1 }),
-        false,
-      ),
-    ).toBe("none");
-  });
-
-  it("keeps following (no action) when on-route with distance remaining", () => {
-    expect(decideNavAction("navigating", progress(), false)).toBe("none");
+  it("does not reroute when there is no progress yet", () => {
+    expect(shouldReroute("navigating", null, false)).toBe(false);
   });
 });

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   Maneuver,
   alertsAhead,
+  endpointDistances,
   nextManeuver,
   projectOnRoute,
   projectUnsafePoints,
@@ -39,6 +40,44 @@ describe("projectOnRoute", () => {
     const pos = { lon: LON + offsetLon, lat: midLat };
     const result = projectOnRoute(ROUTE, pos);
     expect(result.offRouteM).toBeCloseTo(50, -1);
+  });
+});
+
+describe("endpointDistances", () => {
+  it("is ~0 to the start vertex when the position sits on it", () => {
+    const pos = { lon: ROUTE[0][0], lat: ROUTE[0][1] };
+    const { startM, endM } = endpointDistances(ROUTE, pos);
+    expect(startM).toBeCloseTo(0, 0);
+    expect(endM).toBeCloseTo((POINT_COUNT - 1) * METERS_PER_STEP, -1);
+  });
+
+  it("is ~0 to the end vertex when the position sits on it", () => {
+    const last = ROUTE[ROUTE.length - 1];
+    const { startM, endM } = endpointDistances(ROUTE, {
+      lon: last[0],
+      lat: last[1],
+    });
+    expect(endM).toBeCloseTo(0, 0);
+    expect(startM).toBeCloseTo((POINT_COUNT - 1) * METERS_PER_STEP, -1);
+  });
+
+  it("reports BOTH endpoints as far when the position is off-route near the middle — the regression the off-route grace needs", () => {
+    // 50m east of the midpoint: a nearest-point projection would clamp the
+    // along-route offset toward an endpoint, but the straight-line distance to
+    // each actual endpoint stays hundreds of meters, so neither reads as "near".
+    const midLat = LAT_START + 4 * STEP_DEG;
+    const metersPerDegLon = 111_320 * Math.cos((midLat * Math.PI) / 180);
+    const pos = { lon: LON + 50 / metersPerDegLon, lat: midLat };
+    const { startM, endM } = endpointDistances(ROUTE, pos);
+    expect(startM).toBeGreaterThan(30);
+    expect(endM).toBeGreaterThan(30);
+  });
+
+  it("returns Infinity for an empty route", () => {
+    expect(endpointDistances([], { lon: 0, lat: 0 })).toEqual({
+      startM: Infinity,
+      endM: Infinity,
+    });
   });
 });
 

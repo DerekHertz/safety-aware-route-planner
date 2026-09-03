@@ -132,6 +132,12 @@ export default function Home() {
       origin,
       destination,
       navigating,
+      // The route actually being FOLLOWED and drawn while navigating — a
+      // reroute replaces it in place, so `routes` (the frozen planner set) goes
+      // stale mid-trip. Read this, not `routes`, to see the live geometry.
+      navRoute: nav.route,
+      navPhase: nav.phase,
+      rerouting: nav.rerouting,
       progress,
       geoPosition: geo.position,
       geoAccuracy: geo.accuracy,

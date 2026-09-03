@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import { fetchReroute } from "./api";
-import { ARRIVAL_RADIUS_M, NavPhase, decideNavAction } from "./navigation";
+import { NavPhase, hasArrived, shouldReroute } from "./navigation";
 import { LatLon, RouteAlternative } from "./types";
+import { distanceMeters } from "./useGeolocation";
 import { RouteProgressState, useRouteProgress } from "./useRouteProgress";
 
 export interface NavigationState {
@@ -33,10 +34,12 @@ const IDLE: NavigationState = {
  * swapped in place. Reaching the destination ends the session in the `arrived`
  * phase. The planner's own state (origin/selected/routes) is untouched.
  *
- * `phase` and `rerouting` are DERIVED from progress rather than stored, so the
- * reroute effect performs no synchronous setState (see the `set-state-in-effect`
- * ratchet in eslint.config.mjs): the only state it writes — the replacement
- * route and any error — happens inside the fetch's async callbacks.
+ * `rerouting` is DERIVED from progress rather than stored, so the reroute effect
+ * performs no synchronous setState (see the `set-state-in-effect` ratchet in
+ * eslint.config.mjs): the only state it writes — the replacement route and any
+ * error — happens inside the fetch's async callbacks. Arrival IS latched in
+ * state, but from a render-time adjustment (not an effect), so it stays sticky
+ * once reached without tripping the same rule.
  */
 export function useNavigation(
   initialRoute: RouteAlternative | null,
@@ -48,6 +51,9 @@ export function useNavigation(
     null,
   );
   const [rerouteError, setRerouteError] = useState<string | null>(null);
+  // Latched once the traveler reaches the destination; sticky so overshooting
+  // past it doesn't flip back to navigating.
+  const [arrived, setArrived] = useState(false);
   // Guards against firing a second reroute while one is in flight; a ref (not
   // state) so it neither re-renders nor needs a synchronous setState.
   const reroutingRef = useRef(false);
@@ -62,23 +68,28 @@ export function useNavigation(
     if (sessionRef.current === initialRoute) return;
     sessionRef.current = initialRoute;
     setFollowedRoute(initialRoute);
+    setArrived(false);
     reroutingRef.current = false;
     setRerouteError(null);
   }, [initialRoute]);
 
   const progress = useRouteProgress(followedRoute, position, accuracy);
 
-  // Arrival is a pure function of remaining distance, so derive it rather than
-  // storing a phase. Sticky in practice: `remaining()` clamps remaining
-  // distance so it only shrinks as the traveler advances.
-  const phase: NavPhase =
-    progress && progress.remainingM < ARRIVAL_RADIUS_M
-      ? "arrived"
-      : "navigating";
+  // Arrival = within ARRIVAL_RADIUS_M of the destination by great-circle
+  // distance, latched (render-time adjustment, not an effect — the pattern the
+  // React docs sanction and the `set-state-in-effect` rule allows). Great-circle
+  // distance rather than `progress.remainingM`, whose clamped projection can
+  // read 0 while hundreds of meters off-route near the end.
+  const distToDestM =
+    followedRoute && position && destination
+      ? distanceMeters(position, destination)
+      : Infinity;
+  if (!arrived && hasArrived(distToDestM)) setArrived(true);
+  const phase: NavPhase = arrived ? "arrived" : "navigating";
 
   useEffect(() => {
     if (!followedRoute || !position || !destination) return;
-    if (decideNavAction(phase, progress, reroutingRef.current) !== "reroute") {
+    if (!shouldReroute(phase, progress, reroutingRef.current)) {
       return;
     }
     reroutingRef.current = true;

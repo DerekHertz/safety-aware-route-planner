@@ -435,9 +435,12 @@ export default function MapView({
       center: [flyTo.lon, flyTo.lat],
       zoom: Math.max(map.getZoom(), 14),
       duration: 800,
-      // Same reason as fitBounds: without the inset the puck can land under
-      // the sheet, so "locate me" appears to do nothing.
-      padding: typeof fitPadding === "number" ? undefined : fitPadding,
+      // Same reason as fitBounds: without the inset (mobile bottom sheet) the
+      // puck can land under the sheet, so "locate me" appears to do nothing.
+      // Only pass padding when there's an actual inset object — MapLibre reads
+      // `.top` off the value whenever the key is PRESENT, so an explicit
+      // `padding: undefined` (the desktop case) throws. Omit the key instead.
+      ...(typeof fitPadding === "number" ? {} : { padding: fitPadding }),
     });
   }, [flyTo, fitPadding]);
 

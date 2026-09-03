@@ -15,6 +15,14 @@ core/build/
 .env.*
 !.env.example
 
+# Stray npm lockfile: npm writes an empty stub here if `npm install` runs from
+# the repo root instead of web/. It makes Next infer the wrong Turbopack
+# workspace root (pinned in web/next.config.ts) — never commit it.
+/package-lock.json
+# Belt-and-suspenders for the Windows-path junk dirs a mixed Windows/WSL launch
+# can leave under web/ (a colon can't appear in a real path component here).
+web/*:*
+
 # Per-machine Claude Code permission allowlist. It accumulates absolute
 # scratchpad paths (C:\Users\<you>\AppData\Local\Temp\...) and session UUIDs,
 # which are noise at best and a small personal-info leak at worst.

@@ -92,6 +92,28 @@ export function projectOnRoute(
   };
 }
 
+/**
+ * Straight-line distance, in meters, from a raw position to the route's first
+ * and last vertices. Used to decide endpoint proximity for the off-route
+ * grace: unlike the projected `offsetM`, this cannot be fooled by a
+ * nearest-point projection that clamps toward an endpoint when the traveler is
+ * far off-route — which would otherwise suppress off-route detection at exactly
+ * the moment it should fire.
+ */
+export function endpointDistances(
+  coordinates: [number, number][],
+  pos: { lon: number; lat: number },
+): { startM: number; endM: number } {
+  if (coordinates.length === 0) {
+    return { startM: Infinity, endM: Infinity };
+  }
+  const p: [number, number] = [pos.lon, pos.lat];
+  return {
+    startM: haversineM(coordinates[0], p),
+    endM: haversineM(coordinates[coordinates.length - 1], p),
+  };
+}
+
 export interface RemainingEstimate {
   remainingM: number;
   remainingS: number;
