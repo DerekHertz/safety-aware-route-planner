@@ -19,6 +19,11 @@ Then open http://localhost:3000.
 `http://localhost:8000`. See `.env.example`; note it is inlined at build time,
 so changing it needs a rebuild rather than a restart.
 
+Experimental live turn-by-turn navigation is gated behind
+`NEXT_PUBLIC_ENABLE_LIVE_NAV=1` (also build-time inlined). The repository root
+README, under _Trying live navigation on a desktop_, covers the flag and the
+dev-only `window.__srMockGeo` GPS simulator used to exercise it without a phone.
+
 ## Scripts
 
 | Script                            | What it does                                          |
@@ -65,6 +70,8 @@ sync with the installed `maplibre-gl`.
 | `lib/types.ts`                              | Mirror of `api/schemas.py` — keep the two in sync      |
 | `lib/api.ts`                                | Every backend call                                     |
 | `lib/useGeolocation.ts`                     | GPS watch; needs a secure context (https or localhost) |
+| `lib/useNavigation.ts`                      | Live-nav session: same-level reroute + arrival         |
+| `lib/navigation.ts`                         | Pure reroute/arrival decision (unit-tested)            |
 | `lib/units.ts`                              | Imperial/metric display conversion                     |
 
 Tiles come from [OpenFreeMap](https://openfreemap.org/) (no API key). Map data
