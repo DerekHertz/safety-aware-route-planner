@@ -55,7 +55,10 @@ After the milestone: nav gets un-parked and rebuilt as a clean consumer
 - **Parity core.** `pyref/` (reference) and `sr_core` (C++, optional) are held
   bitwise-identical; `sr_core` is absent locally (tests fall back to pyref).
 - **Green bar before a PR:** `.venv/bin/python -m pytest -q`, `.venv/bin/ruff
-  check .`, and (for web changes) `npx tsc --noEmit` + `npx eslint` in `web/`.
+  check .`, and (for web changes) `npx tsc --noEmit`, `npx eslint`, **and
+  `npm run format:check`** in `web/`. Prettier is not optional — the `web` CI
+  job runs `format:check` and fails the build on a style diff (this bit PR #35).
+  Run `npm run format` to auto-fix before committing.
 
 ## Refreshing this handoff
 
