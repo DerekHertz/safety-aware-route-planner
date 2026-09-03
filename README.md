@@ -325,9 +325,55 @@ can tell whether a GPS fix falls inside the routable region. `bbox` is
   rendering steps, which a non-compositing page never runs) keep the canvas
   matched to its container, and map errors surface in a banner instead of
   failing silently.
+- **Live navigation (experimental, off by default).** With
+  `NEXT_PUBLIC_ENABLE_LIVE_NAV=1`, a **Start navigating** button appears once a
+  route is selected against a live GPS origin. It swaps the planner for a
+  turn-by-turn HUD (next maneuver, distance/ETA remaining, optional spoken
+  instructions, and upcoming-hazard banners). Leaving the route triggers a
+  **reroute at the same safety level** (`POST /reroute` carries the route's
+  `preference`, so a reroute can never silently drop you from *fast* onto
+  *safe*), the new route replaces the old one in place, and reaching the
+  destination ends the trip with a **You have arrived** panel. Without the flag
+  the whole mode is unreachable — the planner behaves exactly as before.
 
 See [docs/map-provider-tradeoffs.md](docs/map-provider-tradeoffs.md) for the
 MapLibre vs Google Maps Platform evaluation.
+
+### Trying live navigation on a desktop
+
+Real turn-by-turn can't be exercised by walking around at a desk, so a
+dev-only mock GPS driver feeds a scripted track. Start the web server with the
+flag on (from the repository root):
+
+```bash
+NEXT_PUBLIC_ENABLE_LIVE_NAV=1 npm --prefix web run dev
+```
+
+Then, in the browser console at http://localhost:3000:
+
+```js
+// 1. Drop a live fix inside the Berkeley/North Oakland pack so the origin
+//    goes "live" (⌖ button lights up). Click the map to set a destination;
+//    routes appear and the Start navigating button shows.
+__srMockGeo.start([{ lat: 37.8715, lon: -122.2680 }]);
+
+// 2. Click Start navigating, then play a track that follows the route and
+//    then veers off it to see the reroute. One fix per second:
+__srMockGeo.start(
+  [
+    { lat: 37.8715, lon: -122.268 },
+    { lat: 37.8700, lon: -122.266 },
+    { lat: 37.8690, lon: -122.262 }, // <- off-route: HUD shows "Recalculating…"
+  ],
+  { intervalMs: 1000 },
+);
+
+__srMockGeo.stop(); // halt the track
+```
+
+`window.__srDebug` exposes the live routes/selection/progress for inspection.
+Both handles are stripped from production builds. For a real GPS test on a
+phone you need HTTPS — see *On a phone, via a tunnel* above.
 
 ## Intersection control: observed vs inferred
 
@@ -400,7 +446,9 @@ intersection was classified and why.
 
 ## Non-goals (scope guard)
 
-No live traffic, no voice nav, no accounts, no ML scoring; OSM turn-restriction
-relations are an optional future hard-constraint module. Mobile is future
+No live traffic, no accounts, no ML scoring; OSM turn-restriction relations are
+an optional future hard-constraint module. Live turn-by-turn navigation (with
+spoken instructions) exists but is **experimental and off by default** behind
+`NEXT_PUBLIC_ENABLE_LIVE_NAV` — see *Live navigation* above. Mobile is future
 scope — the API contract is framework-agnostic for a React Native/Expo or PWA
 client.

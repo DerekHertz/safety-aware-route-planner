@@ -34,10 +34,15 @@ import {
   SHEET_PEEK_PX,
   useMediaQuery,
 } from "@/lib/useMediaQuery";
-import { useRouteProgress } from "@/lib/useRouteProgress";
+import { useNavigation } from "@/lib/useNavigation";
 
 // MapLibre touches `window` at import time — client-only bundle
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
+
+// Live turn-by-turn is quarantined behind an opt-in flag (ADR-0008): the whole
+// navigation mode is unreachable unless NEXT_PUBLIC_ENABLE_LIVE_NAV is set. Read
+// at module scope — NEXT_PUBLIC_* is inlined at build time.
+const LIVE_NAV_ENABLED = process.env.NEXT_PUBLIC_ENABLE_LIVE_NAV === "1";
 
 /** Re-route only after the tracked position moves this far, so GPS jitter
  *  doesn't hammer the router. */
@@ -91,11 +96,16 @@ export default function Home() {
     () => routes.find((r) => r.kind === selected) ?? null,
     [routes, selected],
   );
-  const progress = useRouteProgress(
+  // The nav session owns the followed route, its progress, reroute + arrival
+  // lifecycle. Seeded with the chosen alternative when navigation starts; the
+  // planner's own state (origin/routes/selected) stays frozen for the session.
+  const nav = useNavigation(
     navigating ? activeRoute : null,
+    destination,
     geo.position,
     geo.accuracy,
   );
+  const progress = nav.progress;
 
   // Keep routes clear of the sheet when fitting the viewport. Held constant
   // rather than tracking the expanded height: MapLibre cannot honour padding
@@ -122,6 +132,12 @@ export default function Home() {
       origin,
       destination,
       navigating,
+      // The route actually being FOLLOWED and drawn while navigating — a
+      // reroute replaces it in place, so `routes` (the frozen planner set) goes
+      // stale mid-trip. Read this, not `routes`, to see the live geometry.
+      navRoute: nav.route,
+      navPhase: nav.phase,
+      rerouting: nav.rerouting,
       progress,
       geoPosition: geo.position,
       geoAccuracy: geo.accuracy,
@@ -153,6 +169,12 @@ export default function Home() {
   // request 422. Fall back to the default view with an explanation instead.
   useEffect(() => {
     if (!geo.position || !followMode) return;
+    // While navigating, the planner is frozen: the nav session owns the
+    // followed route and reroutes via useNavigation, so `origin` must not move
+    // (moving it here is exactly the overloading that caused the silent
+    // safety-level swap — ADR-0008). The live puck still tracks GPS via
+    // `followTarget`/`originMarkerPosition`, which read geo.position directly.
+    if (navigating) return;
     // Wait for the coverage bbox before acting on a fix. Without this, a GPS
     // fix that arrives before /meta resolves skips the range check entirely
     // and we adopt (and fly to) an out-of-coverage location, only to show the
@@ -168,15 +190,8 @@ export default function Home() {
     setCoverageNote(null);
     const next = geo.position;
     setOrigin((prev) => {
-      if (navigating && activeRoute) {
-        // Navigating: `origin` (and therefore the reroute request) only
-        // moves once useRouteProgress's hysteresis says we've actually left
-        // the route — not on every fix while still on it. The puck itself
-        // still tracks the raw fix continuously; see `originMarkerPosition`.
-        return progress?.offRoute ? next : (prev ?? next);
-      }
-      // Not navigating: ignore sub-threshold jitter so we don't re-route
-      // constantly while just planning.
+      // Ignore sub-threshold jitter so we don't re-route constantly while
+      // just planning.
       if (prev && distanceMeters(prev, next) < REROUTE_MIN_MOVE_M) return prev;
       return next;
     });
@@ -185,15 +200,7 @@ export default function Home() {
       seededRef.current = true;
       setFlyTo(next);
     }
-  }, [
-    geo.position,
-    followMode,
-    meta,
-    metaSettled,
-    navigating,
-    activeRoute,
-    progress,
-  ]);
+  }, [geo.position, followMode, meta, metaSettled, navigating]);
 
   useEffect(() => {
     if (geo.error) setCoverageNote(geo.error);
@@ -300,6 +307,7 @@ export default function Home() {
   const recenter = () => setCameraFollow(true);
 
   const startNavigating = () => {
+    if (!LIVE_NAV_ENABLED) return;
     setCameraFollow(true);
     setNavigating(true);
   };
@@ -313,9 +321,10 @@ export default function Home() {
   // is down, so it should say what the app is currently doing rather than
   // "Show panel".
   const routeSummary = useMemo(() => {
-    if (navigating && activeRoute) {
-      const remainingS = progress?.remainingS ?? activeRoute.eta_s;
-      const remainingM = progress?.remainingM ?? activeRoute.distance_m;
+    if (navigating && nav.route) {
+      if (nav.phase === "arrived") return "You have arrived";
+      const remainingS = progress?.remainingS ?? nav.route.eta_s;
+      const remainingM = progress?.remainingM ?? nav.route.distance_m;
       return `${formatDuration(remainingS)} · ${formatDistance(remainingM, units)} remaining`;
     }
     if (loading) return "Routing…";
@@ -333,7 +342,8 @@ export default function Home() {
     }`;
   }, [
     navigating,
-    activeRoute,
+    nav.route,
+    nav.phase,
     progress,
     loading,
     error,
@@ -343,6 +353,12 @@ export default function Home() {
     destination,
     units,
   ]);
+
+  // While navigating, the map draws the FOLLOWED route (which a reroute
+  // replaces in place) rather than the planner's alternatives, so the line on
+  // screen always matches what the HUD is guiding along.
+  const mapRoutes = navigating && nav.route ? [nav.route] : routes;
+  const mapSelected = navigating && nav.route ? nav.route.kind : selected;
 
   return (
     <main className="layout">
@@ -371,11 +387,13 @@ export default function Home() {
           {sheetOpen ? "Hide panel" : routeSummary}
         </button>
         <h1>Safety-Aware Routes</h1>
-        {navigating && activeRoute ? (
+        {navigating && nav.route ? (
           <NavHud
-            route={activeRoute}
+            route={nav.route}
             progress={progress}
             units={units}
+            phase={nav.phase}
+            rerouting={nav.rerouting}
             onExit={exitNavigating}
           />
         ) : (
@@ -483,7 +501,7 @@ export default function Home() {
               <button type="button" className="reset" onClick={reset}>
                 Reset
               </button>
-              {activeRoute && originIsLive && (
+              {LIVE_NAV_ENABLED && activeRoute && originIsLive && (
                 <button
                   type="button"
                   className="start-nav"
@@ -524,8 +542,8 @@ export default function Home() {
       </aside>
       <div className="map-wrap">
         <MapView
-          routes={routes}
-          selected={selected}
+          routes={mapRoutes}
+          selected={mapSelected}
           onSelect={setSelected}
           origin={origin}
           destination={destination}

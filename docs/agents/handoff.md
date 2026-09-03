@@ -25,24 +25,29 @@ Robust-core milestone status (ADR-0008), plus the reroute line built on it:
       enforced by the `schema-sync` workflow.
 - [x] **Reroute v1** — `POST /reroute`, replan one carried level (ADR-0008). PR #33.
       _Backend + the type-mirror only._
-- [~] **Web consumes `/reroute`** — the **client half has landed**: `fetchReroute`
-      in `web/lib/api.ts` (tested in `web/lib/api.test.ts`) POSTs the carried
-      `preference` and returns the single same-level artifact. It is **not yet
-      called by the UI** — the fake reroute in `web/app/page.tsx` (re-calls
-      `POST /route` from the new origin and reselects, the silent safety-level
-      swap ADR-0008 describes) is still in place. Wiring `fetchReroute` in **is**
-      the nav rebuild below. Do NOT bolt it onto the parked nav.
-- [ ] **Remove `page.tsx` nav-state overloading; quarantine live nav behind a
-      flag** (robust-core milestone item 3, ADR-0008). Largest remaining TS
-      feature — **DEFERRED pending more usage/context.** When resumed: on
-      `offRoute` while navigating, call `fetchReroute(activeRoute.preference)`
-      and **replace the active route in place** (no reselection → same level by
-      construction); stop overloading `origin`/`selected`/`followMode` so the
-      planner and navigator don't share mutable state; add an arrival lifecycle.
+- [x] **Web consumes `/reroute`** — `fetchReroute` (`web/lib/api.ts`) is now
+      called by the nav rebuild below, not just present. The fake reroute
+      (re-`POST /route` + reselect) is gone.
+- [x] **Remove `page.tsx` nav-state overloading; quarantine live nav behind a
+      flag** (robust-core milestone item 3, ADR-0008). Done: a new
+      `web/lib/useNavigation.ts` hook owns the live-nav session — on `offRoute`
+      it calls `fetchReroute` with the followed route's `preference` and
+      **replaces that route in place** (single same-level artifact → no silent
+      swap by construction). The planner's `origin`/`routes`/`selected` are
+      frozen for the session (the GPS→origin effect early-returns while
+      navigating), and an **arrival lifecycle** was added (a `You have arrived`
+      phase). Nav mode is gated behind `NEXT_PUBLIC_ENABLE_LIVE_NAV=1` — absent
+      the flag, the "Start navigating" button never renders. Reroute/arrival
+      decisions live in the pure, unit-tested `web/lib/navigation.ts`
+      (`decideNavAction`); the hook is thin glue.
 - [x] **Safety scenario suite green** (milestone item 4) — already passing.
 
-After the milestone: nav gets un-parked and rebuilt as a clean consumer
-(ADR-0002), at which point the silent-swap bug is gone by construction.
+The robust-core milestone (ADR-0008) is now **complete**: nav has been rebuilt as
+a clean `/reroute` consumer (ADR-0002), so the silent-swap bug is gone by
+construction. Next candidates for the "un-park nav for real" line: promote it from
+the `NEXT_PUBLIC_ENABLE_LIVE_NAV` flag to on-by-default once field-tested; a
+rejoin-the-original-route nicety (deliberately out of reroute v1, ADR-0008); and
+richer arrival UX. Open an ADR/issue before picking one up.
 
 ## Working conventions for this repo
 

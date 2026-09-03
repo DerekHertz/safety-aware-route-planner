@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ProjectedUnsafePoint,
   alertsAhead,
+  endpointDistances,
   nextManeuver,
   projectOnRoute,
   projectUnsafePoints,
@@ -95,8 +96,16 @@ export function useRouteProgress(
     );
 
     const noisy = accuracy != null && accuracy > MAX_ACCURACY_M;
-    const nearEndpoint =
-      offsetM < ENDPOINT_GRACE_M || remainingM < ENDPOINT_GRACE_M;
+    // Endpoint proximity must be measured as straight-line distance to the
+    // actual start/end coordinates, NOT via `offsetM`/`remainingM`: once the
+    // traveler is well off-route the nearest-point projection clamps toward an
+    // endpoint, collapsing `offsetM` and making `nearEndpoint` true at exactly
+    // the moment off-route detection needs to fire.
+    const { startM, endM } = endpointDistances(
+      route.geometry.coordinates,
+      position,
+    );
+    const nearEndpoint = startM < ENDPOINT_GRACE_M || endM < ENDPOINT_GRACE_M;
     const withinStartGrace = Date.now() - startTsRef.current < START_GRACE_MS;
     const suppressed = noisy || nearEndpoint || withinStartGrace;
 
