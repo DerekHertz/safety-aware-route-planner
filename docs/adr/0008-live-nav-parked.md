@@ -1,3 +1,7 @@
+---
+Status: resolved 2026-09-17
+---
+
 # Live navigation is parked until the core is robust; rebuild it as a clean consumer
 
 The "Add real-time GPS turn-by-turn navigation" work (commit 4ab2679) is **parked behind
@@ -32,3 +36,22 @@ core is robust, at which point the silent-swap bug disappears by construction.
 Replan from the current position to the original destination, using the carried
 `preference`, recomputing **only that one safety level** — not the full fast/balanced/safe
 set. Trying to rejoin the original route is a future nav nicety, deliberately out of v1.
+
+## Resolution, 2026-09-17
+
+**The robust-core milestone above is complete** and live nav has been rebuilt as a clean
+`/reroute` consumer, so the silent-swap failure is gone by construction. This ADR is
+resolved; the flag comes off.
+
+Promotion is gated on **one explicit criterion**, not on elapsed time:
+
+1. **Screen Wake Lock is implemented** (`navigator.wakeLock.request("screen")` plus
+   reacquisition on `visibilitychange`). Shipping mounted navigation that lets the screen
+   sleep mid-route is worse than not shipping it: on iOS a backgrounded PWA suspends,
+   killing `watchPosition` and speech together. See ADR-0012.
+2. **One real field drive** with wake lock in place. This cannot be learned from a desktop
+   and the `__srMockGeo` driver, which is what the flag was protecting against.
+
+Once both hold, `NEXT_PUBLIC_ENABLE_LIVE_NAV` is removed and nav is on by default.
+
+The **rejoin-the-original-route** nicety stays out of scope, as reroute v1 records above.
