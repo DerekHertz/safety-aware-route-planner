@@ -18,36 +18,67 @@ them — follow the links.
 
 ## Now / Next (update on every merge)
 
-Robust-core milestone status (ADR-0008), plus the reroute line built on it:
+The robust-core milestone (ADR-0008) is **complete**; that ADR is resolved. The current
+spine is the **scalability + commute-planner** sequence below, decided 2026-09-17 and
+recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-0009.
 
-- [x] **Route-artifact v1** — `preference` + `schema_version` (ADR-0004). PR #32.
-- [x] **Contract schema-versioned + contract-tested.** `tests/test_route_artifact_v1.py`,
-      enforced by the `schema-sync` workflow.
-- [x] **Reroute v1** — `POST /reroute`, replan one carried level (ADR-0008). PR #33.
-      _Backend + the type-mirror only._
-- [x] **Web consumes `/reroute`** — `fetchReroute` (`web/lib/api.ts`) is now
-      called by the nav rebuild below, not just present. The fake reroute
-      (re-`POST /route` + reselect) is gone.
-- [x] **Remove `page.tsx` nav-state overloading; quarantine live nav behind a
-      flag** (robust-core milestone item 3, ADR-0008). Done: a new
-      `web/lib/useNavigation.ts` hook owns the live-nav session — on `offRoute`
-      it calls `fetchReroute` with the followed route's `preference` and
-      **replaces that route in place** (single same-level artifact → no silent
-      swap by construction). The planner's `origin`/`routes`/`selected` are
-      frozen for the session (the GPS→origin effect early-returns while
-      navigating), and an **arrival lifecycle** was added (a `You have arrived`
-      phase). Nav mode is gated behind `NEXT_PUBLIC_ENABLE_LIVE_NAV=1` — absent
-      the flag, the "Start navigating" button never renders. Reroute/arrival
-      decisions live in the pure, unit-tested `web/lib/navigation.ts`
-      (`decideNavAction`); the hook is thin glue.
-- [x] **Safety scenario suite green** (milestone item 4) — already passing.
+**Phase 0 - record the decisions.** _(this PR)_
 
-The robust-core milestone (ADR-0008) is now **complete**: nav has been rebuilt as
-a clean `/reroute` consumer (ADR-0002), so the silent-swap bug is gone by
-construction. Next candidates for the "un-park nav for real" line: promote it from
-the `NEXT_PUBLIC_ENABLE_LIVE_NAV` flag to on-by-default once field-tested; a
-rejoin-the-original-route nicety (deliberately out of reroute v1, ADR-0008); and
-richer arrival UX. Open an ADR/issue before picking one up.
+- [x] ADR-0010 real traffic deferred, ADR-0011 commute planner, ADR-0012 PWA client.
+- [x] Amend ADR-0005 (`busy_floor_by_class`), amend ADR-0009 (CH is not available, and the
+      real blocker is per-request full-graph cost), resolve ADR-0008.
+- [x] `CONTEXT.md` vocabulary: busy floor, traffic basis, commute planner, commute,
+      departure-time sweep, disruption.
+
+**Phase 1 - unblock scale.** Nothing else should start before (1).
+
+- [ ] **(1) Decouple geocoding from the process model.** Self-hosted Photon, or move the
+      limiter to Redis. Today `api/geocode.py` funnels every user through one global
+      ~1 req/s lock, which does not throttle at the edge -- it *serializes*, so N
+      concurrent typists wait N seconds. It is also why the README and Dockerfile mandate
+      a single process with no `--workers`, pinning a CPU-bound engine to one replica for
+      a text-search side feature. Delete those constraints as part of this. **First code
+      PR; everything about scale is downstream of it.**
+- [ ] **(2) Rate-limit `POST /route`.** Currently unauthenticated, no quota, 3-8 graph
+      searches per call, one process. Should not wait for users to exist.
+- [ ] **(3) Lazy per-turn cost evaluation.** `pyref/costs.py` materializes full-graph
+      arrays per request (and `arc_cost` again per lambda and per rerun). Evaluate over
+      the explored frontier instead. **`pyref` and `sr_core` must change together and stay
+      bitwise identical**, so this is one large PR, not two. See ADR-0009's amendment.
+
+**Phase 2 - cheap wins, parallel to Phase 1.**
+
+- [ ] Fast-vs-safe comparison UI. **Zero backend**: one `/route` response already carries
+      all three alternatives with `UnsafeCounts`, per-segment tiers and `detour_pct`.
+      Best effort-to-value ratio in the plan.
+- [ ] `busy_floor_by_class` + a scenario test pinning the 3am arterial (ADR-0005).
+- [ ] Screen Wake Lock, with `visibilitychange` reacquisition (ADR-0012).
+
+**Phase 3 - contract, then nav.**
+
+- [ ] `traffic_basis` in `preference`, `schema_version` -> 2. Do it **before** the commute
+      service exists: a contract change is cheapest while there is one consumer. Drags the
+      hand-mirrored `web/lib/types.ts` edit and a `check-schema-sync.mjs` `PAIRS` entry
+      into the same PR.
+- [ ] Promote live nav off `NEXT_PUBLIC_ENABLE_LIVE_NAV` (ADR-0008's resolution: wake lock
+      + one real field drive).
+
+**Phase 4 - multi-metro.** Pack-per-metro selection and routing. Gated on Phase 1(3).
+
+**Phase 5 - commute planner** (ADR-0011). Google Sign-In, accounts, saved commutes with
+user-set departure times, the **departure-time sweep** as the headline feature, a stubbed
+disruption-source interface, a daily brief, and predicted-vs-actual ETA logging.
+
+**Phase 6 - trigger-gated** (see ADR-0010's triggers). Free event feeds first (511.org,
+WZDx, PeMS pending its access terms), then a paid speed layer only if the Phase 5
+measurements justify it. Then Protomaps tile self-hosting, calendar-derived departure,
+live speed into the safety severity term, measured volume profiles.
+
+### Standing risk
+
+Phase 1(3) is a large PR that must hold Python/C++ parity. It is the only item on the
+plan's risk list; the OpenLR-conflation and traffic-procurement risks were removed by
+ADR-0010's deferral.
 
 ## Working conventions for this repo
 

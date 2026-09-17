@@ -29,6 +29,13 @@ time-dynamic component from simulated volume. A busy road never becomes safe at
 midnight — the floor holds.
 _Avoid_: major road, arterial (those are OSM classes, not the safety concept).
 
+**Busy floor**:
+The per-road-class **minimum** busy contribution that the time-dynamic volume term can
+raise but never lower. It is what stops a four-lane arterial from reading as benign at
+3am. Set low enough that a genuinely quiet street does de-rate overnight. A named config
+parameter on purpose (`busy_floor_by_class`), never an emergent property of weight tuning.
+_Avoid_: busy minimum, static threshold.
+
 **Unsafe action**:
 An instance of one of the committed maneuvers that clears the counting threshold on a
 route. Reported per route as an **unsafe-action count**, split by type. Distinct from a
@@ -66,6 +73,15 @@ route artifact so any consumer can reproduce or reroute it: the safety-level **l
 plus the resolved **reproducer params** (λ, detour budget, departure-time basis).
 _Avoid_: settings, options.
 
+**Traffic basis**:
+The recorded provenance of the traffic inputs a route was computed against: the source
+identifier plus a snapshot timestamp. Carried inside the `preference` alongside the other
+resolved reproducer params. It exists because an artifact is **half perishable** -- its
+`eta_s` and segment timings go stale while its unsafe counts and tiers stay reproducible
+-- and a consumer diffing two artifacts must be able to tell "traffic changed" from "these
+were computed against different data".
+_Avoid_: traffic source, snapshot (each names only half of it).
+
 **λ (lambda)**:
 The safety weight in the generalized cost `g = time + λ·penalty`. λ=0 is pure time;
 higher λ buys safety at a fixed exchange rate against time. An internal knob — users
@@ -102,6 +118,32 @@ A nav consumer re-invoking the route service mid-trip with the artifact's carrie
 `preference`, so the replacement stays at the same safety level. Never a fallback to a
 plain time-only route.
 _Avoid_: recalculate, refresh.
+
+**Commute planner**:
+The stateful consumer that persistently knows a user's saved **commutes** and tells them
+how to leave before they leave. It owns identity, storage and scheduling -- none of which
+the route service has -- and reaches the engine only through route artifacts.
+_Avoid_: commute service (that names the deployment, not the concept), traffic watcher.
+
+**Commute**:
+One saved origin/destination pair plus a habitual departure time, owned by the commute
+planner. The unit its scheduling and measurement are keyed on.
+_Avoid_: trip, route (a commute is the standing intent; a route is one answer to it).
+
+**Departure-time sweep**:
+The commute planner's headline output: the same origin/destination planned across a range
+of departure times, so a user can see what leaving earlier or later actually costs.
+Answers "when should I leave", which the deterministic traffic model can answer honestly.
+Distinct from a **disruption**, which answers "what just went wrong".
+_Avoid_: schedule, time sweep.
+
+**Disruption**:
+An event that materially changes a commute's route or arrival time -- the thing worth
+interrupting someone over. Detected by replanning and diffing against the baseline
+artifact, never by a separate traffic-monitoring system. Currently a **stub**: under
+deterministic traffic two replans of the same commute are byte-identical, so nothing can
+fire (ADR-0010).
+_Avoid_: incident (that is one possible source of a disruption, not the concept), delay.
 
 **Parity core**:
 The pairing of the pure-Python reference engine (`pyref/`) and the C++ engine
