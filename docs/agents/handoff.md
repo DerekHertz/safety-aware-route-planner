@@ -96,6 +96,25 @@ ADR-0010's deferral.
   job runs `format:check` and fails the build on a style diff (this bit PR #35).
   Run `npm run format` to auto-fix before committing.
 
+- **Build `sr_core` locally, or you are not running the parity suite.**
+  `tests/test_parity_cpp.py` opens with `pytest.importorskip("sr_core")`, so a
+  machine without the built extension reports a green bar having *skipped* the
+  thing that proves the Python and C++ cores agree. Measured on one fixed tree:
+  **167 passed / 6 skipped without it, 175 passed / 5 skipped with it** — the 8
+  skipped tests are the entire parity suite, i.e. the whole bitwise guarantee.
+  CI builds it (`pip install ./core`) and enforces it with `SR_CI_STRICT=1`; a
+  laptop does not. Before any change to
+  `pyref/` that the C++ core mirrors — Phase 1(3) above all — build it:
+
+  ```
+  pip wheel --no-deps -w /tmp/wheels ./core   # build isolation supplies pybind11
+  pip install /tmp/wheels/*.whl               # or unzip the wheel somewhere on PYTHONPATH
+  ```
+
+  Unpacking the wheel onto `PYTHONPATH` rather than installing it keeps the
+  extension out of the venv, which is useful when you want to run *both* engines
+  from one interpreter to compare them.
+
 ## Refreshing this handoff
 
 The mattpocock `/handoff` skill produces a *conversation* handoff to an OS temp
