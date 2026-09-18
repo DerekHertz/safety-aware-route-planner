@@ -41,10 +41,26 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
       PR; everything about scale is downstream of it.**
 - [x] **(2) Rate-limit `POST /route`.** Currently unauthenticated, no quota, 3-8 graph
       searches per call, one process. Should not wait for users to exist.
-- [ ] **(3) Lazy per-turn cost evaluation.** `pyref/costs.py` materializes full-graph
-      arrays per request (and `arc_cost` again per lambda and per rerun). Evaluate over
-      the explored frontier instead. **`pyref` and `sr_core` must change together and stay
-      bitwise identical**, so this is one large PR, not two. See ADR-0009's amendment.
+- [ ] **(3) Per-request `O(pack)` cost — RE-SCOPED 2026-09-18, do not build as written.**
+      Measured with `sr_core` built: `compute_costs` is **36% of a real request** (6.4 ms
+      of 17.7 ms) at 61,946 turns, so the bottleneck is real *now*, not at "one large
+      metro". But the fix named here is wrong: A-star settles ~49% of edges, so
+      lazy-over-frontier buys ~2x at metro scale, and it is the one approach that costs
+      bitwise parity (`heuristic` haversines, and MSVC vs glibc sin/cos differ in the
+      last ulp). See ADR-0009's 2026-09-18 amendment for the measurements.
+      **Do instead, in order:**
+  - [ ] (3a) **Pure-numpy hoist — `pyref` only, verified bitwise identical.** Lift the
+        pack-static half of `compute_costs` to load time, compute the heuristic over
+        nodes not edge heads, hoist the `edge_time_s` gather out of `arc_cost`. Removes
+        ~60-70% of the per-request `O(pack)` cost. `sr_core` does not move, so this is
+        not the forbidden split. Land a golden-hash test on the cost arrays **first**.
+  - [ ] (3b) *Only if a pack ever exceeds ~5x a metro:* make the precompute **regional,
+        not lazy** — fill a sub-region of the same full-size array, `+inf` elsewhere.
+        Parity untouched, because both engines still receive one finished numpy array.
+  - [ ] (3c) The genuine lockstep PR: reusable scratch buffers for `dist`/`pred`
+        (`pyref/search.py`) and `dist`/`pred`/`dest_adjust` (`core/src/engine.cpp`),
+        which both allocate `O(E)` per search, 4-6 times a request. Arithmetic-neutral,
+        so the parity suite is a complete check.
 
 **Phase 2 - cheap wins, parallel to Phase 1.**
 
@@ -63,7 +79,9 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
 - [ ] Promote live nav off `NEXT_PUBLIC_ENABLE_LIVE_NAV` (ADR-0008's resolution: wake lock
       + one real field drive).
 
-**Phase 4 - multi-metro.** Pack-per-metro selection and routing. Gated on Phase 1(3).
+**Phase 4 - multi-metro.** Pack-per-metro selection and routing. **No longer gated on
+Phase 1(3)** — that gate was backwards: pack-per-metro keeps each pack metro-sized, so it
+needs a pack registry and a memory budget for N resident packs, not lazy costs.
 
 **Phase 5 - commute planner** (ADR-0011). Google Sign-In, accounts, saved commutes with
 user-set departure times, the **departure-time sweep** as the headline feature, a stubbed
@@ -76,9 +94,12 @@ live speed into the safety severity term, measured volume profiles.
 
 ### Standing risk
 
-Phase 1(3) is a large PR that must hold Python/C++ parity. It is the only item on the
-plan's risk list; the OpenLR-conflation and traffic-procurement risks were removed by
-ADR-0010's deferral.
+Phase 1(3) **as originally written** was the only item on this list. The 2026-09-18
+re-scoping removes most of that risk by keeping every floating-point operation in numpy:
+1(3a) is `pyref`-only and bitwise-verifiable against a golden hash, and 1(3c) is
+arithmetic-neutral so the parity suite is a complete check on it. Only 1(3b) is genuinely
+risky, and it is now conditional on a pack size nothing on this plan calls for. The
+OpenLR-conflation and traffic-procurement risks were removed by ADR-0010's deferral.
 
 ## Working conventions for this repo
 

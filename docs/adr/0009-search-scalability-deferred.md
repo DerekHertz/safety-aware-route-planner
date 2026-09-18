@@ -45,3 +45,74 @@ porting it into a foreign costing abstraction would mostly deliver parity with w
 already exists, at the cost of the Python/C++ parity suite that proves the model correct.
 Revisit if coverage commits to nationwide, or if production map-matching is needed (which
 the learned-habitual-route idea in ADR-0011 would require, and Valhalla ships Meili).
+
+## Amendment, 2026-09-18 — measured, and the item is mis-aimed
+
+The 2026-09-17 amendment named the right bottleneck and then mis-stated its size in
+both directions. Measured on `berkeley_oakland` (20,678 edges, 61,946 turns), WSL,
+with **`sr_core` built** — the correction that matters, because the previous numbers
+were evidently taken against the pure-Python engine:
+
+| | |
+|---|---|
+| `compute_costs` | 6.4 ms |
+| full `POST /route`, C++ engine, median | 17.7 ms |
+| **`compute_costs` as a share of one request** | **36%** |
+
+So *"At 61,946 turns that is trivial"* is **false for the configuration that ships**.
+It is trivial only next to pyref's ~18 ms-per-search, which production does not run.
+The bottleneck is real, and it is real now, at one metro.
+
+Three corrections to the same amendment:
+
+- **`arc_cost` being called 3-8 times per request is not a time cost.** It is 0.1 ms a
+  call, ~2% of the request. Its sin is allocation churn, not latency. Do not build a
+  plan around it.
+- **The explored frontier is not small.** A-star settles **31-71% of edges (mean ~49%)**
+  on random OD pairs, only modestly better than Dijkstra — the heuristic is
+  straight-line over pack-wide max free-flow speed with no safety term, so it goes
+  slack as soon as lambda > 0. Lazy-over-frontier therefore buys about **2x** at metro
+  scale, not the order of magnitude the framing implies.
+- **Both engines already allocate `O(E)` per search call** (`np.full` in
+  `pyref/search.py`; three `std::vector`s in `core/src/engine.cpp`), 4-6 times a
+  request. Any plan that makes costs regional and leaves this alone has solved half the
+  problem.
+
+### Laziness is the one lever that costs bitwise parity
+
+Parity is currently a *design consequence*: all FP happens once in numpy and both
+engines do identical trivial additions. Every lazy design breaks that. Evaluating costs
+in C++ duplicates the model across two compilers — and `heuristic` calls
+`haversine_m`, whose sin/cos/asin differ in the last ulp between MSVC and glibc, so
+parity dies outright and no compiler flag saves it. Having pyref call into `sr_core`
+deletes the pure-Python fallback *and* the parity suite's reference. Calling back into
+Python from C++ reacquires the GIL inside the relaxation loop, destroying the
+GIL-release that the Dockerfile's whole "one process saturates every core" story rests
+on.
+
+### What to do instead
+
+**A pure-numpy hoist, no engine change, no parity risk.** Everything in `compute_costs`
+except the volume term is a function of `(pack, cfg)` only; departure enters solely
+through a length-14 per-class gather. Hoisting the static half to load time, computing
+the heuristic over the 7,684 *nodes* rather than the 20,678 edge heads, and lifting the
+`edge_time_s` gather out of `arc_cost` were each verified **bitwise identical** on the
+real pack and remove roughly 60-70% of the per-request `O(pack)` cost. This is a
+`pyref`-only change, so it does not violate "one large PR" — that instruction is about
+`pyref` and `sr_core` moving *together*, and here `sr_core` does not move.
+
+**If a pack ever exceeds roughly 5x a metro**, the answer is to make the precompute
+*regional* rather than the engines *lazy*: fill a provably-sufficient sub-region of the
+same full-size array and leave the rest at `+inf`. Both engines still receive one
+finished array, so every FP op still happens once in numpy and parity is untouched;
+`g + inf` never relaxes, so no engine code changes to make it safe; and a route whose
+cost lands inside the region's bound is provably exact, with a doubling retry degrading
+to today's behaviour. The `_cross_count` one-hop halo is the subtle part.
+
+**Phase 4's dependency on this item is backwards.** Pack-per-metro selection keeps each
+pack metro-sized — it needs a pack registry and a memory budget for N resident packs,
+not lazy costs. The gate should be removed.
+
+**Unverified:** whether the region stays tight at lambda = 1.5, where the time-only
+heuristic badly under-estimates generalized cost. If it does not, the honest conclusion
+is that the **heuristic** is what to fix first, and this item never happens.
