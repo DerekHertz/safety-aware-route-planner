@@ -261,8 +261,8 @@ either call it by full path or add that directory to your user PATH.
 
 Nothing here is host-specific — it is a container that reads its configuration
 from the environment (`SR_CORS_ORIGINS`, `SR_CORS_ORIGIN_REGEX`,
-`SR_PACKS_URL`, `SR_NOMINATIM_CONTACT`, `SR_REDIS_URL`). Three constraints
-carry over to any host:
+`SR_PACKS_URL`, `SR_NOMINATIM_CONTACT`, `SR_REDIS_URL`,
+`SR_TRUSTED_PROXIES`). Four constraints carry over to any host:
 
 - **HTTPS is mandatory**, for the geolocation reason above.
 - **Scale out with replicas, not `--workers`.** A single process already uses
@@ -277,9 +277,23 @@ carry over to any host:
   replicas means N requests per second against a service whose policy allows
   one — so autoscaling without Redis still needs an explicit max of 1. Over
   budget, `GET /geocode` returns 429 with a `Retry-After`; if a configured
-  Redis is unreachable it returns 503 rather than serving (ADR-0013). Routing
-  never touches the limiter. `SR_RATE_LIMIT_KEY` separates deployments that
-  share one Redis instance.
+  Redis is unreachable it returns 503 rather than serving (ADR-0013).
+  `SR_RATE_LIMIT_KEY` separates deployments that share one Redis instance.
+- **Set `SR_TRUSTED_PROXIES` if anything sits in front of the container.**
+  `POST /route` and `POST /reroute` carry a per-client quota (30/min, burst 15
+  — far above anything the front-end can emit, see `config/config.toml`), and
+  with no auth yet the client is a network address. Behind a load balancer
+  every peer address is the balancer, so the quota silently becomes one bucket
+  for the whole deployment and any single caller can throttle everyone. The fix
+  is `X-Forwarded-For`, but that header is caller-supplied: it is only readable
+  if you know how many proxies appended to it. Set this to the true hop count
+  (1 for a balancer, 2 for CDN-then-balancer). It defaults to **0, meaning the
+  header is ignored entirely** — blunt on purpose, because the alternative
+  default lets anyone mint unlimited identities by varying a header. Over
+  quota, both endpoints return 429 with a `Retry-After`; if a configured Redis
+  is unreachable they **serve anyway**, which is deliberately the opposite of
+  the geocode answer above (that ceiling protects a third party's policy, this
+  one protects our own CPU — see the 2026-09-18 amendment to ADR-0013).
 
 ## API contract (frozen — a future mobile client reuses it)
 
@@ -306,6 +320,11 @@ to the original destination carrying a prior artifact's `preference`, and
 recomputes **only that one safety level** (ADR-0008) — so a nav consumer stays
 at its chosen level instead of silently swapping onto whichever level is fastest
 from the new position. Additive endpoint; the `/route` contract is unchanged.
+
+Both routing endpoints draw on **one per-client quota** (they spend the same
+resource — a graph search), and over it they return **429 with a `Retry-After`**
+and FastAPI's standard `{"detail": ...}` body. No response field was added; the
+frozen shape above is untouched.
 
 `GET /geocode?q=...` proxies Nominatim (rate-limited, identified UA, cached)
 bounded to the pack bbox. Set `SR_NOMINATIM_CONTACT` to override the

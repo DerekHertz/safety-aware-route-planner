@@ -14,13 +14,12 @@ going to read is cheaper for everyone. See ADR-0013.
 """
 from __future__ import annotations
 
-import math
 import os
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from api.ratelimit import LimiterUnavailable
+from api.ratelimit import LimiterUnavailable, retry_after_header
 from api.schemas import GeocodeResponse, GeocodeResult
 
 router = APIRouter()
@@ -31,12 +30,6 @@ router = APIRouter()
 # per replica is lower.
 _cache: dict[str, list[GeocodeResult]] = {}
 _CACHE_MAX = 512
-
-
-def _retry_after(seconds: float) -> str:
-    """RFC 9110 delta-seconds: an integer, and never 0 — a `Retry-After: 0`
-    invites an immediate retry that is guaranteed to be refused again."""
-    return str(max(1, math.ceil(seconds)))
 
 
 @router.get("/geocode", response_model=GeocodeResponse)
@@ -61,7 +54,7 @@ async def geocode(request: Request, q: str = Query(min_length=2, max_length=200)
     if retry_after is not None:
         raise HTTPException(
             429, "too many geocoding requests",
-            headers={"Retry-After": _retry_after(retry_after)})
+            headers={"Retry-After": retry_after_header(retry_after)})
 
     bbox = state.pack.meta.get("bbox")
     # Annotated because the mixed str/int values otherwise infer as

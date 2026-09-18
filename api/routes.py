@@ -3,8 +3,9 @@ from __future__ import annotations
 
 import datetime
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 
+from api.ratelimit import LimiterUnavailable, client_key, retry_after_header
 from api.schemas import (
     RerouteRequest,
     RerouteResponse,
@@ -14,6 +15,51 @@ from api.schemas import (
 from pyref.engine import RoutingError
 
 router = APIRouter()
+
+
+async def enforce_route_quota(request: Request) -> None:
+    """Spend one token from the caller's routing bucket, or refuse with 429.
+
+    A dependency rather than a line in each handler, and `async` rather than
+    `def`, because both handlers are sync: FastAPI runs an async dependency on
+    the event loop and only then hands the handler to the threadpool, so the
+    token is taken before a worker thread — and 3-8 graph searches — is
+    committed to. A refusal costs no search, which is the entire point.
+
+    Both endpoints share one bucket and are charged one token each. They spend
+    the same resource, so two ceilings would mean the real ceiling is their sum
+    and nobody would have written it down. A flat token does over-charge
+    `/reroute` (one search against `/route`'s 3-8) and that is absorbed by
+    sizing the quota for the union of both call patterns; see config.toml,
+    where the numbers are argued from the front-end's actual behaviour. Live
+    navigation is the case that must not break: the client self-limits reroutes
+    to roughly one per 18 s, which is two orders of magnitude inside the quota.
+
+    **This fails OPEN, and it is the opposite of `GET /geocode`'s answer on
+    purpose.** ADR-0013 fails closed because that ceiling enforces a third
+    party's usage policy and the penalty for breaching it is a ban on this
+    project's User-Agent — unrecoverable on our own timescale. This ceiling
+    protects nothing but our own CPU. Failing closed would convert a Redis
+    blip into a 503 on the product's core endpoint, on every replica at once,
+    which is the product being down; failing open converts the same blip into
+    unthrottled routing for its duration, which is a load spike that the
+    process survives and that a graph shows afterwards. Given a choice between
+    an outage and a load problem, take the load problem.
+    """
+    state = request.app.state.app_state
+    key = client_key(
+        request.client.host if request.client else None,
+        request.headers.get("x-forwarded-for"),
+        state.trusted_proxies,
+    )
+    try:
+        retry_after = await state.route_limiter.acquire(key)
+    except LimiterUnavailable:
+        return
+    if retry_after is not None:
+        raise HTTPException(
+            429, "too many routing requests",
+            headers={"Retry-After": retry_after_header(retry_after)})
 
 
 def _artifact(r) -> dict:
@@ -34,7 +80,8 @@ def _artifact(r) -> dict:
     }
 
 
-@router.post("/route", response_model=RouteResponse)
+@router.post("/route", response_model=RouteResponse,
+             dependencies=[Depends(enforce_route_quota)])
 def route(request: Request, body: RouteRequest) -> RouteResponse:
     # sync endpoint on purpose: FastAPI runs it in a worker thread, keeping
     # the event loop free while the (CPU-bound) search runs
@@ -57,7 +104,8 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
     return RouteResponse.model_validate({"routes": [_artifact(r) for r in routes]})
 
 
-@router.post("/reroute", response_model=RerouteResponse, response_model_by_alias=True)
+@router.post("/reroute", response_model=RerouteResponse, response_model_by_alias=True,
+             dependencies=[Depends(enforce_route_quota)])
 def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
     # sync on purpose, like /route: FastAPI runs it in a worker thread so the
     # CPU-bound search never blocks the event loop.

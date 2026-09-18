@@ -77,6 +77,12 @@ EXPOSE 8080
 # count — is now the supported way to add capacity. Without SR_REDIS_URL the
 # bucket is per-process, and one replica remains the limit.
 #
+# If you do put a load balancer in front, also set SR_TRUSTED_PROXIES to the
+# number of proxy hops. The routing quota on /route and /reroute keys clients
+# by network address, and behind an unconfigured proxy every address is the
+# proxy's — which collapses a per-client quota into one bucket that any single
+# caller can exhaust for everybody. See ADR-0013's 2026-09-18 amendment.
+#
 # `--workers N` stays wrong for the reason that was always the real one: the
 # C++ search releases the GIL (core/src/bindings.cpp) and api/routes.py is a
 # sync handler, so FastAPI runs it in a threadpool and a single process already

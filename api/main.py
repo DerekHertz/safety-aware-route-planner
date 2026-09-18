@@ -50,8 +50,11 @@ async def lifespan(app: FastAPI):
     print(f"[api] serving pack '{m.get('region')}' "
           f"({app.state.app_state.pack.num_edges:,} directed edges)")
     yield
-    # Hands back the Redis connection pool; a no-op for the in-process bucket.
+    # Hands back the Redis connection pools; a no-op for the in-process buckets.
+    # Two limiters, two pools: the Nominatim budget and the per-client routing
+    # quota each own what they opened (api/ratelimit.py).
     await app.state.app_state.limiter.aclose()
+    await app.state.app_state.route_limiter.aclose()
 
 
 def create_app() -> FastAPI:

@@ -39,7 +39,7 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
       a single process with no `--workers`, pinning a CPU-bound engine to one replica for
       a text-search side feature. Delete those constraints as part of this. **First code
       PR; everything about scale is downstream of it.**
-- [ ] **(2) Rate-limit `POST /route`.** Currently unauthenticated, no quota, 3-8 graph
+- [x] **(2) Rate-limit `POST /route`.** Currently unauthenticated, no quota, 3-8 graph
       searches per call, one process. Should not wait for users to exist.
 - [ ] **(3) Lazy per-turn cost evaluation.** `pyref/costs.py` materializes full-graph
       arrays per request (and `arc_cost` again per lambda and per rerun). Evaluate over

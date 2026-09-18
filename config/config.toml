@@ -279,4 +279,57 @@ rate_limit_key = "sr:ratelimit:nominatim"
 # that many requests through back-to-back after an idle period — convenient,
 # but not something Nominatim's policy invites.
 nominatim_burst = 1
+
+# --- the routing quota (api/ratelimit.py, ADR-0013 as amended 2026-09-18) ----
+# POST /route and POST /reroute are unauthenticated and expensive — 3-8 graph
+# searches and 1 respectively — so they carry a quota. Unlike the Nominatim
+# budget above, this one is PER CLIENT: a single deployment-wide bucket on the
+# product's core endpoint would let any one caller refuse service to everybody,
+# which is a denial of service requiring no volume at all.
+#
+# The numbers are sized off the front-end's real call pattern, not picked round:
+#   * /route is debounced at 1500 ms (REROUTE_DEBOUNCE_MS in web/app/page.tsx),
+#     so the most a person can emit is ~0.67 req/s, and only while continuously
+#     dragging a pin or a slider. A refill of 0.5/s covers a new plan every two
+#     seconds forever, and the burst covers 15 back-to-back before that bites.
+#   * /reroute is self-limited by the client to roughly one per 18 s: every
+#     successful reroute swaps the followed route's identity, which resets
+#     useRouteProgress's START_GRACE_MS (15 s) and its 3-fix off-route
+#     hysteresis. An hour of live navigation spends ~200 tokens against ~1,800
+#     refilled, so a drive cannot starve itself no matter how lost it gets.
+#   * An unthrottled caller, by contrast, is a CPU-exhaustion primitive: this
+#     caps one client at 30 route requests/minute, i.e. at most ~4 graph
+#     searches per second, which one process absorbs.
+# Raise route_burst before route_rate_per_s: burst buys tolerance for a human's
+# clustered edits, while rate is what an attacker gets to keep.
+route_rate_per_s = 0.5
+route_burst = 15
+# How many proxies sit in front of this process, i.e. how many trailing
+# X-Forwarded-For entries were appended by infrastructure we run.
+#
+# 0 (the default) means the header is NOT READ AT ALL and clients are keyed by
+# the peer address. That is the only safe default: X-Forwarded-For is supplied
+# by the caller, so trusting it without knowing the proxy depth lets anyone mint
+# an unlimited number of identities by varying a header — worse than having no
+# quota, because it still looks like it works.
+#
+# The cost of the safe default is that BEHIND A LOAD BALANCER every peer address
+# is the balancer, so the per-client bucket degenerates into one global bucket
+# and one caller can throttle everyone. Deploying behind a proxy therefore
+# REQUIRES setting this to the true hop count (normally via SR_TRUSTED_PROXIES,
+# since it is a deployment fact): 1 for a single load balancer, 2 for CDN then
+# balancer. Setting it too high keys clients by an entry the caller controls;
+# too low keys them all by the proxy. Count the hops.
+route_trusted_proxies = 0
+# Prefix for the per-client Redis keys (one key per client beneath it).
+# Deliberately not rate_limit_key: the search box's upstream budget and the
+# router's own-CPU quota are unrelated ceilings and must not share a bucket.
+# SR_ROUTE_RATE_LIMIT_KEY overrides, for staging and production on one Redis.
+route_rate_limit_key = "sr:ratelimit:route"
+# Cap on in-process per-client buckets. Per-client state keyed by a string the
+# caller influences is a memory-exhaustion primitive unbounded; eviction is LRU
+# so the client actually being throttled is the last one dropped. Only the
+# in-process backend needs this — Redis keys expire themselves.
+route_max_tracked_clients = 4096
+
 pack_dir = "data/packs"       # SR_PACK_DIR env var overrides (tests use this)
