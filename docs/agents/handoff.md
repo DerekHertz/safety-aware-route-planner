@@ -32,7 +32,7 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
 
 **Phase 1 - unblock scale.** Nothing else should start before (1).
 
-- [ ] **(1) Decouple geocoding from the process model.** Self-hosted Photon, or move the
+- [x] **(1) Decouple geocoding from the process model.** Self-hosted Photon, or move the
       limiter to Redis. Today `api/geocode.py` funnels every user through one global
       ~1 req/s lock, which does not throttle at the edge -- it *serializes*, so N
       concurrent typists wait N seconds. It is also why the README and Dockerfile mandate

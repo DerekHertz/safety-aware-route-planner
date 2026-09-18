@@ -50,6 +50,8 @@ async def lifespan(app: FastAPI):
     print(f"[api] serving pack '{m.get('region')}' "
           f"({app.state.app_state.pack.num_edges:,} directed edges)")
     yield
+    # Hands back the Redis connection pool; a no-op for the in-process bucket.
+    await app.state.app_state.limiter.aclose()
 
 
 def create_app() -> FastAPI:

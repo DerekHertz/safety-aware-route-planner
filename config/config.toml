@@ -264,4 +264,19 @@ nominatim_min_interval_s = 1.1
 # personal addresses out of version control. Override per-deployment with the
 # SR_NOMINATIM_CONTACT environment variable.
 nominatim_user_agent = "safety-aware-route-planner/0.1 (+https://github.com/DerekHertz/safety-aware-route-planner)"
+# Where the Nominatim token bucket lives (api/ratelimit.py, ADR-0013). Empty
+# means in-process, which enforces the ~1 req/s ceiling PER PROCESS and is
+# therefore only correct at a single replica. Set a Redis URL — normally via
+# SR_REDIS_URL, since it is deployment-specific and usually carries a password
+# — before running more than one replica, or each one gets its own budget.
+redis_url = ""
+# The Redis key the shared bucket lives at. SR_RATE_LIMIT_KEY overrides, which
+# matters when staging and production share one Redis instance: the same key
+# would mean staging eating production's upstream budget.
+rate_limit_key = "sr:ratelimit:nominatim"
+# Token-bucket capacity, in requests. 1 holds the ceiling at strictly one
+# request per nominatim_min_interval_s with no burst at all. Raising it lets
+# that many requests through back-to-back after an idle period — convenient,
+# but not something Nominatim's policy invites.
+nominatim_burst = 1
 pack_dir = "data/packs"       # SR_PACK_DIR env var overrides (tests use this)

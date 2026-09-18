@@ -61,6 +61,16 @@ no_implicit_optional = true
 module = ["scipy.*", "osmnx.*", "networkx.*", "sr_core"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# redis DOES ship type information; this is here because it is an OPTIONAL
+# runtime dependency. api/ratelimit.py imports it lazily and only when a
+# shared rate limiter is configured, so a developer who has never set
+# SR_REDIS_URL will not have it installed — and mypy must not turn that into
+# a red lint run. When it is installed (CI installs requirements.txt) it is
+# type-checked normally.
+module = ["redis.*"]
+ignore_missing_imports = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # -ra surfaces skip reasons in the log. The suite has two conditional

@@ -66,10 +66,20 @@ USER app
 
 EXPOSE 8080
 
-# Single process on purpose. The C++ search releases the GIL
-# (core/src/bindings.cpp) and api/routes.py uses a sync handler so FastAPI runs
-# it in a threadpool, so one process already parallelises across cores. More
-# importantly, the Nominatim rate limiter in api/geocode.py is a module-level
-# global: a second worker would double the request rate against a service whose
-# policy allows ~1/s.
+# One process per container, and still no `--workers` — but for one reason
+# now, not two. This comment used to give both, and they were never equally
+# true.
+#
+# The rate limiter is no longer one of them. api/ratelimit.py puts the
+# Nominatim token bucket in Redis when SR_REDIS_URL is set, so the ~1 req/s
+# ceiling holds across every replica instead of per process. Running several
+# of these containers behind a load balancer — previously forbidden at any
+# count — is now the supported way to add capacity. Without SR_REDIS_URL the
+# bucket is per-process, and one replica remains the limit.
+#
+# `--workers N` stays wrong for the reason that was always the real one: the
+# C++ search releases the GIL (core/src/bindings.cpp) and api/routes.py is a
+# sync handler, so FastAPI runs it in a threadpool and a single process already
+# parallelises across every core. Extra workers would buy no throughput and
+# would duplicate the loaded graph pack in RAM once per worker.
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8080"]
