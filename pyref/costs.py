@@ -87,6 +87,16 @@ def _road_class_ranks(edge_road_class: np.ndarray) -> np.ndarray:
     return table[edge_road_class]
 
 
+def _busy_floor_by_class(bc, edge_road_class: np.ndarray) -> np.ndarray:
+    """busy_floor_by_class[class] per edge (ADR-0005). A class with no entry
+    in config.toml floors at 0.0 — i.e. no floor, today's behaviour."""
+    floors = bc.get("busy_floor_by_class", {})
+    table = np.zeros(len(RoadClass), dtype=np.float64)
+    for rc in RoadClass:
+        table[rc.value] = float(floors.get(rc.name, 0.0))
+    return table[edge_road_class]
+
+
 def _cross_count(pack: GraphPack, inn: np.ndarray, out: np.ndarray,
                  mask: np.ndarray) -> np.ndarray:
     """Does a STRAIGHT through this node cross a street matching `mask`?
@@ -187,8 +197,13 @@ def compute_costs(pack: GraphPack, snap: Snapshot, cfg: Config) -> QueryCosts:
     penalty[is_uturn] += float(cc["uturn_fixed_penalty_s"])
 
     # --- busy roads (tunable combination of speed, lanes, volume) ---
-    edge_busy = (bc["a_speed"] * spd_n + bc["a_lanes"] * lanes_n
-                 + bc["a_vol"] * vol_n) > bc["busy_threshold"]
+    # ADR-0005: a per-class floor the volume term can raise but never lower —
+    # see config.toml [busy.busy_floor_by_class] for the "why" and the
+    # 3am-arterial arithmetic this replaces.
+    busy_contribution = (bc["a_speed"] * spd_n + bc["a_lanes"] * lanes_n
+                         + bc["a_vol"] * vol_n)
+    busy_floor = _busy_floor_by_class(bc, pack.edge_road_class)
+    edge_busy = np.maximum(busy_contribution, busy_floor) > bc["busy_threshold"]
     # "Major" narrows busy to roads that are also physically big — the ones a
     # driver holding a stop sign has to cross several lanes of. A stop-sign
     # left onto a busy but ordinary 2-lane street is not counted.

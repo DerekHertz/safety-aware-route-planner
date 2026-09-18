@@ -119,11 +119,18 @@ RIGHT = 0.15
 UTURN = 1.2
 
 # -----------------------------------------------------------------------------
-# "Busy" road definition: busy_score = a_speed*norm(spd) + a_lanes*norm(lanes)
-#                                    + a_vol*norm(vol)  >  busy_threshold
-# With the defaults above: peak-hour primary ~0.65, secondary ~0.56 (busy);
-# residential ~0.30, tertiary ~0.37 (not busy). Off-peak secondaries drop
-# below threshold — busyness is time-of-day dependent by design.
+# "Busy" road definition (ADR-0005, amended 2026-09-17): a static floor from
+# road CHARACTER, hybridized with a time-dynamic component from volume.
+#   contribution = a_speed*norm(spd) + a_lanes*norm(lanes) + a_vol*norm(vol)
+#   busy_score   = max(contribution, busy_floor_by_class[edge's class])
+#   edge_busy    = busy_score > busy_threshold
+# The floor is a LOWER BOUND: the time-varying volume term can push a floored
+# class's score higher (irrelevant here, since the floor alone already clears
+# busy_threshold — see below), but volume dropping toward zero can never pull
+# it back under the floor. With the defaults above: peak-hour primary ~0.65,
+# secondary ~0.56 (busy); residential ~0.30, tertiary ~0.37 (not busy).
+# Off-peak secondaries still drop below threshold — busyness stays
+# time-of-day dependent by design for any class with no floor below.
 # -----------------------------------------------------------------------------
 [busy]
 a_speed = 0.4
@@ -136,6 +143,36 @@ busy_threshold = 0.45
 # road — the "across 4 lanes from a lone stop sign" case.
 major_lanes_min = 2
 major_class_max = "secondary"
+
+# busy_floor_by_class: named minimum busy_score per road class. This is the
+# fix for the accident ADR-0005 documents — with no floor, a default primary
+# arterial's contribution at 3am (speed 0.4*0.56 + lanes 0.3*0.667 + ~zero
+# volume) comes to ~0.424, JUST under busy_threshold=0.45. That "not busy"
+# verdict was never a decision anyone made; it was 0.026 of headroom in the
+# third decimal place of a_speed. Nudging a_speed from 0.40 to 0.43 would
+# have flipped every arterial permanently busy with no code change and no
+# test failure (see the ADR for the arithmetic).
+#
+# The thesis is about road CHARACTER, not the hour: an unprotected left onto
+# a four-lane arterial is structurally dangerous at 3am too (worse, even —
+# speeds rise on empty arterials, sightlines are worse, impaired driving
+# peaks). So mainline arterial classes (motorway, trunk, primary) get an
+# explicit floor that holds regardless of how thin the simulated volume gets.
+# 0.50 is chosen with deliberate margin above busy_threshold (0.45), not
+# merely equal to it, so the floored classes' busy-ness no longer depends on
+# where a_speed/a_lanes/a_vol happen to sit — the floor decides it outright.
+#
+# Link classes (motorway_link/trunk_link/primary_link — ramps and connectors)
+# are deliberately NOT floored: they default to fewer lanes and lower design
+# speed, so they don't share the mainline's structural danger, and letting
+# the ordinary time-varying score decide them is correct. Any class not
+# listed here floors at 0.0 (no floor), which is exactly today's behaviour —
+# busyness for secondary/tertiary/residential/etc. stays purely a function of
+# speed/lanes/volume and keeps de-rating at night as before.
+[busy.busy_floor_by_class]
+motorway = 0.50
+trunk = 0.50
+primary = 0.50
 
 # -----------------------------------------------------------------------------
 # Tier bands on the post-override raw score (for map coloring), and the
