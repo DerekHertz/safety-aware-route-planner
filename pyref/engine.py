@@ -14,7 +14,12 @@ import numpy as np
 from pyref import geometry as geo_out
 from pyref.alternatives import Alternative, compute_alternatives, compute_single
 from pyref.config import Config
-from pyref.costs import QueryCosts, compute_costs, heuristic
+from pyref.costs import (
+    QueryCosts,
+    build_pack_statics,
+    compute_costs,
+    heuristic,
+)
 from pyref.graph import GraphPack
 from pyref.metrics import compute_metrics
 from pyref.search import PathResult, shortest_path, topo_of
@@ -77,6 +82,9 @@ class Router:
         self.cfg = cfg
         self.snap_index = SnapIndex(pack)
         self.topo = topo_of(pack)
+        # The (pack, cfg)-only half of the cost model, built once here rather
+        # than on every request — this is the "load time" ADR-0009's 3a means.
+        self._statics = build_pack_statics(pack, cfg)
         self._impl = cfg["engine"]["impl"]
         self._cpp_engine = None
         if self._impl == "cpp":
@@ -130,7 +138,7 @@ class Router:
             raise RoutingError("destination is too far from any drivable road")
 
         snap = at_time(pack, cfg, departure)
-        qc = compute_costs(pack, snap, cfg)
+        qc = compute_costs(pack, snap, cfg, self._statics)
 
         o_by_edge = {c.edge: c for c in o_cands}
         d_by_edge = {c.edge: c for c in d_cands}
