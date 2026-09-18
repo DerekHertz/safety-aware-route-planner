@@ -36,6 +36,7 @@ import {
   useMediaQuery,
 } from "@/lib/useMediaQuery";
 import { useNavigation } from "@/lib/useNavigation";
+import { useWakeLock } from "@/lib/useWakeLock";
 
 // MapLibre touches `window` at import time — client-only bundle
 const MapView = dynamic(() => import("@/components/MapView"), { ssr: false });
@@ -111,6 +112,10 @@ export default function Home() {
     geo.accuracy,
   );
   const progress = nav.progress;
+  // Held for exactly the mounted-nav session (ADR-0012) — same gate NavHud
+  // renders on below, NOT "a route is planned", so a phone sitting on a desk
+  // between trips doesn't drain its battery over nothing.
+  const wakeLock = useWakeLock(navigating && !!nav.route);
 
   // Keep routes clear of the sheet when fitting the viewport. Held constant
   // rather than tracking the expanded height: MapLibre cannot honour padding
@@ -143,6 +148,8 @@ export default function Home() {
       navRoute: nav.route,
       navPhase: nav.phase,
       rerouting: nav.rerouting,
+      wakeLockHeld: wakeLock.held,
+      wakeLockSupported: wakeLock.supported,
       progress,
       geoPosition: geo.position,
       geoAccuracy: geo.accuracy,

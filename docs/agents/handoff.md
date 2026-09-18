@@ -52,7 +52,7 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
       all three alternatives with `UnsafeCounts`, per-segment tiers and `detour_pct`.
       Best effort-to-value ratio in the plan.
 - [x] `busy_floor_by_class` + a scenario test pinning the 3am arterial (ADR-0005).
-- [ ] Screen Wake Lock, with `visibilitychange` reacquisition (ADR-0012).
+- [x] Screen Wake Lock, with `visibilitychange` reacquisition (ADR-0012).
 
 **Phase 3 - contract, then nav.**
 
