@@ -6,6 +6,7 @@ import NavHud from "@/components/NavHud";
 import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
+import { compareRoutes } from "@/lib/routeComparison";
 import {
   DEFAULT_DETOUR_BUDGET,
   DETOUR_BUDGET_OPTIONS,
@@ -96,6 +97,10 @@ export default function Home() {
     () => routes.find((r) => r.kind === selected) ?? null,
     [routes, selected],
   );
+  // Fast/balanced/safe, ordered and with each one's time cost against the
+  // fastest of the set — the comparison the cards below render (ADR handoff
+  // Phase 2: "is the safer route worth the extra minutes?").
+  const comparisonRows = useMemo(() => compareRoutes(routes), [routes]);
   // The nav session owns the followed route, its progress, reroute + arrival
   // lifecycle. Seeded with the chosen alternative when navigation starts; the
   // planner's own state (origin/routes/selected) stays frozen for the session.
@@ -517,10 +522,14 @@ export default function Home() {
             {error && <div className="status error">{error}</div>}
 
             <div className="cards" id="route-panel">
-              {routes.map((r) => (
+              {comparisonRows.map(({ route: r, deltaS }) => (
                 <RouteCard
                   key={r.kind}
                   route={r}
+                  // A time delta only means something with something to
+                  // compare against — omit it when safety is off and the
+                  // response is a lone "fast" route.
+                  deltaS={comparisonRows.length > 1 ? deltaS : undefined}
                   units={units}
                   selected={selected === r.kind}
                   onSelect={() => setSelected(r.kind)}

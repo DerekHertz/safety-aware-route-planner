@@ -483,6 +483,16 @@ body {
   color: var(--muted);
 }
 
+.time-delta {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.time-delta.fastest {
+  color: #16a34a;
+}
+
 .route-card-unsafe {
   display: flex;
   flex-wrap: wrap;
