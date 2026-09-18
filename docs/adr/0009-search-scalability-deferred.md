@@ -116,3 +116,43 @@ not lazy costs. The gate should be removed.
 **Unverified:** whether the region stays tight at lambda = 1.5, where the time-only
 heuristic badly under-estimates generalized cost. If it does not, the honest conclusion
 is that the **heuristic** is what to fix first, and this item never happens.
+
+## Amendment, 2026-09-18 (later) — 1(3a) is implemented; the estimate was high
+
+The pure-numpy hoist described above is done, and the prediction it rested on was
+worth checking. Measured in situ under `cProfile`, over 40 real `Router.route()`
+calls on `berkeley_oakland` with the C++ engine (cumulative seconds):
+
+| | before | after | |
+|---|---|---|---|
+| `compute_costs` | 0.172 | 0.136 | |
+| `heuristic` (40x) | 0.025 | 0.009 | |
+| `arc_cost` (160x) | 0.020 | 0.015 | |
+| **total `O(pack)`** | **0.217** | **0.160** | **-26%** |
+
+End-to-end that is roughly **-1.4 ms on a ~14 ms request, about 10%**, reproduced
+over three runs. Load-time cost is 4.4 ms once per pack.
+
+**"Roughly 60-70% of the per-request `O(pack)` cost" was too optimistic — it is
+26%.** The static half was correctly identified; the error was assuming it
+dominated. What remains is genuinely per-query: the volume gather, the raw
+arithmetic and its two multiplies, the penalty clamp, the busy masks, `over_tau`,
+the unsafe predicates and the tier scatters.
+
+**`_cross_count` is now the single largest item left**, about 45% of what remains
+in `compute_costs` (~1.55 ms a request). It runs twice — once over `edge_busy`,
+once over `edge_major` — and both masks are volume-dependent, so it cannot be
+hoisted the way the rest was. Its index arrays already are. Anyone continuing this
+item should start there rather than looking for more to hoist.
+
+**The 2026-09-18 amendment's `arc_cost` finding stands, and was nearly overturned
+in error.** An isolated timing loop suggested 0.6 ms a call, which would have made
+it the largest single win; in situ it is ~0.12 ms, matching the 0.1 ms recorded
+above. The isolated number was a benchmark artifact. Treat tight-loop timings of
+these functions as unreliable — the allocation pattern differs from a real request.
+
+**Bitwise neutrality held**, verified two ways: every `QueryCosts` field, `arc_cost`
+at three lambdas and `heuristic` byte-identical to the pre-hoist implementation on
+the real pack, and the golden digests in `tests/test_costs_golden.py`. The
+heuristic's node-gather identity — the one step with a real ulp risk, since it
+applies sin/cos/arcsin to a different-length array — holds on both real packs.

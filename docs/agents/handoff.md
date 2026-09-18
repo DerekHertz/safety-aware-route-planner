@@ -49,11 +49,21 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
       bitwise parity (`heuristic` haversines, and MSVC vs glibc sin/cos differ in the
       last ulp). See ADR-0009's 2026-09-18 amendment for the measurements.
       **Do instead, in order:**
-  - [ ] (3a) **Pure-numpy hoist — `pyref` only, verified bitwise identical.** Lift the
-        pack-static half of `compute_costs` to load time, compute the heuristic over
-        nodes not edge heads, hoist the `edge_time_s` gather out of `arc_cost`. Removes
-        ~60-70% of the per-request `O(pack)` cost. `sr_core` does not move, so this is
-        not the forbidden split. Land a golden-hash test on the cost arrays **first**.
+  - [x] (3a) **Pure-numpy hoist — `pyref` only, verified bitwise identical.** Done.
+        `PackStatics` holds the (pack, cfg)-only half and is built once in
+        `Router.__init__`; the heuristic haversines nodes not edge heads; `arc_cost`
+        consumes a pre-gathered `turn_time_s`. Bitwise neutrality is pinned by
+        `tests/test_costs_golden.py` (495 digests) and was cross-checked against the
+        pre-hoist module side by side on the real pack.
+        **Measured -26% of per-request `O(pack)`, not the estimated 60-70%** — about
+        -1.4 ms on a ~14 ms request. See ADR-0009's second 2026-09-18 amendment for
+        the table and for two corrections worth reading before continuing this item.
+  - [ ] (3a-next) **`_cross_count` is what is left.** After the hoist it is ~45% of
+        the remaining `compute_costs` (~1.55 ms a request), running twice per request
+        over `edge_busy` and `edge_major`. Both masks are volume-dependent so it
+        cannot be hoisted; its index arrays already are. Needs an algorithmic idea,
+        not more lifting. A `np.bincount` rewrite of its histogram was tried and is
+        **slower** at this graph size — don't repeat it.
   - [ ] (3b) *Only if a pack ever exceeds ~5x a metro:* make the precompute **regional,
         not lazy** — fill a sub-region of the same full-size array, `+inf` elsewhere.
         Parity untouched, because both engines still receive one finished numpy array.
@@ -100,6 +110,14 @@ re-scoping removes most of that risk by keeping every floating-point operation i
 arithmetic-neutral so the parity suite is a complete check on it. Only 1(3b) is genuinely
 risky, and it is now conditional on a pack size nothing on this plan calls for. The
 OpenLR-conflation and traffic-procurement risks were removed by ADR-0010's deferral.
+
+1(3a) has since landed with its bits pinned, which retires that share of the risk. It
+also exposed a gap worth remembering: **the parity suite cannot catch a change to the
+shared numpy precompute**, because it proves `pyref` and `sr_core` agree with *each
+other* and both consume the same arrays. A pure re-association of the `raw` sum left all
+216 other tests green while moving 48 cost arrays. `tests/test_costs_golden.py` is what
+closes that hole; treat a change to `pyref/costs.py` with a green parity suite and no
+golden digests as unverified.
 
 ## Working conventions for this repo
 
