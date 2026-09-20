@@ -17,6 +17,13 @@ pydantic==2.13.4
 scipy==1.18.0
 uvicorn[standard]==0.51.0
 
+# Imported lazily, and only when SR_REDIS_URL / [api].redis_url is set —
+# api/ratelimit.py falls back to an in-process token bucket otherwise, so local
+# dev and the test suite never import this. It is pinned here anyway because
+# the image is what gets scaled out, and a multi-replica deployment that has to
+# rebuild the image to get a shared rate limiter would just skip the limiter.
+redis==8.1.0
+
 # zoneinfo ships no tz database of its own: zoneinfo.TZPATH is empty on
 # Windows, and python:*-slim carries no system tzdata either. This arrived
 # transitively via pandas (osmnx) until that moved out of this file, so the

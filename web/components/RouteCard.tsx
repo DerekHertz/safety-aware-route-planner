@@ -1,17 +1,28 @@
 "use client";
 
 import { KIND_COLORS } from "./MapView";
+import { formatTimeDelta } from "@/lib/routeComparison";
 import { RouteAlternative } from "@/lib/types";
 import { UnitSystem, formatDistance, formatDuration } from "@/lib/units";
 
 interface Props {
   route: RouteAlternative;
+  /** Seconds slower than the fastest alternative in the SAME response — see
+   *  lib/routeComparison. Optional so a lone route (e.g. safety disabled) can
+   *  render without a comparison to make. */
+  deltaS?: number;
   units: UnitSystem;
   selected: boolean;
   onSelect: () => void;
 }
 
-export default function RouteCard({ route, units, selected, onSelect }: Props) {
+export default function RouteCard({
+  route,
+  deltaS,
+  units,
+  selected,
+  onSelect,
+}: Props) {
   const color = KIND_COLORS[route.kind];
   const u = route.unsafe;
   return (
@@ -26,6 +37,14 @@ export default function RouteCard({ route, units, selected, onSelect }: Props) {
           {route.kind}
         </span>
         <span className="eta">{formatDuration(route.eta_s)}</span>
+        {deltaS !== undefined && (
+          <span
+            className={`time-delta${deltaS <= 0 ? " fastest" : ""}`}
+            title="Time versus the fastest alternative in this comparison"
+          >
+            {formatTimeDelta(deltaS)}
+          </span>
+        )}
         <span className="dist">{formatDistance(route.distance_m, units)}</span>
       </div>
       <div className="route-card-unsafe">
