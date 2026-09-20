@@ -25,18 +25,65 @@ struct AfterByFEdge {
     }
 };
 
+// P8 scratch. dist/pred/dest_adjust are O(E) and were allocated fresh on
+// every call; a request runs 4-6 searches, so that was 4-6 x O(E) of malloc +
+// first-touch page faults per request. The buffers are reused instead, reset
+// to exactly the values a fresh allocation would have held.
+//
+// THREAD SAFETY: `thread_local`, never a member of Engine. api/routes.py
+// declares its handlers `def`, so FastAPI runs them in a worker threadpool,
+// and PyEngine::shortest_path releases the GIL around this function — several
+// requests really are inside one const Engine at once. Scratch on the Engine
+// would be a data race; scratch on the stack is what we are trying to avoid;
+// per-thread is both race-free and free of any locking in the hot path. Cost:
+// one buffer set resident per worker thread that has ever routed (see the
+// memory note in pyref/search.py).
+//
+// RESET SEMANTICS: reset happens at the START of a search, from the scratch's
+// own record of what it dirtied, so an early `return` can never leave a
+// poisoned buffer for the next caller. dist/pred are refilled wholesale
+// (the settled set is ~half of E, so tracking it is not worth the
+// bookkeeping); dest_adjust is reset only at the handful of indices the
+// previous call wrote, because the dests list is tiny.
+struct Scratch {
+    std::vector<double> dist;
+    std::vector<int64_t> pred;
+    std::vector<double> dest_adjust;
+    std::vector<int32_t> dirty_dests;
+
+    void begin(size_t E) {
+        if (dist.size() != E) {  // first use, or a different pack
+            dist.assign(E, kInf);
+            pred.assign(E, -1);
+            dest_adjust.assign(E, kInf);
+            dirty_dests.clear();
+            return;
+        }
+        std::fill(dist.begin(), dist.end(), kInf);
+        std::fill(pred.begin(), pred.end(), -1);
+        for (const int32_t d : dirty_dests)
+            dest_adjust[static_cast<size_t>(d)] = kInf;
+        dirty_dests.clear();
+    }
+};
+
 }  // namespace
 
 PathOut Engine::shortest_path(
     const double* arc_cost, const double* h,
     const std::vector<std::pair<int32_t, double>>& seeds,
     const std::vector<std::pair<int32_t, double>>& dests) const {
-    std::vector<double> dist(static_cast<size_t>(E_), kInf);
-    std::vector<int64_t> pred(static_cast<size_t>(E_), -1);
+    thread_local Scratch scratch;  // P8 — see the Scratch comment above
+    scratch.begin(static_cast<size_t>(E_));
+    std::vector<double>& dist = scratch.dist;
+    std::vector<int64_t>& pred = scratch.pred;
 
     // dict(dests) semantics: later duplicates overwrite earlier ones
-    std::vector<double> dest_adjust(static_cast<size_t>(E_), kInf);  // kInf = "not a dest"
-    for (const auto& [d, adj] : dests) dest_adjust[static_cast<size_t>(d)] = adj;
+    std::vector<double>& dest_adjust = scratch.dest_adjust;  // kInf = "not a dest"
+    for (const auto& [d, adj] : dests) {
+        dest_adjust[static_cast<size_t>(d)] = adj;
+        scratch.dirty_dests.push_back(d);  // reset only these next time
+    }
 
     // P6 slack — uses each LISTED adjust (mirrors the Python loop over the
     // dests list, not the dict), exact even with duplicate dest edges

@@ -27,10 +27,17 @@ PARITY CONTRACT
       is exact, deterministic, and costs at most a few extra pops.
   P7. pred stores the TURN id taken to reach an edge (-1 for seeds);
       reconstruction walks pred via turn_in_edge inside the engine.
+  P8. dist and pred (and, in C++, dest_adjust) are reusable per-THREAD
+      scratch, not fresh allocations. They are reset at the START of a
+      search to exactly the values a fresh allocation would hold (+inf,
+      -1, "not a dest"), so reuse is observationally identical and every
+      rule above is unaffected. Per-thread, never per-engine: the API
+      runs searches concurrently in a worker threadpool.
 """
 from __future__ import annotations
 
 import heapq
+import threading
 from dataclasses import dataclass
 from typing import NamedTuple
 
@@ -63,6 +70,50 @@ def topo_of(pack) -> TurnTopo:
                     pack.turn_in_edge, pack.turn_allowed)
 
 
+class _Scratch(threading.local):
+    """P8 scratch: `dist`/`pred` reused across searches instead of two
+    `np.full(E, ...)` per call (a request runs 4-6 searches).
+
+    **Thread-local, deliberately — this is a correctness requirement, not a
+    micro-optimisation.** `api/routes.py` declares `/route` and `/reroute`
+    `def` rather than `async def` precisely so FastAPI runs them in a worker
+    threadpool, so several requests are inside the same process-wide `Router`
+    at once. CPython would not save us either: the relaxation loop is plain
+    bytecode and the interpreter may switch threads between any two
+    instructions, so a module-global buffer would interleave two searches'
+    `dist` arrays. `threading.local` gives each worker its own set with no
+    lock on the hot path. (Within one request the searches are strictly
+    sequential — `compute_alternatives` runs the lambda sweep in a `for`
+    loop — so one set per thread is enough; nothing is ever reentrant here,
+    as `shortest_path` calls no user code.)
+
+    **Memory:** one set is `E * 8` (float64) + `E * 8` (int64) bytes, held
+    per thread that has ever routed, and never released. At 20,678 edges that
+    is ~330 KB a thread, ~13 MB across a 40-thread default threadpool. Note it
+    against Phase 4's "memory budget for N resident packs".
+    """
+
+    def __init__(self) -> None:
+        self.dist: np.ndarray | None = None
+        self.pred: np.ndarray | None = None
+
+    def begin(self, E: int) -> tuple[np.ndarray, np.ndarray]:
+        dist, pred = self.dist, self.pred
+        if dist is None or pred is None or dist.shape[0] != E:
+            dist = np.full(E, INF, dtype=np.float64)    # first use, or a
+            pred = np.full(E, -1, dtype=np.int64)       # differently-sized pack
+            self.dist, self.pred = dist, pred
+            return dist, pred
+        # Reset at the START, so an early return can never leave a poisoned
+        # buffer behind for the next search on this thread.
+        dist.fill(INF)
+        pred.fill(-1)
+        return dist, pred
+
+
+_SCRATCH = _Scratch()
+
+
 def shortest_path(topo: TurnTopo,
                   arc_cost: np.ndarray,
                   h: np.ndarray | None,
@@ -73,8 +124,7 @@ def shortest_path(topo: TurnTopo,
     turn_allowed = topo.turn_allowed
     E = len(turn_ptr) - 1
 
-    dist = np.full(E, INF, dtype=np.float64)
-    pred = np.full(E, -1, dtype=np.int64)
+    dist, pred = _SCRATCH.begin(E)              # P8
 
     dest_adjust = dict(dests)
     # P6 termination slack

@@ -12,6 +12,12 @@
 //       slack = max over dests of (h[d] - adjust[d]) computed at start.
 //   P7. pred stores the turn id (-1 for seeds); reconstruction walks
 //       pred via turn_in_edge.
+//   P8. dist and pred (and, in C++, dest_adjust) are reusable per-THREAD
+//       scratch, not fresh allocations. They are reset at the START of a
+//       search to exactly the values a fresh allocation would hold (+inf,
+//       -1, "not a dest"), so reuse is observationally identical and every
+//       rule above is unaffected. Per-thread, never per-engine: the API
+//       runs searches concurrently in a worker threadpool.
 #pragma once
 
 #include <cstdint>
