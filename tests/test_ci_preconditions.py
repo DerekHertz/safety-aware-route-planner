@@ -8,13 +8,23 @@ hide exactly the coverage that matters most:
     Bitwise Python<->C++ equality is the design premise of this codebase, so a
     green run that silently skipped all of it is worse than a red one.
   * `tests/test_parity_cpp.py:~97` — the real-pack parity tests skip unless
-    `data/packs/berkeley_small` exists. Toy fixtures alone do not exercise the
+    the `berkeley_small` pack exists. Toy fixtures alone do not exercise the
     20k-edge graph.
 
 Those skips are correct *locally*: a contributor without a compiler, or without
 having built packs, should still be able to run the suite. So `test_parity_cpp.py`
 is deliberately left alone. This file adds the opposite guarantee for CI, gated
-on an environment variable, so the two can coexist.
+on an environment variable, so the two can coexist. `conftest.py` covers the
+local half differently — it prints what was skipped instead of failing.
+
+The second skip used to be worse than "conditional": it was *location*
+dependent. `data/` is gitignored, so it exists only in the main checkout, and
+the pack was named by a CWD-relative literal. Every `git worktree` — seven live
+in this repo — therefore skipped every real-pack test while reporting green,
+which stacks with the `importorskip` above: build `sr_core`, close the gap you
+know about, and still assert nothing against a real graph. Packs are now
+resolved through `tests/helpers/packs.py`, which finds the main checkout's
+`data/packs` from inside a worktree.
 
 `importorskip` skips at COLLECTION time — the module yields no items at all —
 so there is nothing to mark or assert on after the fact. The check has to live
@@ -24,13 +34,13 @@ from __future__ import annotations
 
 import json
 import os
-from pathlib import Path
 
 import pytest
 
 from pyref.graph import PACK_FORMAT_VERSION
+from tests.helpers.packs import packs_root, real_pack
 
-REAL_PACK = Path("data/packs/berkeley_small")
+REAL_PACK = "berkeley_small"
 
 strict = pytest.mark.skipif(
     os.environ.get("SR_CI_STRICT") != "1",
@@ -65,9 +75,10 @@ def test_engine_impl_is_not_silently_downgraded():
 @strict
 def test_real_pack_is_present():
     """Guards the skipif on the real-pack parity tests."""
-    assert REAL_PACK.is_dir(), (
-        f"{REAL_PACK} is missing, so real-pack parity silently skipped. "
-        f"CI should fetch it via .github/actions/fetch-packs."
+    assert real_pack(REAL_PACK) is not None, (
+        f"pack {REAL_PACK!r} is missing under {packs_root()}, so real-pack "
+        f"parity silently skipped. CI should fetch it via "
+        f".github/actions/fetch-packs."
     )
 
 
@@ -79,9 +90,11 @@ def test_pack_format_matches_code():
     format_version 1 while the code required 2, which fails deep inside
     GraphPack.load() with no hint about the cause.
     """
-    manifest = json.loads((REAL_PACK / "manifest.json").read_text())
+    pack = real_pack(REAL_PACK)
+    assert pack is not None, f"pack {REAL_PACK!r} is missing under {packs_root()}"
+    manifest = json.loads((pack / "manifest.json").read_text())
     assert manifest["format_version"] == PACK_FORMAT_VERSION, (
-        f"{REAL_PACK} is format_version {manifest['format_version']} but the code "
+        f"{pack} is format_version {manifest['format_version']} but the code "
         f"requires {PACK_FORMAT_VERSION}. Rebuild and republish the packs, then "
         f"update packs.lock."
     )

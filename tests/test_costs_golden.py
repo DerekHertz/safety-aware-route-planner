@@ -39,7 +39,6 @@ from __future__ import annotations
 
 import datetime
 import hashlib
-import os
 
 import numpy as np
 import pytest
@@ -62,6 +61,7 @@ from tests.helpers.fixtures import (
     stop_sign_left_city,
     unprotected_left_city,
 )
+from tests.helpers.packs import real_pack, skip_reason
 from tests.helpers.toy_graphs import GraphBuilder
 
 CFG = Config.load()
@@ -760,17 +760,22 @@ def test_heuristic_equals_a_per_node_gather():
                 f"heuristic is not gather-invariant on {name} at ({lat}, {lon})")
 
 
-REAL_PACKS = ["data/packs/berkeley_oakland", "data/packs/berkeley_small"]
+# Pack NAMES, resolved through tests/helpers/packs.py rather than used as
+# CWD-relative paths: `data/` is gitignored, so a git worktree has none of its
+# own and a literal path skips these silently there.
+REAL_PACKS = ["berkeley_oakland", "berkeley_small"]
 
 
-@pytest.mark.parametrize("path", REAL_PACKS)
-def test_heuristic_gather_invariance_on_real_pack(path):
+@pytest.mark.parametrize("name", REAL_PACKS)
+def test_heuristic_gather_invariance_on_real_pack(name):
     """The toys have a handful of nodes, and SIMD tails and kernel dispatch
     only diverge at scale, so the identity above is worth little until it is
     checked on a pack with thousands of nodes. Skips where the pack is not
-    built -- `data/` is not committed."""
-    if not os.path.isdir(path):
-        pytest.skip(f"{path} not built")
+    built -- `data/` is not committed. The skip is announced in the run's
+    terminal summary (see `conftest.py`) rather than left to a silent `s`."""
+    path = real_pack(name)
+    if path is None:
+        pytest.skip(skip_reason(name))
     pack = GraphPack.load(path)
     qc = compute_costs(pack, free_flow(pack, CFG), CFG)
     for lat, lon in _dest_points(pack):

@@ -171,6 +171,33 @@ golden digests as unverified.
   extension out of the venv, which is useful when you want to run *both* engines
   from one interpreter to compare them.
 
+- **Building `sr_core` is necessary but not sufficient — check the packs too.**
+  There is a *second*, independent way to lose real-pack coverage, and it
+  stacks with the one above: `data/` is gitignored, so it exists only in the
+  main checkout. A `git worktree` gets a fresh checkout with **no `data/` at
+  all**, and the real-pack tests used to name their pack CWD-relatively
+  (`"data/packs/berkeley_small"`). So an agent could build the extension, tick
+  off the trap above, and still assert nothing against a 20k-edge graph.
+  Measured on this tree, with `sr_core` built in both runs:
+  **main checkout 228 passed / 5 skipped, worktree 224 passed / 9 skipped** —
+  the 4 extra skips were the whole of the real-pack coverage (2 parity, 2
+  golden), and the bar was green either way. With seven live worktrees, that
+  was the normal case, not an edge case.
+
+  Fixed in `tests/helpers/packs.py`: packs are resolved by **name**, looked for
+  under `$SR_PACKS_ROOT`, then `./data/packs`, then the main checkout (via
+  `git rev-parse --git-common-dir`, and via an ancestor walk, since worktrees
+  live under `<main>/.claude/worktrees/` and the worktree's `.git` file records
+  a *Windows* path that `git` inside WSL cannot resolve). Do not reintroduce a
+  literal `"data/packs/..."` in a test; use `real_pack("berkeley_small")`.
+  `SR_PACKS_ROOT` is **not** `SR_PACK_DIR` — the latter names one pack
+  directory and six API tests monkeypatch it to a toy under `tmp_path`.
+
+  When a pack genuinely is missing, `conftest.py` now prints a
+  `REDUCED COVERAGE (advisory)` banner after the run naming what was skipped
+  and why, including the `sr_core` case above. Locally it is advisory only;
+  CI sets `SR_CI_STRICT=1` and `tests/test_ci_preconditions.py` fails instead.
+
 ## Refreshing this handoff
 
 The mattpocock `/handoff` skill produces a *conversation* handoff to an OS temp
