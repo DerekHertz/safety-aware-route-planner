@@ -27,6 +27,7 @@ from tests.helpers.fixtures import (
     make_costs,
     unprotected_left_city,
 )
+from tests.helpers.packs import has_real_pack, real_pack, skip_reason
 
 LOOSE = os.environ.get("SR_PARITY_LOOSE") == "1"
 LAMBDAS = [0.0, 0.5, 1.5]
@@ -91,15 +92,17 @@ def test_parity_toy_fixtures(lam, use_astar):
             _assert_parity(pack, qc, seeds, dests, lam, use_astar, dest_pt)
 
 
-REAL_PACK = "data/packs/berkeley_small"
+# Resolved, not hardcoded: `data/` is gitignored, so a git worktree has no packs
+# of its own and a CWD-relative literal silently skips this test there. See
+# tests/helpers/packs.py.
+REAL_PACK = "berkeley_small"
 
 
-@pytest.mark.skipif(not os.path.isdir(REAL_PACK),
-                    reason="real pack not built")
+@pytest.mark.skipif(not has_real_pack(REAL_PACK), reason=skip_reason(REAL_PACK))
 @pytest.mark.parametrize("use_astar", [False, True], ids=["dijkstra", "astar"])
 def test_parity_real_pack(use_astar):
     cfg = Config.load()
-    pack = GraphPack.load(REAL_PACK)
+    pack = GraphPack.load(real_pack(REAL_PACK))
     qc = compute_costs(pack, free_flow(pack, cfg), cfg)
     rng = np.random.default_rng(42)
     checked = 0
