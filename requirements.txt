@@ -12,9 +12,9 @@
 
 fastapi==0.141.1
 httpx==0.28.1
-numpy==2.5.1
+numpy==2.5.3
 pydantic==2.13.4
-scipy==1.18.0
+scipy==1.18.1
 uvicorn[standard]==0.51.0
 
 # Imported lazily, and only when SR_REDIS_URL / [api].redis_url is set —
