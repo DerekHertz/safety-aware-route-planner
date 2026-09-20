@@ -67,10 +67,17 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
   - [ ] (3b) *Only if a pack ever exceeds ~5x a metro:* make the precompute **regional,
         not lazy** — fill a sub-region of the same full-size array, `+inf` elsewhere.
         Parity untouched, because both engines still receive one finished numpy array.
-  - [ ] (3c) The genuine lockstep PR: reusable scratch buffers for `dist`/`pred`
-        (`pyref/search.py`) and `dist`/`pred`/`dest_adjust` (`core/src/engine.cpp`),
-        which both allocate `O(E)` per search, 4-6 times a request. Arithmetic-neutral,
-        so the parity suite is a complete check.
+  - [ ] (3c) **CLOSED 2026-09-20 — built, measured, not worth it.** The genuine
+        lockstep PR: reusable scratch buffers for `dist`/`pred` (`pyref/search.py`) and
+        `dist`/`pred`/`dest_adjust` (`core/src/engine.cpp`), which both allocate `O(E)`
+        per search, 4-6 times a request. Built and correct (PR #48, draft), but it
+        measured **+2.58% slower** as written — confirmed codegen: binding the
+        buffers as `thread_local` references stops the compiler hoisting their data
+        pointers out of the relaxation loop. Rewriting to raw pointers erases the
+        regression, but only down to **+0.12%, p=0.87** — parity with baseline, not a
+        win. Do not rebuild this. If revisited, the raw-pointer form is the only one
+        worth trying, and it must clear a bar meaningfully better than parity. See
+        ADR-0009's 2026-09-20 amendment for the measurements.
 
 **Phase 2 - cheap wins, parallel to Phase 1.**
 
@@ -109,10 +116,12 @@ live speed into the safety severity term, measured volume profiles.
 
 Phase 1(3) **as originally written** was the only item on this list. The 2026-09-18
 re-scoping removes most of that risk by keeping every floating-point operation in numpy:
-1(3a) is `pyref`-only and bitwise-verifiable against a golden hash, and 1(3c) is
-arithmetic-neutral so the parity suite is a complete check on it. Only 1(3b) is genuinely
-risky, and it is now conditional on a pack size nothing on this plan calls for. The
-OpenLR-conflation and traffic-procurement risks were removed by ADR-0010's deferral.
+1(3a) is `pyref`-only and bitwise-verifiable against a golden hash. 1(3c) was
+arithmetic-neutral, so the parity suite was a complete check on it, but it measured
+slower and was closed 2026-09-20 without shipping — see ADR-0009's amendment of that
+date. Only 1(3b) is genuinely risky, and it is now conditional on a pack size nothing
+on this plan calls for. The OpenLR-conflation and traffic-procurement risks were
+removed by ADR-0010's deferral.
 
 1(3a) has since landed with its bits pinned, which retires that share of the risk. It
 also exposed a gap worth remembering: **the parity suite cannot catch a change to the

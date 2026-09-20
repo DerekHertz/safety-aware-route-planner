@@ -156,3 +156,88 @@ at three lambdas and `heuristic` byte-identical to the pre-hoist implementation 
 the real pack, and the golden digests in `tests/test_costs_golden.py`. The
 heuristic's node-gather identity — the one step with a real ulp risk, since it
 applies sin/cos/arcsin to a different-length array — holds on both real packs.
+
+## Amendment, 2026-09-20 — 1(3c) is built and measured; it is a regression, and the fix only reaches parity
+
+1(3c) — reusable per-thread scratch buffers for `dist`/`pred` (`pyref/search.py`) and
+`dist`/`pred`/`dest_adjust` (`core/src/engine.cpp`), replacing an `O(E)` allocation
+done 4-6 times per request — was built (PR #48, draft). It is correct and
+arithmetic-neutral. It measures slower.
+
+Setup: real pack `berkeley_oakland` (E=20,683 edges / T=61,955 turns), WSL, `impl="cpp"`,
+g++ 13.3.0 `-O2 -ffp-contract=off`, 40 fixed OD pairs, best-of-7 per pair in-process,
+**18 interleaved processes per variant** with rotated order (a Latin square, to cancel
+the cold-page-cache position bias on the first process of each round), compared pair by
+pair. Three variants: **base** (pre-change, function-local `std::vector`s), **ref** (the
+PR as written — `std::vector<T>&` references bound to a `thread_local` struct), and
+**raw** (same scratch, but taking `double* dist = scratch.dist.data();` etc. once at the
+top of `shortest_path`).
+
+Headline, median-across-processes estimator:
+
+| metric | ref-binding (the PR) | raw pointers |
+|---|---|---|
+| base median | 13.170 ms | 13.170 ms |
+| new median | 13.468 ms | 13.209 ms |
+| base total (40 pairs) | 534.23 ms | 534.23 ms |
+| new total (40 pairs) | 548.00 ms | 534.89 ms |
+| total delta | +13.76 ms (+2.58%) | +0.65 ms (+0.12%) |
+| median paired delta | +0.321 ms (+2.61%) | +0.012 ms (+0.09%) |
+| pairs faster with the change | 0 / 40 | 19 / 40 |
+| sign-test p | 1.8e-12 | 0.87 |
+
+Per-process sums (ms, n=18 each): base min 522.40 / med 534.86 / max 552.89; ref min
+535.77 / med 549.53 / max 556.67; raw min 509.12 / med 536.62 / max 543.05.
+
+**The codegen hypothesis was correct.** The PR's suspicion was that the slowdown is not
+the fill or the allocator but the compiler losing the ability to hoist the buffers' data
+pointers: as function-local non-escaping vectors it could keep them in registers, but as
+references into a globally-reachable `thread_local` it cannot prove `heap.push` (which
+may call `operator new`) does not alias them, so it reloads inside the relaxation loop
+that runs up to T = 61,955 times a request. Raw pointers erase the regression (+2.58% →
++0.12%), which confirms this.
+
+**But erasing it only buys parity.** Raw pointers land at +0.12% vs base, sign-test
+p=0.87, 19/40 pairs faster — a coin flip. There is no net win. That is the number that
+closes the item.
+
+**Estimator sensitivity is a methodological warning worth keeping.** Under the
+*min-across-processes* estimator that the original +1.85% result used, raw vs base reads
+**−2.42%** (27/40 pairs faster, p=0.038) — i.e. it looks like a win. That reading is an
+artifact: raw happened to draw one exceptionally quiet process (509.12 ms, vs 519.75 for
+the next-lowest and a 536.62 median), and min imports that single process's luck into
+every pair — visible as a contiguous block of pairs 16-37 all reading about −6%.
+Min-across-processes is only safe when the variants' per-process sums are cleanly
+separated — as they were in the original 4-process run, where every base process beat
+every new one. That is not the case in this 18-process run: base spans 522.40-552.89 and
+ref spans 535.77-556.67, which overlap, and base-vs-raw overlap almost entirely. When the
+distributions overlap, use median-across-processes or 18+ processes, and report both.
+(Base-vs-ref survives either estimator regardless, at 0/40 pairs faster and p=1.8e-12;
+it is the base-vs-raw comparison that the choice of estimator actually decides.)
+Two earlier 6-process replications contradicted each other on raw (+0.70% vs −1.09%) for
+exactly this reason.
+
+**Harness sanity check passed:** the ref build reproduced the originally recorded
++1.85% — it measured +1.97% under the original min-across estimator and +2.58% under
+median-across, with two independent 6-round replications at +2.71% and +2.39%. Same
+sign, same magnitude.
+
+**`__restrict` needs no separate measurement:** adding `__restrict` to the three raw
+pointers compiles to a byte-identical binary to plain raw pointers under g++ 13.3.0 at
+`-O2` (same md5). It is the same machine code.
+
+**Arithmetic-neutrality confirmed on the real pack:** all three builds emitted a
+byte-identical output digest over the 40 real-pack routes (full-precision geometry,
+unsafe dict, preference, maneuvers).
+
+Disassembling `Engine::shortest_path` to observe the pointer reload directly is useless
+— the symbol is a ~60-line stub in every build, because the body inlines into the pybind
+wrapper. The differing binary hashes plus the timing are the evidence that stands in for
+it.
+
+**1(3c) is closed as measured-and-not-worth-it.** The cost side of the ledger: a
+`thread_local`, a reset-semantics contract clause (P8, added in two files), a 248-line
+concurrency test, and a non-obvious raw-pointer idiom — all for zero measurable gain. If
+anyone revisits this, the raw-pointer variant is the only form worth considering, and it
+must clear a bar meaningfully better than parity before it is worth paying that cost
+again.
