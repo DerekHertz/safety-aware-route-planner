@@ -103,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       # Built and exercised on every PR, because the alternative is finding out
       # at deploy time. The image is loaded into the local daemon rather than
