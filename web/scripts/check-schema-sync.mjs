@@ -37,7 +37,11 @@ const PAIRS = {
   Segment: "Segment",
   UnsafePoint: "UnsafePoint",
   Maneuver: "Maneuver",
+  TrafficBasis: "TrafficBasis",
   Preference: "Preference",
+  // The /reroute input shape: Preference with an optional traffic_basis, so a
+  // client still following a v1 artifact can reroute (ADR-0004 schema v2).
+  CarriedPreference: "CarriedPreference",
   RouteAlternative: "RouteAlternative",
   RouteResponse: "RouteResponse",
   RerouteRequest: "RerouteRequest",

@@ -52,6 +52,23 @@ class Maneuver(BaseModel):
     lat: float
 
 
+class TrafficBasis(BaseModel):
+    """What traffic inputs a route was computed against (CONTEXT.md "traffic
+    basis"; ADR-0004 schema v2). Minted by `sim.snapshot`, which is where the
+    inputs actually come from — see `sim.snapshot.TrafficBasis` for the full
+    argument, including why `as_of` currently equals `departure_time` and when
+    it will stop doing so.
+
+    Nested rather than three flat `traffic_*` keys on `Preference` so the
+    eventual real-feed upgrade is a VALUE change (`source`, `as_of`) at one
+    key rather than a reshuffle of the preference object: ADR-0010's "a data
+    swap, not an architecture change", held at the contract.
+    """
+    source: str                      # "synthetic" today (ADR-0010)
+    as_of: datetime.datetime         # when those inputs were observed
+    profile_version: str             # content hash of the generating profiles
+
+
 class Preference(BaseModel):
     """The reproducible description of what a route was optimized for (ADR-0004):
     the human-meaningful safety-level label PLUS the resolved reproducer params.
@@ -60,13 +77,40 @@ class Preference(BaseModel):
 
     `lambda` is a Python keyword, so the field is `lambda_` with a wire alias;
     FastAPI serializes response models by alias, so the JSON/TS key is `lambda`.
+
+    This is the OUTPUT shape: every field is required, so a consumer reading an
+    artifact never has to null-check the basis. `CarriedPreference` below is
+    what the wire accepts back.
     """
     level: str                # "fast" | "balanced" | "safe" (== RouteAlternative.kind)
     lambda_: float = Field(alias="lambda")   # the safety weight that produced it
     detour_budget_pct: float  # RESOLVED (config default when the request omitted it)
     departure_time: datetime.datetime        # the departure basis the route used
+    traffic_basis: TrafficBasis              # what traffic it was computed against
 
     model_config = {"populate_by_name": True}
+
+
+class CarriedPreference(Preference):
+    """A preference arriving back OFF a client, on `RerouteRequest`.
+
+    Identical to `Preference` except that `traffic_basis` is optional, because
+    a client mid-drive is holding whatever artifact it was handed — possibly a
+    v1 one with no basis at all. The repo's contract rule is that new wire
+    shapes must be ADDITIVE, and a newly required field on a request model is
+    not additive: it would 422 an in-flight nav session at the first reroute,
+    which is precisely the session ADR-0008's reroute exists to keep alive.
+
+    Relaxing by subclass rather than duplicating the model keeps the two sides
+    provably the same four reproducer params, so they cannot drift.
+
+    The field is accepted and then IGNORED. A reroute builds a fresh snapshot
+    and its artifact reports THAT snapshot's basis; echoing the carried one
+    would label a new artifact with inputs it never used, and the difference
+    between the two is the disruption signal a consumer is diffing for
+    (ADR-0011).
+    """
+    traffic_basis: TrafficBasis | None = None
 
 
 class RouteAlternative(BaseModel):
@@ -92,9 +136,11 @@ class RerouteRequest(BaseModel):
     destination, carrying a prior artifact's `preference` so the replacement
     stays at the SAME safety level. The service recomputes only that one level.
     """
-    origin: LatLon           # the current position, mid-trip
-    destination: LatLon      # the original, unchanged destination
-    preference: Preference   # carried verbatim off the artifact being followed
+    origin: LatLon                  # the current position, mid-trip
+    destination: LatLon             # the original, unchanged destination
+    # Carried verbatim off the artifact being followed — which may be a v1
+    # artifact with no traffic_basis, hence the relaxed input model.
+    preference: CarriedPreference
 
 
 class RerouteResponse(BaseModel):

@@ -46,12 +46,16 @@ def test_route_contract_shape(client):
                                  "maneuvers", "detour_pct", "preference",
                                  "schema_version"}
         assert r["kind"] in ("fast", "balanced", "safe")
-        # route artifact v1 (ADR-0004): self-describing preference + version.
-        # Detailed assertions live in test_route_artifact_v1.py.
-        assert r["schema_version"] == 1
+        # route artifact v2 (ADR-0004): self-describing preference + version.
+        # Detailed assertions live in test_route_artifact_v1.py (the three
+        # tiers) and test_route_artifact_v2.py (traffic_basis).
+        assert r["schema_version"] == 2
         assert set(r["preference"].keys()) == {"level", "lambda",
                                                "detour_budget_pct",
-                                               "departure_time"}
+                                               "departure_time",
+                                               "traffic_basis"}
+        assert set(r["preference"]["traffic_basis"].keys()) == {
+            "source", "as_of", "profile_version"}
         assert r["preference"]["level"] == r["kind"]
         assert r["geometry"]["type"] == "LineString"
         assert len(r["geometry"]["coordinates"]) >= 2

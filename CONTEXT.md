@@ -80,6 +80,11 @@ resolved reproducer params. It exists because an artifact is **half perishable**
 `eta_s` and segment timings go stale while its unsafe counts and tiers stay reproducible
 -- and a consumer diffing two artifacts must be able to tell "traffic changed" from "these
 were computed against different data".
+Shipped 2026-09-19 as `preference.traffic_basis` = `{source, as_of, profile_version}`
+(ADR-0004 schema v2). `profile_version` is the third part the two-part definition above
+did not name: under the deterministic `[sim]` model `as_of` is just the departure clock,
+so a hash of the generating profiles is the only part of the basis that can actually
+differ between two artifacts today.
 _Avoid_: traffic source, snapshot (each names only half of it).
 
 **λ (lambda)**:

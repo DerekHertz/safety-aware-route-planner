@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import datetime
 import warnings
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -24,7 +24,7 @@ from pyref.graph import GraphPack
 from pyref.metrics import compute_metrics
 from pyref.search import PathResult, shortest_path, topo_of
 from pyref.snap import SnapCandidate, SnapIndex
-from sim.snapshot import at_time
+from sim.snapshot import TrafficBasis, at_time
 
 
 class RoutingError(Exception):
@@ -34,7 +34,11 @@ class RoutingError(Exception):
 # The route-artifact contract version (ADR-0004). Lives with the engine because
 # the engine emits the artifact; api/schemas.py just mirrors it onto the wire.
 # Bump this only on a deliberate breaking change to the artifact shape.
-ROUTE_SCHEMA_VERSION = 1
+#
+# 2 (ADR-0004 v2): `preference.traffic_basis`. The single place the version is
+# produced — every artifact takes it as RouteOut's default — so a bump is one
+# edit and cannot land half-applied.
+ROUTE_SCHEMA_VERSION = 2
 
 
 def _with_detour_pct(routes: list[RouteOut]) -> list[RouteOut]:
@@ -58,7 +62,8 @@ class RouteOut:
     segments: list[dict]
     unsafe_points: list[dict]
     maneuvers: list[dict]
-    preference: dict          # {level, lambda, detour_budget_pct, departure_time}
+    # {level, lambda, detour_budget_pct, departure_time, traffic_basis}
+    preference: dict
     detour_pct: float = 0.0   # extra time vs the fastest route in this response
     schema_version: int = ROUTE_SCHEMA_VERSION
 
@@ -74,6 +79,9 @@ class _Plan:
     dests: list[tuple[int, float]]
     h: np.ndarray | None
     same_edge: PathResult | None   # set when origin/dest share one directed edge
+    # The snapshot's own account of what traffic it was built from, forwarded
+    # unchanged into every artifact this plan produces (ADR-0004 v2).
+    basis: TrafficBasis
 
 
 class Router:
@@ -138,6 +146,7 @@ class Router:
             raise RoutingError("destination is too far from any drivable road")
 
         snap = at_time(pack, cfg, departure)
+        assert snap.basis is not None   # at_time always stamps one
         qc = compute_costs(pack, snap, cfg, self._statics)
 
         o_by_edge = {c.edge: c for c in o_cands}
@@ -161,7 +170,8 @@ class Router:
         if cfg["search"]["algo"] == "astar":
             h = heuristic(pack, qc, d_cands[0].lat, d_cands[0].lon)
         return _Plan(qc=qc, o_by_edge=o_by_edge, d_by_edge=d_by_edge,
-                     seeds=seeds, dests=dests, h=h, same_edge=same_edge)
+                     seeds=seeds, dests=dests, h=h, same_edge=same_edge,
+                     basis=snap.basis)
 
     def route(self, origin_lat: float, origin_lon: float,
               dest_lat: float, dest_lon: float,
@@ -193,7 +203,7 @@ class Router:
                                    plan.o_by_edge[res.first_edge],
                                    plan.d_by_edge[res.dest_edge],
                                    lam=lam_by_kind["fast"], budget=budget,
-                                   departure=departure)]
+                                   departure=departure, basis=plan.basis)]
 
         alts = self._alternatives(plan.qc, plan.seeds, plan.dests, plan.h,
                                   safety_enabled, detour_budget_pct)
@@ -203,7 +213,7 @@ class Router:
                                  plan.o_by_edge[a.result.first_edge],
                                  plan.d_by_edge[a.result.dest_edge],
                                  lam=lam_by_kind[a.kind], budget=budget,
-                                 departure=departure)
+                                 departure=departure, basis=plan.basis)
                   for a in alts]
         return _with_detour_pct(routes)
 
@@ -229,7 +239,7 @@ class Router:
                                   plan.o_by_edge[res.first_edge],
                                   plan.d_by_edge[res.dest_edge],
                                   lam=lam, budget=detour_budget_pct,
-                                  departure=departure)
+                                  departure=departure, basis=plan.basis)
 
         result = compute_single(
             self.pack, plan.qc, self.topo, plan.seeds, plan.dests, plan.h,
@@ -244,7 +254,7 @@ class Router:
                               plan.o_by_edge[result.first_edge],
                               plan.d_by_edge[result.dest_edge],
                               lam=lam, budget=detour_budget_pct,
-                              departure=departure)
+                              departure=departure, basis=plan.basis)
 
     def _alternatives(self, qc, seeds, dests, h, safety_enabled,
                       detour_budget_pct) -> list[Alternative]:
@@ -256,7 +266,8 @@ class Router:
     def _describe(self, kind: str, result: PathResult, qc,
                   oc: SnapCandidate, dc: SnapCandidate, *,
                   lam: float, budget: float,
-                  departure: datetime.datetime) -> RouteOut:
+                  departure: datetime.datetime,
+                  basis: TrafficBasis) -> RouteOut:
         pack = self.pack
         m = compute_metrics(pack, qc, result,
                             frac_origin=oc.frac, frac_dest=dc.frac)
@@ -275,5 +286,9 @@ class Router:
             # a consumer holds one route out of the response array (ADR-0004).
             preference={"level": kind, "lambda": lam,
                         "detour_budget_pct": budget,
-                        "departure_time": departure},
+                        "departure_time": departure,
+                        # forwarded from the snapshot, never re-derived here:
+                        # the engine must not have an opinion about what the
+                        # traffic inputs were (ADR-0004 v2, ADR-0010).
+                        "traffic_basis": asdict(basis)},
         )

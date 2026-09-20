@@ -14,7 +14,9 @@ from pyref.engine import Router
 from tests.helpers.fixtures import line3, unprotected_left_city
 
 CFG = Config.load()
-PREF_KEYS = {"level", "lambda", "detour_budget_pct", "departure_time"}
+# v2 (ADR-0004) added traffic_basis; the v1 tiers below are unchanged by it.
+PREF_KEYS = {"level", "lambda", "detour_budget_pct", "departure_time",
+             "traffic_basis"}
 
 
 @pytest.fixture()
@@ -45,7 +47,7 @@ def test_every_artifact_carries_preference_and_version(client):
     routes = client.post("/route", json=_body(client.pack, client.ids)).json()["routes"]
     assert len(routes) >= 2
     for r in routes:
-        assert r["schema_version"] == 1
+        assert r["schema_version"] == 2
         assert set(r["preference"].keys()) == PREF_KEYS
         # the label duplicates `kind` ON PURPOSE (ADR-0004): the artifact must
         # stay self-describing when pulled out of the response array.
@@ -109,7 +111,7 @@ def test_safety_off_single_fast_artifact_still_has_preference(client):
     assert [r["kind"] for r in routes] == ["fast"]
     assert routes[0]["preference"]["level"] == "fast"
     assert routes[0]["preference"]["lambda"] == 0.0
-    assert routes[0]["schema_version"] == 1
+    assert routes[0]["schema_version"] == 2
 
 
 def test_same_edge_shortcircuit_artifact_carries_preference():
@@ -126,7 +128,7 @@ def test_same_edge_shortcircuit_artifact_carries_preference():
                        departure=datetime.datetime(2026, 7, 24, 8, 30),
                        detour_budget_pct=0.5)
     assert len(out) == 1 and out[0].kind == "fast"
-    assert out[0].schema_version == 1
+    assert out[0].schema_version == 2
     assert out[0].preference["level"] == "fast"
     assert out[0].preference["lambda"] == 0.0
     assert out[0].preference["detour_budget_pct"] == 0.5

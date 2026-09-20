@@ -17,7 +17,8 @@ from pyref.engine import Router
 from tests.helpers.fixtures import line3, unprotected_left_city
 
 CFG = Config.load()
-PREF_KEYS = {"level", "lambda", "detour_budget_pct", "departure_time"}
+PREF_KEYS = {"level", "lambda", "detour_budget_pct", "departure_time",
+             "traffic_basis"}   # traffic_basis added by ADR-0004 v2
 
 
 @pytest.fixture()
@@ -72,7 +73,7 @@ def test_reroute_returns_single_artifact_at_carried_level(client):
     assert set(payload.keys()) == {"route"}
     art = payload["route"]
     assert art["kind"] == "safe"
-    assert art["schema_version"] == 1
+    assert art["schema_version"] == 2
     assert set(art["preference"].keys()) == PREF_KEYS
     assert art["preference"]["level"] == "safe"
 
@@ -137,7 +138,7 @@ def test_reroute_same_edge_shortcircuit_carries_preference():
                          detour_budget_pct=0.5,
                          departure=datetime.datetime(2026, 7, 24, 8, 30))
     assert art.kind == "fast"
-    assert art.schema_version == 1
+    assert art.schema_version == 2
     assert art.preference["level"] == "fast"
     assert art.preference["detour_budget_pct"] == 0.5
 
