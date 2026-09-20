@@ -133,10 +133,15 @@ golden digests as unverified.
 - **Parity core.** `pyref/` (reference) and `sr_core` (C++, optional) are held
   bitwise-identical; `sr_core` is absent locally (tests fall back to pyref).
 - **Green bar before a PR:** `.venv/bin/python -m pytest -q`, `.venv/bin/ruff
-  check .`, and (for web changes) `npx tsc --noEmit`, `npx eslint`, **and
-  `npm run format:check`** in `web/`. Prettier is not optional — the `web` CI
-  job runs `format:check` and fails the build on a style diff (this bit PR #35).
-  Run `npm run format` to auto-fix before committing.
+  check .`, `.venv/bin/python -m mypy`, and (for web changes) `npx tsc --noEmit`,
+  `npx eslint`, **and `npm run format:check`** in `web/`. Run mypy bare, with no
+  paths and no flags — the `lint` job runs it that way and fails the build, and
+  the file list and the deliberate leniency live in `[tool.mypy]` in
+  `pyproject.toml`. Neither pytest nor ruff is a substitute: a pydantic
+  field-type widening in a subclass passed both and still turned PR #45 red.
+  Prettier is not optional either — the `web` CI job runs `format:check` and
+  fails the build on a style diff (this bit PR #35). Run `npm run format` to
+  auto-fix before committing.
 
 - **Build `sr_core` locally, or you are not running the parity suite.**
   `tests/test_parity_cpp.py` opens with `pytest.importorskip("sr_core")`, so a
