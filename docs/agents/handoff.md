@@ -85,8 +85,8 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
 - [x] `traffic_basis` in `preference`, `schema_version` -> 2. Done 2026-09-19; see
       ADR-0004's "v2 as shipped" section. Nested `{source, as_of, profile_version}`, minted
       in `sim/snapshot.py` so the future feed swap is a value change; **required on output,
-      optional on input** via a `CarriedPreference` subclass, so a client mid-drive holding
-      a v1 artifact can still reroute. `as_of` duplicates `departure_time` under the
+      optional on input** via a sibling `CarriedPreference` model, so a client mid-drive
+      holding a v1 artifact can still reroute. `as_of` duplicates `departure_time` under the
       synthetic model and is documented as doing so; `profile_version` (a hash of `[sim]`)
       is the half that is real information today.
 - [ ] Promote live nav off `NEXT_PUBLIC_ENABLE_LIVE_NAV` (ADR-0008's resolution: wake lock

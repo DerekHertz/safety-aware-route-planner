@@ -60,7 +60,9 @@ the synthetic profiles" detectable from two artifacts alone.
 `/reroute`, carried verbatim off whatever artifact a client is following -- possibly a v1
 one. A newly required request field is not an additive change and would 422 an in-flight
 nav session at its first reroute, the exact session ADR-0008's reroute exists to keep
-alive. So `RerouteRequest` takes a `CarriedPreference`: `Preference` subclassed with
-`traffic_basis` relaxed to optional. The server ignores the carried value and reports the
-basis of the snapshot it actually computed, because echoing it would label a new artifact
-with inputs it never used.
+alive. So `RerouteRequest` takes a `CarriedPreference`: a sibling of `Preference` -- both
+extend a private base holding the four reproducer params -- with `traffic_basis` relaxed
+to optional. A sibling rather than a subclass because a preference whose basis may be
+missing is not substitutable for one that guarantees it, which mypy rejects outright. The
+server ignores the carried value and reports the basis of the snapshot it actually
+computed, because echoing it would label a new artifact with inputs it never used.

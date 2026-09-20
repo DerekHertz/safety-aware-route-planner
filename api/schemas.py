@@ -69,29 +69,36 @@ class TrafficBasis(BaseModel):
     profile_version: str             # content hash of the generating profiles
 
 
-class Preference(BaseModel):
-    """The reproducible description of what a route was optimized for (ADR-0004):
-    the human-meaningful safety-level label PLUS the resolved reproducer params.
-    A nav consumer replays these to reroute at the SAME safety level (ADR-0002)
-    instead of silently falling back to a time-only route.
+class _PreferenceParams(BaseModel):
+    """The four resolved reproducer params, shared by the two preference shapes
+    below so they cannot drift apart. Never referenced by a route, so it does
+    not appear in the OpenAPI document and needs no `types.ts` mirror.
 
     `lambda` is a Python keyword, so the field is `lambda_` with a wire alias;
     FastAPI serializes response models by alias, so the JSON/TS key is `lambda`.
-
-    This is the OUTPUT shape: every field is required, so a consumer reading an
-    artifact never has to null-check the basis. `CarriedPreference` below is
-    what the wire accepts back.
     """
     level: str                # "fast" | "balanced" | "safe" (== RouteAlternative.kind)
     lambda_: float = Field(alias="lambda")   # the safety weight that produced it
     detour_budget_pct: float  # RESOLVED (config default when the request omitted it)
     departure_time: datetime.datetime        # the departure basis the route used
-    traffic_basis: TrafficBasis              # what traffic it was computed against
 
     model_config = {"populate_by_name": True}
 
 
-class CarriedPreference(Preference):
+class Preference(_PreferenceParams):
+    """The reproducible description of what a route was optimized for (ADR-0004):
+    the human-meaningful safety-level label PLUS the resolved reproducer params.
+    A nav consumer replays these to reroute at the SAME safety level (ADR-0002)
+    instead of silently falling back to a time-only route.
+
+    This is the OUTPUT shape: every field is required, so a consumer reading an
+    artifact never has to null-check the basis. `CarriedPreference` below is
+    what the wire accepts back.
+    """
+    traffic_basis: TrafficBasis              # what traffic it was computed against
+
+
+class CarriedPreference(_PreferenceParams):
     """A preference arriving back OFF a client, on `RerouteRequest`.
 
     Identical to `Preference` except that `traffic_basis` is optional, because
@@ -101,8 +108,10 @@ class CarriedPreference(Preference):
     not additive: it would 422 an in-flight nav session at the first reroute,
     which is precisely the session ADR-0008's reroute exists to keep alive.
 
-    Relaxing by subclass rather than duplicating the model keeps the two sides
-    provably the same four reproducer params, so they cannot drift.
+    A SIBLING of `Preference`, not a subclass of it: a preference whose basis
+    may be missing is not substitutable for one that guarantees it, and mypy
+    rejects the widening outright. The shared private base is what keeps the
+    four reproducer params single-sourced.
 
     The field is accepted and then IGNORED. A reroute builds a fresh snapshot
     and its artifact reports THAT snapshot's basis; echoing the carried one
