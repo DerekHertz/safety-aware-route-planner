@@ -1,8 +1,8 @@
 import {
+  CarriedPreference,
   GeocodeResult,
   LatLon,
   PackMeta,
-  Preference,
   RerouteRequest,
   RerouteResponse,
   RouteRequest,
@@ -49,11 +49,15 @@ export async function fetchRoutes(
 /** Replan from `origin` to the original `destination` at the SAME safety level,
  *  by replaying a prior artifact's `preference` (ADR-0008). The server recomputes
  *  only that one level and returns a single artifact — never the fast/balanced/
- *  safe set — so a reroute can't silently swap the traveler's safety level. */
+ *  safe set — so a reroute can't silently swap the traveler's safety level.
+ *
+ *  Takes a `CarriedPreference` rather than a `Preference`: an artifact's own
+ *  (v2) preference satisfies it, and so does one carried off a pre-v2 artifact
+ *  that has no `traffic_basis` (ADR-0004 schema v2). */
 export async function fetchReroute(
   origin: LatLon,
   destination: LatLon,
-  preference: Preference,
+  preference: CarriedPreference,
 ): Promise<RerouteResponse> {
   // Typed, like fetchRoutes above, so the schema-sync check has the request
   // side of the contract to compare against.

@@ -24,8 +24,13 @@ function route(kind: RouteKind, etaS: number): RouteAlternative {
       lambda: 0,
       detour_budget_pct: 0.25,
       departure_time: "2026-09-18T08:00:00",
+      traffic_basis: {
+        source: "synthetic",
+        as_of: "2026-09-18T08:00:00",
+        profile_version: "0123456789ab",
+      },
     },
-    schema_version: 1,
+    schema_version: 2,
   };
 }
 

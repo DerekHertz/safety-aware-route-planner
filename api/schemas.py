@@ -52,11 +52,27 @@ class Maneuver(BaseModel):
     lat: float
 
 
-class Preference(BaseModel):
-    """The reproducible description of what a route was optimized for (ADR-0004):
-    the human-meaningful safety-level label PLUS the resolved reproducer params.
-    A nav consumer replays these to reroute at the SAME safety level (ADR-0002)
-    instead of silently falling back to a time-only route.
+class TrafficBasis(BaseModel):
+    """What traffic inputs a route was computed against (CONTEXT.md "traffic
+    basis"; ADR-0004 schema v2). Minted by `sim.snapshot`, which is where the
+    inputs actually come from — see `sim.snapshot.TrafficBasis` for the full
+    argument, including why `as_of` currently equals `departure_time` and when
+    it will stop doing so.
+
+    Nested rather than three flat `traffic_*` keys on `Preference` so the
+    eventual real-feed upgrade is a VALUE change (`source`, `as_of`) at one
+    key rather than a reshuffle of the preference object: ADR-0010's "a data
+    swap, not an architecture change", held at the contract.
+    """
+    source: str                      # "synthetic" today (ADR-0010)
+    as_of: datetime.datetime         # when those inputs were observed
+    profile_version: str             # content hash of the generating profiles
+
+
+class _PreferenceParams(BaseModel):
+    """The four resolved reproducer params, shared by the two preference shapes
+    below so they cannot drift apart. Never referenced by a route, so it does
+    not appear in the OpenAPI document and needs no `types.ts` mirror.
 
     `lambda` is a Python keyword, so the field is `lambda_` with a wire alias;
     FastAPI serializes response models by alias, so the JSON/TS key is `lambda`.
@@ -67,6 +83,43 @@ class Preference(BaseModel):
     departure_time: datetime.datetime        # the departure basis the route used
 
     model_config = {"populate_by_name": True}
+
+
+class Preference(_PreferenceParams):
+    """The reproducible description of what a route was optimized for (ADR-0004):
+    the human-meaningful safety-level label PLUS the resolved reproducer params.
+    A nav consumer replays these to reroute at the SAME safety level (ADR-0002)
+    instead of silently falling back to a time-only route.
+
+    This is the OUTPUT shape: every field is required, so a consumer reading an
+    artifact never has to null-check the basis. `CarriedPreference` below is
+    what the wire accepts back.
+    """
+    traffic_basis: TrafficBasis              # what traffic it was computed against
+
+
+class CarriedPreference(_PreferenceParams):
+    """A preference arriving back OFF a client, on `RerouteRequest`.
+
+    Identical to `Preference` except that `traffic_basis` is optional, because
+    a client mid-drive is holding whatever artifact it was handed — possibly a
+    v1 one with no basis at all. The repo's contract rule is that new wire
+    shapes must be ADDITIVE, and a newly required field on a request model is
+    not additive: it would 422 an in-flight nav session at the first reroute,
+    which is precisely the session ADR-0008's reroute exists to keep alive.
+
+    A SIBLING of `Preference`, not a subclass of it: a preference whose basis
+    may be missing is not substitutable for one that guarantees it, and mypy
+    rejects the widening outright. The shared private base is what keeps the
+    four reproducer params single-sourced.
+
+    The field is accepted and then IGNORED. A reroute builds a fresh snapshot
+    and its artifact reports THAT snapshot's basis; echoing the carried one
+    would label a new artifact with inputs it never used, and the difference
+    between the two is the disruption signal a consumer is diffing for
+    (ADR-0011).
+    """
+    traffic_basis: TrafficBasis | None = None
 
 
 class RouteAlternative(BaseModel):
@@ -92,9 +145,11 @@ class RerouteRequest(BaseModel):
     destination, carrying a prior artifact's `preference` so the replacement
     stays at the SAME safety level. The service recomputes only that one level.
     """
-    origin: LatLon           # the current position, mid-trip
-    destination: LatLon      # the original, unchanged destination
-    preference: Preference   # carried verbatim off the artifact being followed
+    origin: LatLon                  # the current position, mid-trip
+    destination: LatLon             # the original, unchanged destination
+    # Carried verbatim off the artifact being followed — which may be a v1
+    # artifact with no traffic_basis, hence the relaxed input model.
+    preference: CarriedPreference
 
 
 class RerouteResponse(BaseModel):

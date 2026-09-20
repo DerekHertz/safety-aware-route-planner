@@ -403,6 +403,10 @@ def _reroute_body(pack, ids):
     body = _route_body(pack, ids)
     body.pop("departure_time")
     body.pop("safety_enabled")
+    # Deliberately left as a v1-shaped preference (no traffic_basis): the
+    # quota suite exercises every /reroute path, so leaving it v1 keeps a
+    # second, incidental guard on the backward compatibility that
+    # test_route_artifact_v2.py asserts head-on.
     body["preference"] = {"level": "fast", "lambda": 0.0,
                           "detour_budget_pct": 0.25,
                           "departure_time": "2026-07-24T08:30:00"}
@@ -420,7 +424,7 @@ class TestRouteEndpoint:
         data = resp.json()
         assert set(data.keys()) == {"routes"}
         assert 1 <= len(data["routes"]) <= 3
-        assert data["routes"][0]["schema_version"] == 1
+        assert data["routes"][0]["schema_version"] == 2
 
     def test_over_the_quota_is_429_with_a_retry_after(self, make_client):
         c = make_client(burst=2.0)

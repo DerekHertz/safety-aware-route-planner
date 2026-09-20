@@ -111,6 +111,11 @@ def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
     # CPU-bound search never blocks the event loop.
     state = request.app.state.app_state
     pref = body.preference
+    # pref.traffic_basis is deliberately NOT read. It describes the artifact
+    # the client is currently following; this call builds a fresh snapshot and
+    # the artifact it returns reports THAT basis. It may also be absent
+    # entirely — a client mid-drive can be holding a v1 artifact (ADR-0004 v2;
+    # see CarriedPreference in api/schemas.py).
     try:
         art = state.router.reroute(
             body.origin.lat, body.origin.lon,

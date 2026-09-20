@@ -57,15 +57,55 @@ export interface Maneuver {
   lat: number;
 }
 
+/** What traffic inputs a route was computed against (ADR-0004 schema v2).
+ *
+ *  `source` is "synthetic" while the deterministic `[sim]` profiles are the
+ *  volume model (ADR-0010); a real feed changes this VALUE, not this shape.
+ *
+ *  `as_of` is when those inputs were observed. Under the synthetic model that
+ *  is a pure function of the departure clock, so today it EQUALS
+ *  `Preference.departure_time` — a deliberate, documented duplication that
+ *  ends when a real feed lands and the observation time stops being the
+ *  departure time. Don't build on the equality.
+ *
+ *  `profile_version` is a content hash of the generating profiles, so
+ *  "the synthetic profiles were retuned" is detectable from two artifacts
+ *  alone — the one thing that can actually differ under a deterministic
+ *  model. */
+export interface TrafficBasis {
+  source: string;
+  as_of: string;
+  profile_version: string;
+}
+
 /** The reproducible description of what a route was optimized for (ADR-0004):
  *  the safety-level label plus the resolved reproducer params. A nav consumer
  *  replays these to reroute at the SAME safety level (ADR-0002). `lambda` is the
- *  weight the level maps to — an internal knob; the UI shows `level`. */
+ *  weight the level maps to — an internal knob; the UI shows `level`.
+ *
+ *  This is the shape the server EMITS: `traffic_basis` is always present, so a
+ *  consumer reading an artifact never null-checks it. */
 export interface Preference {
   level: RouteKind;
   lambda: number;
   detour_budget_pct: number;
   departure_time: string;
+  traffic_basis: TrafficBasis;
+}
+
+/** A preference sent back to the server on /reroute. Identical to `Preference`
+ *  except that `traffic_basis` is optional, because a client mid-drive may be
+ *  following a v1 artifact that has none — a required request field would not
+ *  be an additive contract change and would 422 that in-flight nav session.
+ *  `Preference` is assignable to this, so callers just pass the artifact's own.
+ *  The server ignores it and reports the basis of the snapshot it actually
+ *  computes. */
+export interface CarriedPreference {
+  level: RouteKind;
+  lambda: number;
+  detour_budget_pct: number;
+  departure_time: string;
+  traffic_basis?: TrafficBasis;
 }
 
 export interface RouteAlternative {
@@ -106,7 +146,7 @@ export interface RouteResponse {
 export interface RerouteRequest {
   origin: LatLon;
   destination: LatLon;
-  preference: Preference;
+  preference: CarriedPreference;
 }
 
 /** A reroute yields ONE artifact at the carried level, not a `routes` list. */
