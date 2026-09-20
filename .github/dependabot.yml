@@ -6,7 +6,10 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # Raised from 5 on 2026-09-19. Four separate requirements files feed this
+    # one ecosystem, and at 5 the queue sat saturated for weeks — pydantic and
+    # uvicorn bumps were being suppressed with no signal that they existed.
+    open-pull-requests-limit: 10
     groups:
       # Tightly coupled and always bumped together; separate PRs for these
       # would just fight each other in the lockstep resolver.
@@ -19,7 +22,10 @@ updates:
     directory: "/web"
     schedule:
       interval: weekly
-    open-pull-requests-limit: 5
+    # Raised from 5 on 2026-09-19 for the same reason as pip: the queue was
+    # saturated, and two of the five slots were held by PRs blocked upstream
+    # with no fix available (see the ignore rules below).
+    open-pull-requests-limit: 10
     groups:
       next:
         patterns: ["next", "eslint-config-next", "@next/*"]
@@ -30,11 +36,61 @@ updates:
     # in scripts/assert-build-assets.mjs is what turns a stale copy into a red
     # build instead of a silently blank map — so that PR deserves to be read on
     # its own rather than buried in a group.
+    ignore:
+      # Each of these closed a real PR that cannot be made to pass. Without the
+      # rule dependabot reopens on every new release in the range, and each
+      # reopen consumes a slot. Every one is a HOLD, not a NEVER — the revisit
+      # condition is stated so a future reader knows what to re-check.
+
+      # eslint 10 removed context.getFilename(). eslint-plugin-react still
+      # calls it (util/version.js testReactVersion), and its newest release,
+      # 7.37.5, peers eslint "<=^9.7" — there is no v10-compatible version to
+      # upgrade or `overrides` to. We reach it only through eslint-config-next,
+      # which pins eslint-plugin-react ^7.37.0 identically in 16.2.11 through
+      # 16.4.0-canary. Closed #21. Revisit when eslint-config-next moves off
+      # that pin.
+      - dependency-name: "eslint"
+        versions: ["10.x"]
+
+      # TypeScript 7 is the Go port: its default export is lib/version.cjs, not
+      # the compiler API. Three things break at once — typescript-eslint gates
+      # on it explicitly (peers <6.1.0), Next's TS detection reports the package
+      # missing, and web/scripts/check-schema-sync.mjs uses the compiler API
+      # directly and would need rewriting against typescript/unstable/ast.
+      # Closed #20. Revisit when eslint-config-next moves off typescript-eslint
+      # ^8.x, and budget for the schema-sync rewrite separately.
+      - dependency-name: "typescript"
+        versions: ["7.x"]
+
+      # Pinned to the Node floor, not to latest. package.json declares
+      # engines.node ">=20.9.0" and README.md says Node 20.9+; typing against a
+      # newer major would let tsc accept APIs the declared floor does not have,
+      # and CI (Node 22) could not catch it. Closed #19. Move this and the
+      # engines floor in ONE commit when the floor moves — never separately.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
       interval: monthly
+    groups:
+      # The actions/* bumps arrive together and are read together; one PR for
+      # the set rather than four that each need their own CI run.
+      actions:
+        patterns: ["actions/*"]
 
-  # No docker entry yet — there is no Dockerfile until the hosting work lands.
-  # Add one alongside it.
+  # Tracks the FROM lines in the root Dockerfile (both stages are
+  # python:3.12-slim). Added 2026-09-19; the placeholder comment here claimed
+  # there was no Dockerfile, which stopped being true when badbbd0 added one on
+  # 2026-07-28 — the config had simply not been revisited since.
+  #
+  # CAVEAT: this ecosystem sees FROM lines ONLY. It will not see the inline
+  # `pip install --no-cache-dir "pybind11>=2.12" "setuptools>=68" wheel` on
+  # Dockerfile line 20, which is a third copy of floors also declared in
+  # requirements-dev.txt and core/pyproject.toml. Dependabot bumps the first
+  # of those three; the other two drift silently and need a human.
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
