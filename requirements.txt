@@ -28,4 +28,4 @@ redis==8.1.0
 # Windows, and python:*-slim carries no system tzdata either. This arrived
 # transitively via pandas (osmnx) until that moved out of this file, so the
 # per-region timezone handling in api/routes.py needs it stated outright.
-tzdata==2026.3
+tzdata==2026.4
