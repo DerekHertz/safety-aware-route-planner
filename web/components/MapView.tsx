@@ -315,8 +315,7 @@ export default function MapView({
     // Surface failures instead of swallowing them. Without this, a broken
     // style or tile source leaves a silently blank map with no diagnostic.
     map.on("error", (e) => {
-      const msg =
-        (e as { error?: Error })?.error?.message ?? "unknown map error";
+      const msg = e.error?.message ?? "unknown map error";
       console.error("[MapView]", msg);
       setMapError(msg);
     });
