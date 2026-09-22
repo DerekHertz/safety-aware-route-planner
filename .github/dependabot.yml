@@ -70,6 +70,16 @@ updates:
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
 
+      # vitest 5 is blocked by our own Node floor, not upstream: it peers
+      # @types/node "^22 || >=24" against the ^20 pin above, so `npm ci` dies
+      # with ERESOLVE, and its engines field ("^22.12 || ^24 || >=26") drops
+      # the declared 20.9 floor outright. Holding 5.x also frees dependabot to
+      # offer the 4.x security patch (4.1.11 closes alerts #5/#6). Closed #56.
+      # Revisit when engines.node moves to 22.12 — move engines.node,
+      # @types/node and vitest in ONE commit, as with the rule above.
+      - dependency-name: "vitest"
+        versions: ["5.x"]
+
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
