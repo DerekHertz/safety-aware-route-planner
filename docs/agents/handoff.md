@@ -58,12 +58,22 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
         **Measured -26% of per-request `O(pack)`, not the estimated 60-70%** — about
         -1.4 ms on a ~14 ms request. See ADR-0009's second 2026-09-18 amendment for
         the table and for two corrections worth reading before continuing this item.
-  - [ ] (3a-next) **`_cross_count` is what is left.** After the hoist it is ~45% of
-        the remaining `compute_costs` (~1.55 ms a request), running twice per request
-        over `edge_busy` and `edge_major`. Both masks are volume-dependent so it
-        cannot be hoisted; its index arrays already are. Needs an algorithmic idea,
-        not more lifting. A `np.bincount` rewrite of its histogram was tried and is
-        **slower** at this graph size — don't repeat it.
+  - [x] (3a-next) **DONE 2026-09-20 — `_cross_count` is deleted; `compute_costs` is
+        -44%.** The lever was not lifting but noticing the consumer: its `> 0` answer
+        is read at only `is_straight & observed & (ctrl_none | unprotected_approach)`
+        — **2,865 of 61,955 turns (4.6%)** — and only as an *any*, never as a count.
+        `_crossing_legs` lists each gated turn's crossed approaches once per pack;
+        per request it is one gather plus an `any`. Exact by construction (boolean
+        output, no ulp), the one premise — the two excluded legs being distinct edges
+        — asserted at build time. Measured on `berkeley_oakland`, 18 interleaved
+        processes a variant: `compute_costs` **3.39 -> 2.01 ms (-44%)**, whole request
+        **14.17 -> 13.19 ms (-6.8%)**, 40/40 pairs faster, sign-test p=1.8e-12, both
+        estimators agreeing; +3.3 ms once per pack at load. Golden digests unchanged;
+        `tests/test_cross_count.py` holds the old algorithm as a real-pack oracle.
+        The **fused-bit** variant (busy/major as bits of one array, one gather over
+        the union) was built and is **slower** — see the amendment before retrying it,
+        as with the older `np.bincount` attempt. ADR-0009's second 2026-09-20
+        amendment has the tables and what is left in `compute_costs`.
   - [ ] (3b) *Only if a pack ever exceeds ~5x a metro:* make the precompute **regional,
         not lazy** — fill a sub-region of the same full-size array, `+inf` elsewhere.
         Parity untouched, because both engines still receive one finished numpy array.

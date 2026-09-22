@@ -38,8 +38,8 @@ What is per-pack and what is per-query (ADR-0009, 2026-09-18)
 The departure time reaches this model through exactly one term: normalized
 volume. Everything else — severity, the speed and lanes norms, the median
 term, every control-override mask, the busy floor, the "physically big" test,
-the unsafe-predicate masks and the index arrays `_cross_count` gathers through
-— is a function of (pack, cfg) alone, and used to be rebuilt on every request.
+the unsafe-predicate masks and the crossing legs `_uncontrolled_crossing`
+gathers through — is a function of (pack, cfg) alone, and used to be rebuilt on every request.
 `PackStatics` holds that half, built once per pack (see `Router.__init__`);
 `compute_costs` computes it on demand when a caller does not supply it, so
 every existing call site keeps working, just without the saving.
@@ -135,10 +135,15 @@ class PackStatics:
     ctrl_none: np.ndarray        # bool, no control at all on the approach
     unprotected_approach: np.ndarray  # bool, holds a stop/yield line
 
-    # --- index arrays _cross_count would otherwise re-gather per request ---
-    in_head: np.ndarray          # i32[T], node this maneuver happens at
-    out_rev: np.ndarray          # i32[T], reverse of the out-edge (0 where none)
-    out_has_rev: np.ndarray      # bool[T]
+    # --- the crossing predicate's only consumers, and what they cross ---
+    # See `_crossing_legs`. `*_turns` are turn ids; `*_legs[j, i]` is the j-th
+    # other incoming approach at turn `*_turns[i]`'s node, padded by repeating
+    # a real one. One pair per mask: `busy` governs ctrl_none approaches,
+    # `major` governs stop/yield-holding ones.
+    cross_busy_turns: np.ndarray    # intp[n0]
+    cross_busy_legs: np.ndarray     # intp[D0, n0]
+    cross_major_turns: np.ndarray   # intp[n1]
+    cross_major_legs: np.ndarray    # intp[D1, n1]
 
 
 def _norm(x: np.ndarray, cap: float) -> np.ndarray:
@@ -273,8 +278,15 @@ def build_pack_statics(pack: GraphPack, cfg: Config) -> PackStatics:
            <= ROAD_CLASS_RANK[RoadClass[str(bc["major_class_max"])]])
     )
 
-    rev = pack.edge_reverse[out]
-    has_rev = rev >= 0
+    is_straight = pack.turn_maneuver == Maneuver.STRAIGHT
+    unprotected_approach = ((ctrl == Control.STOP_2WAY) | yielding) & must_stop
+    # The crossing predicate is read only through these two static gates
+    # (straight, observed, and the approach's control class) — everywhere
+    # else its answer is ANDed away. The two gates are disjoint by control.
+    busy_turns, busy_legs = _crossing_legs(
+        pack, is_straight & observed & ctrl_none)
+    major_turns, major_legs = _crossing_legs(
+        pack, is_straight & observed & unprotected_approach)
 
     return PackStatics(
         spd_n=spd_n,
@@ -290,39 +302,88 @@ def build_pack_statics(pack: GraphPack, cfg: Config) -> PackStatics:
         guessed_mult=guessed_mult,
         is_uturn=pack.turn_maneuver == Maneuver.UTURN,
         is_left=is_left,
-        is_straight=pack.turn_maneuver == Maneuver.STRAIGHT,
+        is_straight=is_straight,
         observed=observed,
         ctrl_none=ctrl_none,
         # Holding the stop sign or yield line at a 2-way stop means cross
         # traffic does NOT stop — no protection at all. This is the "pull up to
         # an arterial from a side street and squeeze into a gap" case.
-        unprotected_approach=(((ctrl == Control.STOP_2WAY) | yielding)
-                              & must_stop),
-        in_head=pack.edge_head[inn],
-        out_rev=np.where(has_rev, rev, 0),
-        out_has_rev=has_rev,
+        unprotected_approach=unprotected_approach,
+        cross_busy_turns=busy_turns,
+        cross_busy_legs=busy_legs,
+        cross_major_turns=major_turns,
+        cross_major_legs=major_legs,
     )
 
 
-def _cross_count(pack: GraphPack, st: PackStatics, inn: np.ndarray,
-                 mask: np.ndarray) -> np.ndarray:
-    """Does a STRAIGHT through this node cross a street matching `mask`?
+def _crossing_legs(pack: GraphPack,
+                   gate: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """For each turn in `gate`, the incoming approaches a STRAIGHT through its
+    node would cross.
 
-    Documented approximation: it does iff any OTHER incoming approach at the
-    node qualifies — excluding our own in-edge and the reverse of our out-edge,
-    which are the two legs we are travelling along rather than across.
+    Documented approximation: a straight crosses a street iff some OTHER
+    incoming approach at the node qualifies — excluding our own in-edge and the
+    reverse of our out-edge, which are the two legs we travel along rather than
+    across. This used to be a per-request node histogram over every edge
+    (`np.add.at`) and every turn, run once per mask (ADR-0009, 3a-next); the
+    legs are static, so they are listed here once instead.
+
+    Returns `(turns, legs)`: `legs[:, i]` lists turn `turns[i]`'s crossed
+    approaches, padded to a common depth by repeating its first one — a repeat
+    cannot change an any(). Turns with nothing to cross can never answer True
+    and are dropped. Column-major so the per-request reduce walks rows.
     """
-    # `np.add.at` rather than a bincount over the masked heads: the latter is
-    # the same integer histogram and avoids the unbuffered-scatter slow path,
-    # but it was measured SLOWER in situ here (0.052 s -> 0.066 s over 40
-    # requests), because at E ~= 20k the boolean-mask gather it needs costs
-    # more than the scatter it saves. Left as it was.
-    node_in = np.zeros(pack.num_nodes, dtype=np.int64)
-    np.add.at(node_in, pack.edge_head, mask.astype(np.int64))
-    count = node_in[st.in_head] - mask[inn].astype(np.int64)
-    count = count - np.where(st.out_has_rev,
-                             mask[st.out_rev].astype(np.int64), 0)
-    return count > 0
+    inn = pack.turn_in_edge
+    rev = pack.edge_reverse[pack.turn_out_edge]
+    # The old count subtracted both excluded legs, so it equalled "how many
+    # others match" only when they are two distinct edges. Ingestion forces
+    # out == reverse(in) to UTURN (ingestion/turns.py); guard the premise.
+    straight_reversal = (pack.turn_maneuver == Maneuver.STRAIGHT) & (rev == inn)
+    assert not straight_reversal.any(), (
+        "a STRAIGHT turn leaves along the reverse of its in-edge; the crossing "
+        "legs can no longer be listed statically without changing the count")
+
+    turns = np.flatnonzero(gate)
+    # Incoming edges per node, padded with -1: [num_nodes, max in-degree].
+    head = pack.edge_head
+    order = np.argsort(head, kind="stable")
+    indeg = np.bincount(head, minlength=pack.num_nodes)
+    width = max(int(indeg.max(initial=0)), 1)
+    start = np.concatenate(([0], np.cumsum(indeg)[:-1]))
+    slot = np.arange(len(order)) - np.repeat(start, indeg)
+    node_in = np.full((pack.num_nodes, width), -1, dtype=np.intp)
+    node_in[head[order], slot] = order
+
+    cand = node_in[head[inn[turns]]]
+    keep = ((cand >= 0) & (cand != inn[turns, None])
+            & (cand != rev[turns, None]))
+    has_any = keep.any(axis=1)
+    turns, cand, keep = turns[has_any], cand[has_any], keep[has_any]
+    # Kept legs first, then pad with the row's first kept leg.
+    cand = np.take_along_axis(cand, np.argsort(~keep, axis=1, kind="stable"),
+                              axis=1)
+    depth = int(keep.sum(axis=1).max(initial=1))
+    cand = cand[:, :depth]
+    pad = np.arange(depth)[None, :] >= keep.sum(axis=1)[:, None]
+    cand = np.where(pad, cand[:, :1], cand)
+    return turns.astype(np.intp), np.ascontiguousarray(cand.T, dtype=np.intp)
+
+
+def _uncontrolled_crossing(st: PackStatics, over_tau: np.ndarray,
+                           edge_busy: np.ndarray,
+                           edge_major: np.ndarray) -> np.ndarray:
+    """UNSAFE_CROSSING's predicate: an observed STRAIGHT over tau that crosses
+    a busy street from an uncontrolled approach, or a major one while holding a
+    stop/yield line. Computed only at the turns `_crossing_legs` listed — every
+    other turn is False by construction. The two turn sets are disjoint (one
+    keys off Control.NONE, the other off a held STOP_2WAY/YIELD), so the second
+    scatter cannot overwrite an answer from the first."""
+    out = np.zeros(len(over_tau), dtype=bool)
+    t = st.cross_busy_turns
+    out[t] = over_tau[t] & edge_busy[st.cross_busy_legs].any(axis=0)
+    t = st.cross_major_turns
+    out[t] = over_tau[t] & edge_major[st.cross_major_legs].any(axis=0)
+    return out
 
 
 def compute_costs(pack: GraphPack, snap: Snapshot, cfg: Config,
@@ -335,7 +396,6 @@ def compute_costs(pack: GraphPack, snap: Snapshot, cfg: Config,
     st = statics if statics is not None else build_pack_statics(pack, cfg)
 
     out = pack.turn_out_edge
-    inn = pack.turn_in_edge
 
     # --- the one term a departure time can move ---
     vol_n = _norm(snap.volume_vph_lane, cc["vol_norm_max_vph"])
@@ -373,13 +433,8 @@ def compute_costs(pack: GraphPack, snap: Snapshot, cfg: Config,
            | (st.unprotected_approach & edge_major[out]))
     )
 
-    uncontrolled_crossing = (
-        st.is_straight
-        & st.observed
-        & over_tau
-        & ((st.ctrl_none & _cross_count(pack, st, inn, edge_busy))
-           | (st.unprotected_approach & _cross_count(pack, st, inn, edge_major)))
-    )
+    uncontrolled_crossing = _uncontrolled_crossing(st, over_tau, edge_busy,
+                                                   edge_major)
 
     unsafe_type = np.zeros(pack.num_turns, dtype=np.uint8)
     unsafe_type[uncontrolled_crossing] = UNSAFE_CROSSING

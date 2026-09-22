@@ -241,3 +241,97 @@ concurrency test, and a non-obvious raw-pointer idiom — all for zero measurabl
 anyone revisits this, the raw-pointer variant is the only form worth considering, and it
 must clear a bar meaningfully better than parity before it is worth paying that cost
 again.
+
+## Amendment, 2026-09-20 (later) — 1(3a-next) is done: `_cross_count` is gone, −44% of `compute_costs`
+
+`_cross_count` — the node-level `np.add.at` histogram over every edge, gathered to
+every turn, run twice a request (`edge_busy`, `edge_major`) — is deleted. It is replaced
+by `_crossing_legs` (load time) plus `_uncontrolled_crossing` (per request) in
+`pyref/costs.py`. `sr_core` does not move; this is a `pyref`-only change.
+
+**The idea is not more lifting, it is noticing who reads the answer.** The count is
+consumed in exactly one place, and only through a `> 0` test ANDed with three static
+masks: `is_straight & observed & (ctrl_none | unprotected_approach)`. On
+`berkeley_oakland` that gate is true for **2,865 of 61,955 turns (4.6%)**, so the old
+code computed a histogram over all 20,683 edges and 61,955 turns to answer a question
+asked at 2,865 of them — twice. Since only `> 0` is read, no count is needed either:
+"does any other incoming approach at this node match" is an **any**, not a sum.
+
+What the rewrite does, per gated turn: list the node's *other* incoming approaches
+(everything but our in-edge and our out-edge's reverse) once per pack, padded to a
+common depth by repeating one of them — a repeat cannot change an `any()`. Per request
+it is one gather of shape `[depth, n]` (depth ≤ 4 here) and an `any` along axis 0. Turns
+with nothing to cross can never answer True and are dropped at build time.
+
+**It is exact, not merely close, and not by an FP argument** — the output is boolean, so
+there is no ulp in it. The one premise is that the two excluded legs are distinct edges;
+the old subtraction `node_in[head] − mask[inn] − mask[rev]` equals "how many others
+match" only then. `ingestion/turns.py` forces `out == reverse(in)` to UTURN, so no
+STRAIGHT can violate it — `_crossing_legs` asserts it at build time rather than assuming
+it, and `tests/test_cross_count.py` pins the assert.
+
+Setup, matching the 2026-09-20 amendment's methodology: real pack `berkeley_oakland`
+(E=20,683 / T=61,955), WSL, `impl="cpp"` with `sr_core` built, 40 fixed OD pairs,
+best-of-7 per pair in-process, **18 interleaved processes per variant** with the order
+rotated each round, compared pair by pair. Both estimators reported, per the warning
+recorded for 1(3c).
+
+| `compute_costs`, per request | median-across | min-across |
+|---|---|---|
+| base median | 3.394 ms | 2.821 ms |
+| new median | 2.012 ms | 1.553 ms |
+| base total (40 pairs) | 133.02 ms | 115.25 ms |
+| new total (40 pairs) | 74.15 ms | 66.13 ms |
+| total delta | **−58.87 ms (−44.3%)** | **−49.13 ms (−42.6%)** |
+| median paired delta | −1.390 ms (−41.1%) | −1.271 ms (−45.1%) |
+| pairs faster | 40 / 40 | 40 / 40 |
+| sign-test p | 1.8e-12 | 1.8e-12 |
+
+| whole `POST /route` | median-across | min-across |
+|---|---|---|
+| base median | 14.167 ms | 12.866 ms |
+| new median | 13.192 ms | 12.079 ms |
+| total delta (40 pairs) | **−39.08 ms (−6.77%)** | **−36.36 ms (−6.84%)** |
+| median paired delta | −0.990 ms (−6.9%) | −0.883 ms (−7.0%) |
+| pairs faster | 40 / 40 | 40 / 40 |
+| sign-test p | 1.8e-12 | 1.8e-12 |
+
+Per-process sums (ms, n=18 each): base min 534.03 / med 577.97 / max 649.09; new min
+502.37 / med 534.66 / max 664.63 — overlapping distributions, which is exactly why the
+paired, both-estimator reading is what the conclusion rests on; the unpaired per-process
+median delta is −43.31 ms at permutation p=0.0038. **Unlike 1(3c), the two estimators
+agree and every single pair moves the same way.**
+
+Replicated on `berkeley_small` (E=1,827 / T=5,365), 10 processes per variant:
+`compute_costs` −35.1% (0.243 → 0.158 ms), whole request −2.78% (3.053 → 2.984 ms),
+40/40 pairs faster, p=1.8e-12. The win shrinks with pack size, as expected — the gated
+fraction is what it scales with, not the edge count.
+
+**Load-time cost: +3.3 ms once per pack** (Router construction 72.1 → 75.4 ms), which
+buys −1.39 ms on every request after it.
+
+**The fused-bit variant was built and is slower — do not try it again.** Encoding
+busy/major as bits of one `uint8[E]`, gathering once over the union of both gated turn
+sets and testing a per-turn threshold measured **+9.6% median-across / +1.2% min-across
+on `compute_costs`** and +0.67% on the whole request (3/40 pairs faster, p=2.0e-08)
+against the split form that shipped. The reason is structural: `ctrl_none & observed` is
+**empty on both real packs** (an untagged approach is never OSM-observed), so the split
+form's busy gather is zero-width and the major gather is the only work, while fusing
+re-adds an `O(E)` bit-combine and a wider reduce to serve a set that is empty. Two
+gathers over disjoint sets beat one gather over their union here.
+
+**Arithmetic and output neutrality:** `tests/test_costs_golden.py`'s 495 digests are
+unchanged, and all 36 benchmark processes across both variants emitted one identical
+route digest (geometry, unsafe counts, segments, maneuvers, preference) over the 40
+real-pack routes. The golden corpus is toys only, so `tests/test_cross_count.py` adds
+the real-pack half: it keeps the old algorithm as an oracle and compares on both real
+packs over random masks (including `major ⊄ busy`, which `compute_costs` never produces)
+and at six real departure times.
+
+**What is left in `compute_costs` is now genuinely per-query and evenly spread** — the
+volume gather and norm, `raw`'s arithmetic and its two mask multiplies, the penalty
+clamp, the busy/major masks, `over_tau`, the unprotected-left predicate and the two tier
+scatters, all `O(T)` numpy with no remaining `O(pack)` scatter. It is ~2.0 ms of a
+~13.2 ms request (15%, down from 24%). There is no single item left worth naming; the
+next real step down would be evaluating the whole per-query half in one pass, which is
+the laziness this ADR already ruled out on parity grounds.
