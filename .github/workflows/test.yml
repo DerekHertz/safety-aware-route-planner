@@ -108,7 +108,7 @@ jobs:
       # Built and exercised on every PR, because the alternative is finding out
       # at deploy time. The image is loaded into the local daemon rather than
       # pushed — nothing is published from a PR.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           load: true
