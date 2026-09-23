@@ -16,15 +16,21 @@ network_type = "drive"
 # arterials) without reaching a mid-block crossing on the next segment.
 max_control_offset_m = 30.0
 
+# Every preset carries an IANA `timezone`: departure times are resolved into
+# the served pack's local wall clock before the traffic-profile lookup
+# (api/departure.py; ADR-0014 decision 7). Config, not the pack manifest, so
+# published packs need no rebuild. Missing on a served pack = startup failure.
 [region.presets.berkeley_small]
 # ~2x2 km central Berkeley dev box: fast Overpass pull, fast iteration.
 # bbox = [west, south, east, north]  (OSMnx v2 order: left, bottom, right, top)
 bbox = [-122.283, 37.855, -122.250, 37.880]
+timezone = "America/Los_Angeles"
 
 [region.presets.berkeley_oakland]
 # Confirmed initial target: Berkeley + North Oakland
 # (Albany/El Cerrito down to Lake Merritt).
 bbox = [-122.32, 37.77, -122.22, 37.90]
+timezone = "America/Los_Angeles"
 
 # -----------------------------------------------------------------------------
 # Attribute defaults applied when OSM tags are missing.

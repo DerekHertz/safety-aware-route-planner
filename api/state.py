@@ -14,7 +14,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from api.departure import pack_timezone
 from api.ratelimit import (
     PerClientLimiter,
     RateLimiter,
@@ -46,6 +48,9 @@ class AppState:
     # deployed, and re-reading the environment per request would only invite
     # the answer to change under a live limiter.
     trusted_proxies: int
+    # The served pack's IANA zone, from its config preset (api/departure.py).
+    # Departure times are resolved into it before the traffic-profile lookup.
+    pack_tz: ZoneInfo
 
     # Shorthands for the sole served pack. Kept because tests reach through
     # them (e.g. spying on `app_state.router.route`); they return the very
@@ -66,7 +71,10 @@ class AppState:
             entry = load_pinned_pack(pinned, cfg)
         else:
             entry = load_named_pack(Path(cfg["api"]["pack_dir"]), cfg.region_name, cfg)
+        tz = pack_timezone(cfg, entry.pack.meta.get("region"),
+                           allow_unconfigured=pinned is not None)
         return cls(cfg=cfg, registry=PackRegistry([entry]),
                    limiter=build_limiter(cfg),
                    route_limiter=build_route_limiter(cfg),
-                   trusted_proxies=trusted_proxies(cfg))
+                   trusted_proxies=trusted_proxies(cfg),
+                   pack_tz=tz)

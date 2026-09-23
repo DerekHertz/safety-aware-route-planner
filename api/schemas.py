@@ -19,7 +19,10 @@ class LatLon(BaseModel):
 class RouteRequest(BaseModel):
     origin: LatLon
     destination: LatLon
-    departure_time: datetime.datetime | None = None  # default: server "now"
+    # Naive = pack-local wall clock (used as-is); aware = an instant, converted
+    # into the pack's timezone; omitted = "now" in the pack's timezone. The
+    # artifact echoes the resolved naive local time (api/departure.py).
+    departure_time: datetime.datetime | None = None
     safety_enabled: bool = True
     # How much longer the "safe" route may be in exchange for avoiding every
     # counted unsafe maneuver outright. None = the config default; 0 disables
