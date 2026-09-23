@@ -8,7 +8,9 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from api.departure import pack_timezone
 from api.ratelimit import (
     PerClientLimiter,
     RateLimiter,
@@ -40,15 +42,22 @@ class AppState:
     # deployed, and re-reading the environment per request would only invite
     # the answer to change under a live limiter.
     trusted_proxies: int
+    # The served pack's IANA zone, from its config preset (api/departure.py).
+    # Departure times are resolved into it before the traffic-profile lookup.
+    pack_tz: ZoneInfo
 
     @classmethod
     def load(cls) -> AppState:
         cfg = Config.load(os.environ.get("SR_CONFIG", DEFAULT_CONFIG_PATH))
-        pack_dir = os.environ.get("SR_PACK_DIR")
+        pinned = os.environ.get("SR_PACK_DIR")
+        pack_dir = pinned
         if pack_dir is None:
             pack_dir = str(Path(cfg["api"]["pack_dir"]) / cfg.region_name)
         pack = GraphPack.load(pack_dir)
+        tz = pack_timezone(cfg, pack.meta.get("region"),
+                           allow_unconfigured=pinned is not None)
         return cls(cfg=cfg, pack=pack, router=Router(pack, cfg),
                    limiter=build_limiter(cfg),
                    route_limiter=build_route_limiter(cfg),
-                   trusted_proxies=trusted_proxies(cfg))
+                   trusted_proxies=trusted_proxies(cfg),
+                   pack_tz=tz)

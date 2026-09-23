@@ -1,10 +1,9 @@
 """POST /route — the core endpoint — and POST /reroute (ADR-0008)."""
 from __future__ import annotations
 
-import datetime
-
 from fastapi import APIRouter, Depends, HTTPException, Request
 
+from api.departure import resolve_departure
 from api.ratelimit import LimiterUnavailable, client_key, retry_after_header
 from api.schemas import (
     RerouteRequest,
@@ -86,7 +85,9 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
     # sync endpoint on purpose: FastAPI runs it in a worker thread, keeping
     # the event loop free while the (CPU-bound) search runs
     state = request.app.state.app_state
-    departure = body.departure_time or datetime.datetime.now()
+    # Pack-local wall clock (#63): naive passes through, aware is converted,
+    # omitted is "now" in the pack's zone — never the server's UTC clock.
+    departure = resolve_departure(body.departure_time, state.pack_tz)
     try:
         routes = state.router.route(
             body.origin.lat, body.origin.lon,
@@ -123,7 +124,7 @@ def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
             level=pref.level,
             lam=pref.lambda_,
             detour_budget_pct=pref.detour_budget_pct,
-            departure=pref.departure_time,
+            departure=resolve_departure(pref.departure_time, state.pack_tz),
         )
     except RoutingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
