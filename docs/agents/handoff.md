@@ -112,6 +112,24 @@ recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-000
 **Phase 4 - multi-metro.** Pack-per-metro selection and routing. **No longer gated on
 Phase 1(3)** — that gate was backwards: pack-per-metro keeps each pack metro-sized, so it
 needs a pack registry and a memory budget for N resident packs, not lazy costs.
+**Designed in [ADR-0014](../adr/0014-pack-registry-multi-metro.md) (proposed 2026-09-20)**
+— read it before starting. The short version: config names the served packs, their
+bboxes must be disjoint, and a request goes to the pack that contains both of its
+endpoints. Otherwise it gets a 422 with the existing `{detail}` shape, and no `/route`
+wire field changes. All packs are loaded eagerly. Measured cost: about 20 MiB
+resident per `berkeley_oakland`-sized pack. The ADR ends with a 7-step PR sequence;
+work through it in order:
+
+- [ ] (1) `PackRegistry` of one + pure `pack_for(o, d)` + startup validation.
+- [ ] (2) `[api] regions` / `SR_REGIONS`, eager load of N packs, real `/health` count.
+- [ ] (3) Route by coordinates; the 422 contract, on `/route` and `/reroute`.
+- [ ] (4) Per-pack IANA timezone for departure. This is also a latent bug today: an
+      omitted `departure_time` falls back to naive `now()` in a UTC container.
+- [ ] (5) `/geocode?region=`, bounding per pack.
+- [ ] (6) Additive `/meta.packs` and the client: initial view, coverage check, and a
+      cross-region pre-flight.
+- [ ] (7) Build a second real metro and **re-measure memory in the container**. The
+      metro-scale figure in the ADR is a guess.
 
 **Phase 5 - commute planner** (ADR-0011). Google Sign-In, accounts, saved commutes with
 user-set departure times, the **departure-time sweep** as the headline feature, a stubbed
