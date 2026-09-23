@@ -87,9 +87,10 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
     state = request.app.state.app_state
     # Pack-local wall clock (#63): naive passes through, aware is converted,
     # omitted is "now" in the pack's zone — never the server's UTC clock.
-    departure = resolve_departure(body.departure_time, state.pack_tz)
+    entry = state.registry.only()      # routing by coordinates: ADR-0014 step 3
+    departure = resolve_departure(body.departure_time, entry.tz)
     try:
-        routes = state.registry.only().router.route(
+        routes = entry.router.route(
             body.origin.lat, body.origin.lon,
             body.destination.lat, body.destination.lon,
             departure=departure,
@@ -117,14 +118,15 @@ def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
     # the artifact it returns reports THAT basis. It may also be absent
     # entirely — a client mid-drive can be holding a v1 artifact (ADR-0004 v2;
     # see CarriedPreference in api/schemas.py).
+    entry = state.registry.only()      # routing by coordinates: ADR-0014 step 3
     try:
-        art = state.registry.only().router.reroute(
+        art = entry.router.reroute(
             body.origin.lat, body.origin.lon,
             body.destination.lat, body.destination.lon,
             level=pref.level,
             lam=pref.lambda_,
             detour_budget_pct=pref.detour_budget_pct,
-            departure=resolve_departure(pref.departure_time, state.pack_tz),
+            departure=resolve_departure(pref.departure_time, entry.tz),
         )
     except RoutingError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

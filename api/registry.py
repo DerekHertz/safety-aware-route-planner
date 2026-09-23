@@ -9,6 +9,11 @@ invariants that make it one are checked at startup and are fatal:
   equal the manifest's `region`.
 * Served bboxes are **pairwise disjoint**.
 * A null bbox (a toy pack) is allowed only when it is the **sole** served pack.
+* Every served pack has a timezone (ADR-0014 decision 7), resolved once at
+  load and carried on its `PackEntry`.
+
+Which packs are served is `served_regions`: `[api] regions`, or `SR_REGIONS`,
+or else `[region.active]` (step 2).
 
 Conventions, which differ on purpose and are easy to swap:
 
@@ -25,10 +30,13 @@ not supported (west > east is rejected as malformed).
 """
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+import os
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
+from api.departure import pack_timezone
 from pyref.config import Config
 from pyref.engine import Router
 from pyref.graph import GraphPack
@@ -162,6 +170,33 @@ def validate_pack_name(name: str, meta: dict) -> None:
             "a served pack's directory name must equal its manifest region")
 
 
+# ------------------------------------------------------------ served set
+def served_regions(cfg: Config, env: Mapping[str, str] | None = None) -> list[str]:
+    """The names of the packs this deployment serves, in order.
+
+    `SR_REGIONS` (comma-separated, parsed like `SR_CORS_ORIGINS`: blanks
+    dropped, and an empty value counts as unset) overrides `[api] regions`;
+    with neither, the served set is `[region.active]`, so a single-pack
+    deployment needs no new config. `region.active` stays the *ingestion*
+    target; this list is the *served* set (ADR-0014 decision 1).
+    """
+    env = os.environ if env is None else env
+    raw = env.get("SR_REGIONS")
+    if raw:
+        names = [r.strip() for r in raw.split(",") if r.strip()]
+        if names:
+            return names
+    configured = cfg["api"].get("regions")
+    if configured is None:
+        return [cfg.region_name]
+    names = [str(r) for r in configured]
+    if not names:
+        raise PackConfigError(
+            "[api] regions is empty; list the packs to serve, or remove the key "
+            "to serve [region] active")
+    return names
+
+
 # ------------------------------------------------------------------- entries
 @dataclass(frozen=True)
 class PackEntry:
@@ -169,19 +204,30 @@ class PackEntry:
     pack: GraphPack
     router: Router
     bbox: BBox | None
+    # The pack's IANA zone (api/departure.py): departure times are resolved
+    # into it before the traffic-profile lookup.
+    tz: ZoneInfo
 
 
-def _entry(name: str, pack: GraphPack, cfg: Config) -> PackEntry:
+def _entry(name: str, pack: GraphPack, cfg: Config, tz: ZoneInfo) -> PackEntry:
     raw = pack.meta.get("bbox")
     bbox = None if raw is None else _check_bbox(name, raw)
-    return PackEntry(name=name, pack=pack, router=Router(pack, cfg), bbox=bbox)
+    return PackEntry(name=name, pack=pack, router=Router(pack, cfg), bbox=bbox, tz=tz)
 
 
 def load_named_pack(pack_root: str | Path, name: str, cfg: Config) -> PackEntry:
-    """Load `<pack_root>/<name>`, refusing it if its manifest names another region."""
+    """Load `<pack_root>/<name>`, refusing it if its manifest names another
+    region or its preset has no timezone."""
     pack = GraphPack.load(Path(pack_root) / name)
     validate_pack_name(name, pack.meta)
-    return _entry(name, pack, cfg)
+    tz = pack_timezone(cfg, name, allow_unconfigured=False)
+    return _entry(name, pack, cfg, tz)
+
+
+def load_served_packs(pack_root: str | Path, names: Sequence[str],
+                      cfg: Config) -> PackRegistry:
+    """Eagerly load every served pack and validate the set (ADR-0014 decision 3)."""
+    return PackRegistry([load_named_pack(pack_root, n, cfg) for n in names])
 
 
 def load_pinned_pack(pack_dir: str | Path, cfg: Config) -> PackEntry:
@@ -192,11 +238,15 @@ def load_pinned_pack(pack_dir: str | Path, cfg: Config) -> PackEntry:
     pack whose manifest says `berkeley_small`), so the directory name carries
     no meaning here and there is nothing to check it against. A manifest with
     no `region` falls back to the directory name.
+
+    A pinned pack whose region is not a config preset (the API tests' toy) is
+    served in UTC; one whose region *is* a preset must carry its timezone.
     """
     p = Path(pack_dir)
     pack = GraphPack.load(p)
-    name = pack.meta.get("region") or p.name
-    return _entry(str(name), pack, cfg)
+    region = pack.meta.get("region")
+    tz = pack_timezone(cfg, region, allow_unconfigured=True)
+    return _entry(str(region or p.name), pack, cfg, tz)
 
 
 # ------------------------------------------------------------------ registry

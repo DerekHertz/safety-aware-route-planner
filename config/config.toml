@@ -5,7 +5,10 @@
 # =============================================================================
 
 [region]
-# Active region preset (key into [region.presets]).
+# Active region preset (key into [region.presets]): the INGESTION target, i.e.
+# what `ingestion.build_pack` builds when no --region is given. It is NOT the
+# list of packs the API serves — that is `[api] regions` (ADR-0014), which
+# defaults to [active] when absent, so a single-pack deployment needs neither.
 active = "berkeley_oakland"
 network_type = "drive"
 
@@ -260,6 +263,16 @@ impl = "cpp"                  # "pyref" | "cpp"  (cpp falls back to pyref with a
                               # warning if the sr_core extension isn't built)
 
 [api]
+# The SERVED set (ADR-0014): the packs this deployment loads, each from
+# `<pack_dir>/<name>`, all eagerly at startup. Distinct from [region] active,
+# which is only the ingestion target. When this key is absent the served set is
+# [active], which is today's single-pack deployment; set it to serve several:
+#   regions = ["berkeley_oakland", "another_metro"]
+# SR_REGIONS (comma-separated) overrides it per deployment. Every served name
+# must be a [region.presets] entry with a `timezone`, its manifest `region`
+# must equal its directory name, and the served bboxes must be pairwise
+# disjoint (touching counts) — any violation fails startup. SR_PACK_DIR pins a
+# single pack directory instead and ignores this list.
 host = "127.0.0.1"
 port = 8000
 cors_origins = ["http://localhost:3000"]

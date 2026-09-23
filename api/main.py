@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 
 from api import geocode, meta, routes
 from api.packs_fetch import ensure_packs
+from api.registry import served_regions
 from api.state import AppState
 from pyref.config import DEFAULT_CONFIG_PATH, Config
 
@@ -33,22 +34,28 @@ def _cors_origins(cfg: Config) -> list[str]:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # A fresh container has no packs (data/ is gitignored and building one hits
-    # Overpass), so pull anything missing before the router needs it. No-ops
-    # when the pack is already on disk, which is the local-dev and CI case.
+    # Overpass), so pull anything missing before the router needs it — every
+    # served pack, not just one (ADR-0014 step 2). No-ops when the packs are
+    # already on disk, which is the local-dev and CI case.
     #
     # SR_PACK_DIR pins one explicit pack directory — the test suite points it at
     # a generated toy pack — so when it is set we must not touch the network at
-    # all, or every API test would depend on a bucket.
+    # all, or every API test would depend on a bucket. It also bypasses the
+    # served list, so there is nothing to fetch.
     if os.environ.get("SR_PACK_DIR") is None:
         cfg = Config.load(os.environ.get("SR_CONFIG", DEFAULT_CONFIG_PATH))
-        fetched = ensure_packs([cfg.region_name], cfg["api"]["pack_dir"])
+        fetched = ensure_packs(served_regions(cfg), cfg["api"]["pack_dir"])
         if fetched:
             print(f"[api] fetched pack(s) from object storage: {', '.join(fetched)}")
 
+    # Every served pack is loaded here, eagerly, before `app_state` exists —
+    # and /health answers 503 until it does, so no traffic arrives early.
     app.state.app_state = AppState.load()
-    m = app.state.app_state.pack.meta
-    print(f"[api] serving pack '{m.get('region')}' "
-          f"({app.state.app_state.pack.num_edges:,} directed edges)")
+    reg = app.state.app_state.registry
+    for name in reg.names():
+        entry = reg[name]
+        print(f"[api] serving pack '{name}' "
+              f"({entry.pack.num_edges:,} directed edges, {entry.tz.key})")
     yield
     # Hands back the Redis connection pools; a no-op for the in-process buckets.
     # Two limiters, two pools: the Nominatim budget and the per-client routing
@@ -102,12 +109,16 @@ def create_app() -> FastAPI:
                 {"status": "starting", "detail": "graph pack not loaded yet"},
                 status_code=503,
             )
+        reg = state.registry
+        entries = [reg[n] for n in reg.names()]
+        # Every Router picks its engine the same way (sr_core importable or
+        # not), so the first one speaks for all of them.
         return {
             "status": "ok",
-            "packs_loaded": 1,
-            "region": state.pack.meta.get("region"),
-            "num_edges": state.pack.num_edges,
-            "engine": state.router._impl,
+            "packs_loaded": len(entries),
+            "regions": [e.name for e in entries],
+            "num_edges": sum(e.pack.num_edges for e in entries),
+            "engine": entries[0].router._impl,
         }
 
     return app

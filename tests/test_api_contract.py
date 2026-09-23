@@ -138,7 +138,7 @@ def test_health(client):
     assert body["status"] == "ok"
     assert body["packs_loaded"] == 1
     assert body["engine"] in {"cpp", "pyref"}
-    assert body["region"] == "toy"
+    assert body["regions"] == ["toy"]      # was `region`; a list since ADR-0014 step 2
     assert body["num_edges"] > 0
 
 
