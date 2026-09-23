@@ -16,10 +16,11 @@ router = APIRouter()
 @router.get("/meta", response_model=MetaResponse)
 def meta(request: Request) -> MetaResponse:
     state = request.app.state.app_state
-    m = state.pack.meta
+    pack = state.registry.only().pack
+    m = pack.meta
     return MetaResponse(
         region=m.get("region", "unknown"),
         # Toy/test packs carry no bbox; a null bbox disables coverage checks.
         bbox=m.get("bbox"),
-        num_edges=state.pack.num_edges,
+        num_edges=pack.num_edges,
     )

@@ -56,7 +56,7 @@ async def geocode(request: Request, q: str = Query(min_length=2, max_length=200)
             429, "too many geocoding requests",
             headers={"Retry-After": retry_after_header(retry_after)})
 
-    bbox = state.pack.meta.get("bbox")
+    bbox = state.registry.only().pack.meta.get("bbox")
     # Annotated because the mixed str/int values otherwise infer as
     # dict[str, object], which httpx's params type does not accept.
     params: dict[str, str | int] = {"q": q, "format": "jsonv2", "limit": 5}

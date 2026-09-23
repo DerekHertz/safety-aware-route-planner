@@ -88,7 +88,7 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
     state = request.app.state.app_state
     departure = body.departure_time or datetime.datetime.now()
     try:
-        routes = state.router.route(
+        routes = state.registry.only().router.route(
             body.origin.lat, body.origin.lon,
             body.destination.lat, body.destination.lon,
             departure=departure,
@@ -117,7 +117,7 @@ def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
     # entirely — a client mid-drive can be holding a v1 artifact (ADR-0004 v2;
     # see CarriedPreference in api/schemas.py).
     try:
-        art = state.router.reroute(
+        art = state.registry.only().router.reroute(
             body.origin.lat, body.origin.lon,
             body.destination.lat, body.destination.lon,
             level=pref.level,
