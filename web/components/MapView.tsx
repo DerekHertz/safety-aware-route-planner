@@ -12,6 +12,11 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection } from "geojson";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { bboxToLngLatBounds } from "@/lib/coverage";
+import {
+  bottomOverlap,
+  initialFitPadding,
+  shouldRefitInitial,
+} from "@/lib/initialFit";
 import { LatLon, RouteAlternative, RouteKind } from "@/lib/types";
 
 // OpenFreeMap: genuinely free vector tiles, no API key. (MapLibre demotiles
@@ -92,6 +97,11 @@ interface Props {
   /** Fired with the map's center after it loads and after every move, so the
    *  caller can tell which served pack the map is showing. */
   onViewChange?: (center: LatLon) => void;
+  /** An element floating over the bottom of the map (the mobile bottom
+   *  sheet). Its measured overlap pads the first framing of
+   *  `initialBounds`, so the region is not opened underneath it. An element
+   *  beside the map, like the desktop sidebar column, overlaps nothing. */
+  bottomOverlayRef?: React.RefObject<HTMLElement | null>;
 }
 
 const emptyFC = (): FeatureCollection => ({
@@ -116,12 +126,17 @@ export default function MapView({
   originMarkerPosition = origin,
   initialBounds,
   onViewChange,
+  bottomOverlayRef,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
   const originMarker = useRef<Marker | null>(null);
   const destMarker = useRef<Marker | null>(null);
   const layersReady = useRef(false);
+  // Set by anything that moves the camera after construction — a gesture, the
+  // first-GPS-fix flyTo, camera follow, a route fit — so the one-off padded
+  // re-fit of initialBounds never overrides it.
+  const cameraMoved = useRef(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
   // Refs so the map's event handlers see current props without being torn down
@@ -141,6 +156,7 @@ export default function MapView({
     onUserGesture,
     onViewChange,
     initialBounds,
+    bottomOverlayRef,
   });
   const routesRef = useRef({ routes, selected });
   useEffect(() => {
@@ -152,6 +168,7 @@ export default function MapView({
       onUserGesture,
       onViewChange,
       initialBounds,
+      bottomOverlayRef,
     };
     routesRef.current = { routes, selected };
   });
@@ -344,6 +361,45 @@ export default function MapView({
     }
     mapRef.current = map;
 
+    // ...then, once the canvas has its real size, re-frame the same bbox
+    // padded clear of the bottom sheet (and the controls). Instant, so it is
+    // not a visible jump; once; and never over a camera something else has
+    // already moved. On an ordinary page the container is laid out before the
+    // map is built, so this lands on the very first call below, before the
+    // first frame; the resize paths retry it when the canvas started at the
+    // 400x300 fallback.
+    let refitDone = false;
+    const tryInitialRefit = () => {
+      const el = containerRef.current;
+      if (!el) return;
+      const w = el.clientWidth;
+      const h = el.clientHeight;
+      const canvas = map.getCanvas();
+      const sized =
+        w > 0 && h > 0 && canvas.clientWidth === w && canvas.clientHeight === h;
+      if (
+        !bounds ||
+        !shouldRefitInitial({
+          done: refitDone,
+          hasBounds: true,
+          cameraMoved: cameraMoved.current,
+          sized,
+        })
+      ) {
+        return;
+      }
+      refitDone = true;
+      const overlay = stateRef.current.bottomOverlayRef?.current ?? null;
+      const sheet = bottomOverlap(
+        el.getBoundingClientRect(),
+        overlay?.getBoundingClientRect() ?? null,
+      );
+      const padding = initialFitPadding({ width: w, height: h }, sheet);
+      if (!padding) return; // sheet expanded: nothing worth framing into
+      map.fitBounds(bboxToLngLatBounds(bounds), { padding, animate: false });
+    };
+    tryInitialRefit();
+
     // Surface failures instead of swallowing them. Without this, a broken
     // style or tile source leaves a silently blank map with no diagnostic.
     map.on("error", (e) => {
@@ -359,6 +415,7 @@ export default function MapView({
     // "load" event (which also waits on sources and therefore on rendering).
     const tryInit = () => initLayers(map);
     map.on("load", tryInit);
+    map.on("load", tryInitialRefit);
     map.on("style.load", tryInit);
     map.on("styledata", tryInit);
     tryInit();
@@ -367,7 +424,10 @@ export default function MapView({
     // at zero size (created before layout, or while the tab/pane is hidden)
     // the canvas sticks at MapLibre's 400x300 fallback forever and the map
     // renders into a corner of a blank area. Watch the container itself.
-    const ro = new ResizeObserver(() => map.resize());
+    const ro = new ResizeObserver(() => {
+      map.resize();
+      tryInitialRefit();
+    });
     ro.observe(containerRef.current);
 
     // Belt and braces: ResizeObserver callbacks are delivered during the
@@ -384,6 +444,7 @@ export default function MapView({
       if (w === 0 || h === 0) return;
       const canvas = map.getCanvas();
       if (canvas.clientWidth !== w || canvas.clientHeight !== h) map.resize();
+      tryInitialRefit();
       if (!layersReady.current) tryInit();
     }, 500);
 
@@ -394,6 +455,7 @@ export default function MapView({
       if (document.visibilityState !== "visible") return;
       map.resize();
       map.triggerRepaint();
+      tryInitialRefit();
       tryInit();
     };
     document.addEventListener("visibilitychange", onVisible);
@@ -402,7 +464,9 @@ export default function MapView({
     // other nav app — "originalEvent" is what distinguishes a real gesture
     // from our own programmatic easeTo/flyTo/fitBounds calls, which don't set it.
     const onGesture = (e: { originalEvent?: unknown }) => {
-      if (e.originalEvent) stateRef.current.onUserGesture?.();
+      if (!e.originalEvent) return;
+      cameraMoved.current = true;
+      stateRef.current.onUserGesture?.();
     };
     const reportView = () => {
       const c = map.getCenter();
@@ -454,6 +518,7 @@ export default function MapView({
       if (coords.length) {
         const lons = coords.map((c) => c[0]);
         const lats = coords.map((c) => c[1]);
+        cameraMoved.current = true;
         map.fitBounds(
           [
             [Math.min(...lons), Math.min(...lats)],
@@ -471,6 +536,7 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flyTo) return;
+    cameraMoved.current = true;
     map.flyTo({
       center: [flyTo.lon, flyTo.lat],
       zoom: Math.max(map.getZoom(), 14),
@@ -490,6 +556,7 @@ export default function MapView({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !cameraFollow || !followTarget) return;
+    cameraMoved.current = true;
     map.easeTo({
       center: [followTarget.lon, followTarget.lat],
       bearing: heading ?? map.getBearing(),
