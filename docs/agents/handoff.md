@@ -143,17 +143,28 @@ work through it in order:
       `tests/test_route_by_coords.py` (spies on each served `Router`, a recording
       limiter for the spent token, the null-bbox `SR_PACK_DIR` toy still getting the
       snap-failure 422, and a byte-identical `berkeley_oakland` artifact through the
-      registry vs a direct `Router`). **Still one-pack only:** `/meta` reads
-      `registry.only()`, so on a deployment serving ≥2 packs it returns 500 until (6)
-      lands. `AppState.pack`/`.router` are single-pack shortcuts too.
+      registry vs a direct `Router`). The "still one-pack only" gaps noted here are
+      closed by (5) and (6): no handler reads `registry.only()` any more, and
+      `AppState.pack`/`.router` are gone.
 - [x] (4) Per-pack IANA timezone for departure (#72, done before (2) and merged into
       it). `api/departure.py`: `resolve_departure` + `pack_timezone`; `timezone` on
       each `[region.presets.*]`, missing on a served pack = startup failure.
 - [x] (5) `/geocode?region=`, bounding per pack (#75). Unknown region is 422 before
       cache/bucket; several packs and no region = one unbounded query (limit 20),
       post-filtered to served bboxes, top 5 returned. Cache keys on `(q, region)`.
-- [ ] (6) Additive `/meta.packs` and the client: initial view, coverage check, and a
-      cross-region pre-flight.
+- [x] (6) Additive `/meta.packs` and the client: initial view, coverage check, and a
+      cross-region pre-flight. Done 2026-09-24. `/meta` lists every served pack
+      (`ServedPack`, default first) and keeps the top-level fields as the default pack;
+      tests in `tests/test_meta_packs.py`. Client helpers are pure and live in
+      `web/lib/coverage.ts` (`packForPoint`, `insideCoverage`, `initialViewBbox`,
+      `preflight`, `normalizeMeta` for a server without `packs`). `MapView` has no
+      hard-coded center: it is not constructed until `/meta` settles, then frames the
+      pack containing the GPS fix (else the default pack), or the whole world if
+      `/meta` failed or the pack has no bbox. The geocoder sends `region` = the pack
+      the map center is in, else the GPS fix's. With ≥2 packs, every endpoint
+      (`/route`, `/reroute`, `/geocode`, `/meta`, `/health`) now answers without a
+      500. `AppState.pack`/`.router` were removed (only tests used them);
+      `PackRegistry.only()` stays, for tests only.
 - [ ] (7) Build a second real metro and **re-measure memory in the container**. The
       metro-scale figure in the ADR is a guess.
 

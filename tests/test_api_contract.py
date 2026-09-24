@@ -147,11 +147,14 @@ def test_meta_shape(client):
     resp = client.get("/meta")
     assert resp.status_code == 200
     data = resp.json()
-    assert set(data.keys()) == {"region", "bbox", "num_edges"}
+    assert set(data.keys()) == {"region", "bbox", "num_edges", "packs"}
     assert data["region"] == "toy"
     # toy packs declare no bbox -> null disables the client coverage check
     assert data["bbox"] is None
     assert data["num_edges"] == client.pack.num_edges
+    # ADR-0014 decision 6: every served pack, default first.
+    assert data["packs"] == [
+        {"region": "toy", "bbox": None, "num_edges": client.pack.num_edges}]
 
 
 def test_meta_bbox_present_for_real_region(tmp_path, monkeypatch):

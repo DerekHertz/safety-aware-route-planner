@@ -460,13 +460,13 @@ class TestRouteEndpoint:
         c = make_client(burst=1.0)
         c.post("/route", json=_route_body(c.pack, c.ids))
         calls = []
-        real_route = c.app.state.app_state.router.route
+        real_route = c.app.state.app_state.registry.only().router.route
 
         def counting(*a, **kw):
             calls.append(1)
             return real_route(*a, **kw)
 
-        c.app.state.app_state.router.route = counting
+        c.app.state.app_state.registry.only().router.route = counting
         assert c.post("/route", json=_route_body(c.pack, c.ids)).status_code == 429
         assert calls == []
         # The spy is on the Router the handler actually selects: once the

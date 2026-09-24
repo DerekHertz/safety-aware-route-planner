@@ -34,8 +34,6 @@ from api.registry import (
     served_regions,
 )
 from pyref.config import DEFAULT_CONFIG_PATH, Config
-from pyref.engine import Router
-from pyref.graph import GraphPack
 
 
 @dataclass
@@ -56,18 +54,6 @@ class AppState:
     # deployed, and re-reading the environment per request would only invite
     # the answer to change under a live limiter.
     trusted_proxies: int
-
-    # Shorthands for the sole served pack; they raise with two or more. The
-    # handlers select per request (`registry.pack_for`), but these return the
-    # very objects the registry holds, so on a one-pack deployment a patch
-    # through one (a spy on `app_state.router.route`) is seen by the handlers.
-    @property
-    def pack(self) -> GraphPack:
-        return self.registry.only().pack
-
-    @property
-    def router(self) -> Router:
-        return self.registry.only().router
 
     @classmethod
     def load(cls) -> AppState:

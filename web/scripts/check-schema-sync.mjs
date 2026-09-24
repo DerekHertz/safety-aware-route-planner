@@ -50,6 +50,8 @@ const PAIRS = {
   // Names differ on purpose: the server calls it MetaResponse, the client
   // PackMeta.
   MetaResponse: "PackMeta",
+  // One entry of MetaResponse.packs (ADR-0014 decision 6).
+  ServedPack: "ServedPack",
 };
 
 const IGNORED = new Set([

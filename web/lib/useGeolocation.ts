@@ -191,10 +191,3 @@ export function distanceMeters(a: LatLon, b: LatLon): number {
     Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
-
-/** bbox is [west, south, east, north]; null bbox means "no known coverage". */
-export function insideBbox(p: LatLon, bbox: number[] | null): boolean {
-  if (!bbox || bbox.length !== 4) return true;
-  const [west, south, east, north] = bbox;
-  return p.lon >= west && p.lon <= east && p.lat >= south && p.lat <= north;
-}

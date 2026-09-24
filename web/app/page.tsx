@@ -6,6 +6,14 @@ import NavHud from "@/components/NavHud";
 import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
+import {
+  coverageLabel,
+  initialViewBbox,
+  insideCoverage,
+  packForPoint,
+  preflight,
+  regionLabel as labelOf,
+} from "@/lib/coverage";
 import { compareRoutes } from "@/lib/routeComparison";
 import {
   DEFAULT_DETOUR_BUDGET,
@@ -24,11 +32,7 @@ import {
   formatDuration,
   isUnitSystem,
 } from "@/lib/units";
-import {
-  distanceMeters,
-  insideBbox,
-  useGeolocation,
-} from "@/lib/useGeolocation";
+import { distanceMeters, useGeolocation } from "@/lib/useGeolocation";
 import { useHeading } from "@/lib/useHeading";
 import {
   COMPACT_QUERY,
@@ -76,6 +80,9 @@ export default function Home() {
   const [coverageNote, setCoverageNote] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState(true);
   const [flyTo, setFlyTo] = useState<LatLon | null>(null);
+  // Where the map is looking, reported by MapView after every move. Decides
+  // which served pack a geocoder search is bounded to.
+  const [mapCenter, setMapCenter] = useState<LatLon | null>(null);
   // Continuously recenters/rotates the camera on the live fix. Independent of
   // followMode (which only controls whether GPS feeds `origin`) so a manual
   // map pan can drop the camera without abandoning live tracking.
@@ -168,7 +175,7 @@ export default function Home() {
     window.localStorage.setItem(UNITS_STORAGE_KEY, u);
   };
 
-  // --- region metadata (bbox drives the coverage check) ---
+  // --- region metadata (the served packs drive coverage, view, pre-flight) ---
   useEffect(() => {
     fetchMeta()
       .then(setMeta)
@@ -177,8 +184,9 @@ export default function Home() {
   }, []);
 
   // --- GPS -> origin ---------------------------------------------------
-  // The pack only covers one metro area, so a fix outside it would make every
-  // request 422. Fall back to the default view with an explanation instead.
+  // The served packs cover a few metro areas at most, so a fix outside all of
+  // them would make every request 422. Stay on the default view with an
+  // explanation instead.
   useEffect(() => {
     if (!geo.position || !followMode) return;
     // While navigating, the planner is frozen: the nav session owns the
@@ -192,9 +200,9 @@ export default function Home() {
     // and we adopt (and fly to) an out-of-coverage location, only to show the
     // "outside the mapped area" notice a moment later.
     if (!metaSettled) return;
-    if (meta && !insideBbox(geo.position, meta.bbox)) {
+    if (meta && !insideCoverage(meta.packs, geo.position)) {
       setCoverageNote(
-        "You're outside the mapped area (Berkeley / North Oakland) — showing the default region. Pick points on the map to route.",
+        `You're outside the mapped area (${coverageLabel(meta.packs)}) — showing the default region. Pick points on the map to route.`,
       );
       setFollowMode(false);
       return;
@@ -222,6 +230,17 @@ export default function Home() {
   const runRoute = useCallback(async () => {
     if (!origin || !destination) return;
     const seq = ++reqSeq.current;
+    // Pre-flight (ADR-0014 decision 6): a pair the server can only refuse —
+    // different regions, or outside all of them — is said here and never
+    // sent. Skipped while /meta is unknown; the server stays the authority.
+    const refusal = meta ? preflight(meta.packs, origin, destination) : null;
+    if (refusal) {
+      setRoutes([]);
+      setSelected(null);
+      setError(refusal);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     try {
@@ -253,7 +272,7 @@ export default function Home() {
     } finally {
       if (seq === reqSeq.current) setLoading(false);
     }
-  }, [origin, destination, departure, safety, detourBudget]);
+  }, [origin, destination, departure, safety, detourBudget, meta]);
 
   // Debounced so a moving origin (or rapid edits) coalesces into one request.
   useEffect(() => {
@@ -324,10 +343,27 @@ export default function Home() {
     setNavigating(true);
   };
   const exitNavigating = () => setNavigating(false);
-  const regionLabel = useMemo(
-    () => (meta ? meta.region.replace(/_/g, " ") : "Berkeley / North Oakland"),
-    [meta],
-  );
+  // The pack containing the origin; with no origin (or one outside every
+  // pack), everything that is covered. Null until /meta answers.
+  const regionLabel = useMemo(() => {
+    if (!meta) return null;
+    const own = origin ? packForPoint(meta.packs, origin) : null;
+    return own ? labelOf(own.region) : coverageLabel(meta.packs);
+  }, [meta, origin]);
+  // The pack a search is bounded to: the one the map shows, else the one the
+  // GPS fix is in. Undefined (no `region` sent) when neither is covered.
+  const searchRegion = useMemo(() => {
+    if (!meta) return undefined;
+    const pack =
+      (mapCenter && packForPoint(meta.packs, mapCenter)) ||
+      (geo.position && packForPoint(meta.packs, geo.position));
+    return pack ? pack.region : undefined;
+  }, [meta, mapCenter, geo.position]);
+  // What the map frames when it is built: undefined until /meta settles, so
+  // the map is not built on a guess (see MapView's initialBounds).
+  const initialBounds = metaSettled
+    ? initialViewBbox(meta?.packs ?? [], geo.position)
+    : undefined;
 
   // Label on the collapsed sheet. It is the only thing visible when the panel
   // is down, so it should say what the app is currently doing rather than
@@ -411,8 +447,8 @@ export default function Home() {
         ) : (
           <>
             <p className="hint intro">
-              Search, click the map, or use your current location. Covered area:{" "}
-              {regionLabel}.
+              Search, click the map, or use your current location.
+              {regionLabel && <> Covered area: {regionLabel}.</>}
             </p>
 
             <div className="origin-row">
@@ -421,6 +457,7 @@ export default function Home() {
                 value={originText}
                 onTextChange={setOriginText}
                 onPick={pickGeocode("origin")}
+                region={searchRegion}
               />
               <button
                 type="button"
@@ -438,6 +475,7 @@ export default function Home() {
               value={destText}
               onTextChange={setDestText}
               onPick={pickGeocode("destination")}
+              region={searchRegion}
             />
 
             <div className="controls-row">
@@ -572,6 +610,8 @@ export default function Home() {
           heading={heading}
           onUserGesture={onUserGesture}
           originMarkerPosition={followTarget ?? origin}
+          initialBounds={initialBounds}
+          onViewChange={setMapCenter}
         />
         {originIsLive && !cameraFollow && (
           <button

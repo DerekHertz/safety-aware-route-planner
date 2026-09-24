@@ -161,11 +161,24 @@ class RerouteResponse(BaseModel):
     route: RouteAlternative
 
 
-class MetaResponse(BaseModel):
-    """Pack coverage info. Additive — not part of the frozen /route contract."""
+class ServedPack(BaseModel):
+    """One served pack's coverage (ADR-0014 decision 6)."""
     region: str
     bbox: list[float] | None      # [west, south, east, north]; None for toy packs
     num_edges: int
+
+
+class MetaResponse(BaseModel):
+    """Pack coverage info. Additive — not part of the frozen /route contract.
+
+    The top-level `region`/`bbox`/`num_edges` describe the **default** pack
+    (the first served), which is all a client predating `packs` reads.
+    `packs` lists every served pack in `[api] regions` order, default first.
+    """
+    region: str
+    bbox: list[float] | None      # [west, south, east, north]; None for toy packs
+    num_edges: int
+    packs: list[ServedPack]
 
 
 class GeocodeResult(BaseModel):

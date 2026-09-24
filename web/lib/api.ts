@@ -8,6 +8,7 @@ import {
   RouteRequest,
   RouteResponse,
 } from "./types";
+import { normalizeMeta, RawPackMeta } from "./coverage";
 
 // Default to the same-origin proxy (see the rewrite in next.config.ts) rather
 // than an absolute localhost URL. Same-origin means no CORS, and — because
@@ -74,14 +75,23 @@ export async function fetchReroute(
   return resp.json();
 }
 
+/** Coverage of every served pack. Always has `packs`: for a server that
+ *  predates it, the one pack is synthesized from the top-level fields. */
 export async function fetchMeta(): Promise<PackMeta> {
   const resp = await fetch(`${API_BASE}/meta`);
   if (!resp.ok) throw new Error("failed to load region metadata");
-  return resp.json();
+  return normalizeMeta((await resp.json()) as RawPackMeta);
 }
 
-export async function geocode(q: string): Promise<GeocodeResult[]> {
-  const resp = await fetch(`${API_BASE}/geocode?q=${encodeURIComponent(q)}`);
+/** `region` bounds the search to that served pack (ADR-0014 decision 5):
+ *  pass the pack the map or GPS fix is in, or omit it when unknown. */
+export async function geocode(
+  q: string,
+  region?: string,
+): Promise<GeocodeResult[]> {
+  const params = new URLSearchParams({ q });
+  if (region) params.set("region", region);
+  const resp = await fetch(`${API_BASE}/geocode?${params}`);
   if (!resp.ok) throw new Error("geocoding failed");
   const data = await resp.json();
   return data.results;
