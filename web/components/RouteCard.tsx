@@ -1,6 +1,7 @@
 "use client";
 
 import { KIND_COLORS } from "./MapView";
+import { routeWaitLabel } from "@/lib/controlDelay";
 import { formatTimeDelta } from "@/lib/routeComparison";
 import { RouteAlternative } from "@/lib/types";
 import { UnitSystem, formatDistance, formatDuration } from "@/lib/units";
@@ -25,6 +26,7 @@ export default function RouteCard({
 }: Props) {
   const color = KIND_COLORS[route.kind];
   const u = route.unsafe;
+  const wait = routeWaitLabel(route.control_delay_s);
   return (
     <button
       type="button"
@@ -67,6 +69,14 @@ export default function RouteCard({
           >
             ✕ {u.uncontrolled_crossing} uncontrolled crossing
             {u.uncontrolled_crossing === 1 ? "" : "s"}
+          </span>
+        )}
+        {wait && (
+          <span
+            className="control-delay"
+            title="Expected time waiting at lights, stop signs and for gaps in traffic over the whole route. Already included in the ETA."
+          >
+            {wait}
           </span>
         )}
         {route.detour_pct > 0.005 && (

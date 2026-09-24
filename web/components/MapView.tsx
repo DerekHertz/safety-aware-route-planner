@@ -11,13 +11,14 @@ import {
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection } from "geojson";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { unsafePointPopup } from "@/lib/controlDelay";
 import { bboxToLngLatBounds } from "@/lib/coverage";
 import {
   bottomOverlap,
   initialFitPadding,
   shouldRefitInitial,
 } from "@/lib/initialFit";
-import { LatLon, RouteAlternative, RouteKind } from "@/lib/types";
+import { LatLon, RouteAlternative, RouteKind, UnsafeType } from "@/lib/types";
 
 // OpenFreeMap: genuinely free vector tiles, no API key. (MapLibre demotiles
 // are demo-only; do not hotlink tile.openstreetmap.org rasters.)
@@ -218,7 +219,7 @@ export default function MapView({
           type: "FeatureCollection",
           features: sel.unsafe_points.map((p): Feature => ({
             type: "Feature",
-            properties: { type: p.type },
+            properties: { type: p.type, expected_wait_s: p.expected_wait_s },
             geometry: { type: "Point", coordinates: [p.lon, p.lat] },
           })),
         }
@@ -311,14 +312,23 @@ export default function MapView({
           map.on("click", "unsafe-points", (ev) => {
             const f = ev.features?.[0];
             if (!f) return;
-            const label =
-              f.properties?.type === "unprotected_left"
-                ? "Unprotected left turn onto a busy street"
-                : "Uncontrolled crossing of a busy street";
-            new Popup()
-              .setLngLat(ev.lngLat)
-              .setHTML(`<strong>${label}</strong>`)
-              .addTo(map);
+            // Feature properties come back untyped. A missing wait (a server
+            // predating ADR-0016) goes in as NaN, never as a coerced 0, so
+            // the popup leaves the line out rather than claiming no wait.
+            const waitS = f.properties?.expected_wait_s;
+            const { title, wait } = unsafePointPopup(
+              f.properties?.type as UnsafeType,
+              typeof waitS === "number" ? waitS : NaN,
+            );
+            // Built as DOM text, not setHTML: the wait can read "<5 s".
+            const el = document.createElement("div");
+            const heading = el.appendChild(document.createElement("strong"));
+            heading.textContent = title;
+            if (wait) {
+              const line = el.appendChild(document.createElement("div"));
+              line.textContent = wait;
+            }
+            new Popup().setLngLat(ev.lngLat).setDOMContent(el).addTo(map);
           });
         }
 
