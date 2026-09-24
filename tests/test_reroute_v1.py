@@ -14,7 +14,7 @@ from fastapi.testclient import TestClient
 
 from pyref.config import Config
 from pyref.engine import Router
-from tests.helpers.fixtures import line3, unprotected_left_city
+from tests.helpers.fixtures import QUIET_DEPARTURE_ISO, line3, unprotected_left_city
 
 CFG = Config.load()
 PREF_KEYS = {"level", "lambda", "detour_budget_pct", "departure_time",
@@ -39,7 +39,9 @@ def _route_body(pack, ids, **extra):
     return {
         "origin": {"lat": float(pack.node_lat[o]), "lon": float(pack.node_lon[o])},
         "destination": {"lat": float(pack.node_lat[d]), "lon": float(pack.node_lon[d])},
-        "departure_time": "2026-07-24T08:30:00",
+        # the quiet hour, so the fast route still takes the unprotected left
+        # the toy is built around (ADR-0016; see QUIET_DEPARTURE)
+        "departure_time": QUIET_DEPARTURE_ISO,
         "safety_enabled": True,
         **extra,
     }
@@ -115,7 +117,7 @@ def test_reroute_echoes_the_carried_preference(client):
     # a reroute reproduces the same level, not a fresh server-default plan.
     assert art["preference"]["lambda"] == pytest.approx(pref["lambda"])
     assert art["preference"]["detour_budget_pct"] == 1.0
-    assert art["preference"]["departure_time"].startswith("2026-07-24T08:30:00")
+    assert art["preference"]["departure_time"].startswith(QUIET_DEPARTURE_ISO)
 
 
 def test_reroute_bad_snap_is_422(client):

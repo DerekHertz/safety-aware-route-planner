@@ -45,6 +45,9 @@ class UnsafePoint(BaseModel):
     lon: float
     lat: float
     type: str                 # "unprotected_left" | "uncontrolled_crossing"
+    # Expected control delay at this maneuver, seconds (ADR-0016): the "these
+    # lefts may add about X minutes" number. Time, not a safety score.
+    expected_wait_s: float
 
 
 class Maneuver(BaseModel):
@@ -135,6 +138,9 @@ class RouteAlternative(BaseModel):
     unsafe_points: list[UnsafePoint]
     maneuvers: list[Maneuver]
     detour_pct: float         # extra time vs the fastest route in this response
+    # Total expected intersection wait over every turn, signals included
+    # (ADR-0016). Already inside eta_s; broken out to make it legible.
+    control_delay_s: float
     preference: Preference    # how to reproduce/reroute this route (ADR-0004)
     schema_version: int       # artifact contract version; bumped on breaking change
 

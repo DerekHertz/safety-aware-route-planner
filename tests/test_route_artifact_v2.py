@@ -23,11 +23,13 @@ from fastapi.testclient import TestClient
 from pyref.config import Config
 from pyref.engine import ROUTE_SCHEMA_VERSION, Router
 from sim.snapshot import SYNTHETIC_SOURCE, at_time
-from tests.helpers.fixtures import line3, unprotected_left_city
+from tests.helpers.fixtures import QUIET_DEPARTURE_ISO, line3, unprotected_left_city
 
 CFG = Config.load()
 BASIS_KEYS = {"source", "as_of", "profile_version"}
-DEPARTURE = "2026-07-24T08:30:00"
+# The quiet hour, so the toy's fast route still takes the unprotected left and
+# /route returns both a fast and a safe artifact (ADR-0016; QUIET_DEPARTURE).
+DEPARTURE = QUIET_DEPARTURE_ISO
 
 
 @pytest.fixture()

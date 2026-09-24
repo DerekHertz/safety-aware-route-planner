@@ -19,6 +19,7 @@ function route(kind: RouteKind, etaS: number): RouteAlternative {
     unsafe_points: [],
     maneuvers: [],
     detour_pct: 0,
+    control_delay_s: 0,
     preference: {
       level: kind,
       lambda: 0,

@@ -65,6 +65,9 @@ class RouteOut:
     # {level, lambda, detour_budget_pct, departure_time, traffic_basis}
     preference: dict
     detour_pct: float = 0.0   # extra time vs the fastest route in this response
+    # Expected intersection waits over the whole route (ADR-0016); already
+    # inside eta_s, broken out so the fast-vs-safe trade is legible.
+    control_delay_s: float = 0.0
     schema_version: int = ROUTE_SCHEMA_VERSION
 
 
@@ -276,6 +279,7 @@ class Router:
             geometry=geo_out.route_geometry(pack, result, oc.frac, dc.frac),
             distance_m=m.distance_m,
             eta_s=m.eta_s,
+            control_delay_s=m.control_delay_s,
             unsafe={"unprotected_left": m.unprotected_left,
                     "uncontrolled_crossing": m.uncontrolled_crossing,
                     "total": m.unsafe_total},

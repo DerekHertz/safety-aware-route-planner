@@ -1,6 +1,14 @@
 """THE named scenario test (spec): an intersection where the safe route
 avoids an unprotected left the fast route takes — assert the metric
-difference and that the routes actually diverge."""
+difference and that the routes actually diverge.
+
+ADR-0016: tests whose premise is "the FAST route takes the unprotected left"
+run at QUIET_DEPARTURE (3 am). At base volume the left's control delay is the
+capped two-minute gap wait and the fast route rightly goes to the light
+instead -- see QUIET_DEPARTURE in tests/helpers/fixtures.py. The rush-hour
+half of that story is tests/test_scenario_control_delay.py."""
+import math
+
 import numpy as np
 import pytest
 
@@ -12,6 +20,7 @@ from pyref.search import topo_of
 from tests.helpers.fixtures import (
     find_turn,
     make_costs,
+    make_quiet_costs,
     route_between_nodes,
     stop_sign_left_city,
     unprotected_left_city,
@@ -23,7 +32,7 @@ CFG = Config.load()
 
 def test_fast_route_takes_the_unprotected_left():
     pack, ids = unprotected_left_city()
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     r = route_between_nodes(pack, qc, ids["s"], ids["a0"], lam=0.0)
     assert r.edges(pack.turn_out_edge) == [
         find_edge(pack, ids["s"], ids["a2"]),
@@ -32,8 +41,17 @@ def test_fast_route_takes_the_unprotected_left():
     ]
     m = compute_metrics(pack, qc, r)
     assert m.unprotected_left == 1
-    # 50 s side street + 2 x ~32.14 s arterial blocks
-    assert m.eta_s == pytest.approx(50.0 + 2 * (500.0 / (56.0 / 3.6)), rel=1e-9)
+    # The left's gap wait at 3 am (ADR-0016): both arterial directions, each
+    # 600 veh/h/lane x 0.05 (arterial volume_mult at 03:00) x 2 lanes = 60
+    # veh/h, against the >= 4-lane left gap of 7.5 s. The straight through
+    # A1's protected signal waits nothing.
+    q = 2 * 60.0 / 3600.0
+    t_c = float(CFG["sim"]["control_delay"]["t_c_left_wide_s"])
+    wait = (math.exp(q * t_c) - q * t_c - 1.0) / q               # ~1.02 s
+    assert m.control_delay_s == pytest.approx(wait, rel=1e-12)
+    # 50 s side street + 2 x ~32.14 s arterial blocks + the wait
+    assert m.eta_s == pytest.approx(50.0 + 2 * (500.0 / (56.0 / 3.6)) + wait,
+                                    rel=1e-9)
 
 
 def test_safe_route_detours_to_protected_signal():
@@ -59,7 +77,7 @@ def test_safe_route_detours_to_protected_signal():
 
 def test_metric_difference_and_divergence():
     pack, ids = unprotected_left_city()
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     lam_safe = float(CFG["alternatives"]["lambda_safe"])
     fast = route_between_nodes(pack, qc, ids["s"], ids["a0"], lam=0.0)
     safe = route_between_nodes(pack, qc, ids["s"], ids["a0"], lam=lam_safe)
@@ -88,7 +106,7 @@ def test_stop_sign_left_across_four_lanes_is_counted():
     not NONE, so the old predicate ignored it — even though holding the stop
     sign is exactly what makes it dangerous."""
     pack, ids = stop_sign_left_city()
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     fast = route_between_nodes(pack, qc, ids["s"], ids["a0"], lam=0.0)
     assert fast.edges(pack.turn_out_edge) == [
         find_edge(pack, ids["s"], ids["a2"]),
@@ -124,11 +142,12 @@ def test_detour_budget_forces_the_light_when_lambda_will_not_pay():
     The budget is what makes "go over to the light" reliable: the hard-avoid
     run buys the same detour outright, as long as it fits the ceiling.
 
-    Side streets of 1200 m make the safe route ~1.9x the fast one, well past
-    what lambda_safe will trade for.
+    Side streets of 1200 m make the safe route ~2.4x the fast one (at 3 am,
+    control delay included: ~294 s vs ~123 s), well past what lambda_safe will
+    trade for, and inside the generous budget's 2.5x.
     """
     pack, ids = stop_sign_left_city(side_street_m=1200.0)
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     lam_safe = float(CFG["alternatives"]["lambda_safe"])
 
     swept = route_between_nodes(pack, qc, ids["s"], ids["a0"], lam=lam_safe)
@@ -145,7 +164,7 @@ def test_detour_budget_forces_the_light_when_lambda_will_not_pay():
 
 def test_alternatives_api_labels_and_orders():
     pack, ids = unprotected_left_city()
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     seeds = [(int(e), float(qc.edge_time_s[e]))
              for e in np.flatnonzero(pack.edge_tail == ids["s"])]
     dests = [(int(e), 0.0) for e in np.flatnonzero(pack.edge_head == ids["a0"])]

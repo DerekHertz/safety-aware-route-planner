@@ -64,9 +64,81 @@ The protected-control override stays an assignment of exactly `+0.0`. Folding
 it in as a `* 0.0` would give `-0.0` wherever the pre-override score was
 negative, which is a different bit pattern; see `_median_cross` in the golden
 test for the case that reaches it.
+
+Control delay (ADR-0016)
+------------------------
+    turn_time_s = edge_time_s[out] + turn_delay_s        (time, never penalty)
+
+The expected wait at the junction, charged to the turn that makes it. It is
+travel time: it enters every lambda's arc cost unchanged, the ETA, the detour
+budget and the fast route's choice. Constants are `[sim.control_delay]` in
+config.toml (uncalibrated; ADR-0017 calibrates them). The governing control is
+the approach's, as for the penalty, and an INFERRED control waits exactly like
+an observed one: the OBSERVED gate above protects the unsafe COUNT, and the
+best estimate of time uses the best guess of control.
+
+Movement table, by the approach's control:
+    SIGNAL_PROTECTED, ROUNDABOUT      -> 0
+    STOP_4WAY                         -> all_way_stop_s
+    SIGNAL_PERMISSIVE                 -> signal_major_s / signal_minor_s by
+                                         approach; a LEFT adds a gap wait
+                                         against oncoming (t_c_priority_left_s)
+    priority approach                 -> STRAIGHT / RIGHT 0; LEFT gap wait
+      (STOP_2WAY / YIELD not holding     against oncoming (t_c_priority_left_s)
+       the line, or NONE and major)
+    minor approach                    -> gap wait for every movement:
+      (holding a stop / give-way line,   STRAIGHT t_c_crossing_s, LEFT
+       or NONE and not major)            t_c_left_s (t_c_left_wide_s onto a
+                                         road of >= left_wide_lanes_min lanes
+                                         in total), RIGHT t_c_right_s
+    UTURN                             -> 0 (only allowed at dead ends, which
+                                         have nothing to wait for)
+
+Gap wait: Adams' single-vehicle delay, `(e^(q*t_c) - q*t_c - 1) / q`, capped at
+cap_s, exactly 0 at q == 0 (`adams_delay_s`). q is the conflicting flow in
+veh/s, summed over the approaches ("legs") the movement must clear, each leg's
+flow being `volume_vph_lane * lanes` -- the same [sim] volume the busy rule
+reads, so the departure time is again the only thing that moves it.
+
+**"Major" approach.** An approach is major iff it outranks every other road
+at the junction (ROAD_CLASS_RANK, lower = more major, as in
+ingestion/controls.py). The other roads are every incoming approach except the
+approach itself and its oncoming leg, which are its own road. Outranking is a
+strictly lower rank, or, at equal rank, going straight through against a road
+that ends here: the T-junction rule, where the through road has priority over
+the stem. Otherwise ties are minor -- with no dominant road the green, or the
+priority, is split, and the longer signal wait is the closer estimate. A node
+with fewer than three physical legs is a bend, not a junction, and is
+vacuously major.
+
+**Leg selection** -- documented approximations, all built from the existing
+turn table rather than new geometry. A "straight feeder" of an edge o is an
+incoming approach whose STRAIGHT turn leaves along o, i.e. the traffic that
+travels o. Own in-edge is always excluded.
+  * crossing (STRAIGHT): every other incoming approach at the node except the
+    reverse of our out-edge -- `_crossing_legs`' set. At a 4-way this is both
+    directions of the cross road. Overcounts at a T whose stem we pass, but
+    only from a minor approach, which the T rule makes rare.
+  * left onto a road: both of its directions -- the near side arriving on
+    reverse(out), and the far side, out's straight feeders.
+  * right onto a road: the near-side flow only, out's straight feeders -- the
+    lanes being joined.
+  * left across oncoming (priority approach, or any permissive signal): the
+    straight feeders of reverse(in), i.e. whoever arrives dead ahead. None
+    when our road is one-way.
+Legs are whole-approach volumes, not per-movement ones (the sim has none), so
+turning traffic on a conflicting leg counts as conflicting; a turn restriction
+does not remove a feeder. `gap_legs` is padded with a sentinel edge id whose
+flow is 0.0 -- NOT by repeating a real leg, because these legs are summed.
+
+Per request this is one gather of conflicting flow, one sum and one exp over
+the gap-acceptance turns only (`control_delay_s`). The exp is `_exp_poly`, not
+`np.exp`: see there -- the delay reaches pinned arrays, so it must be built
+from IEEE-exact operations like everything else in this module.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -96,7 +168,10 @@ TIER_UNSAFE = 2
 class QueryCosts:
     """Frozen per-(pack, snapshot) arrays consumed by engines and metrics."""
     edge_time_s: np.ndarray      # f64[E]
-    turn_time_s: np.ndarray      # f64[T] edge_time_s gathered to turn targets
+    # f64[T] edge_time_s gathered to turn targets, PLUS turn_delay_s: the
+    # time half of the arc cost, identical for every lambda
+    turn_time_s: np.ndarray
+    turn_delay_s: np.ndarray     # f64[T] expected control delay (ADR-0016), >= 0
     turn_penalty_s: np.ndarray   # f64[T]
     turn_raw: np.ndarray         # f64[T] post-override raw score (debug/tiers)
     edge_busy: np.ndarray        # bool[E]
@@ -144,6 +219,19 @@ class PackStatics:
     cross_busy_legs: np.ndarray     # intp[D0, n0]
     cross_major_turns: np.ndarray   # intp[n1]
     cross_major_legs: np.ndarray    # intp[D1, n1]
+
+    # --- control delay (ADR-0016); see "Control delay" in the docstring ---
+    delay_fixed_s: np.ndarray    # f64[T], signal / all-way-stop wait, else 0
+    edge_lanes: np.ndarray       # f64[E], per direction: flow = volume * lanes
+    # Gap-acceptance turns, their critical gaps, and the approaches whose flow
+    # they must clear. `gap_legs[:, i]` is padded with the sentinel edge id E,
+    # whose flow is pinned to 0.0 per request: the legs are SUMMED, so a
+    # repeated real leg (the `_crossing_legs` trick for an any()) would count
+    # that approach twice.
+    gap_turns: np.ndarray        # intp[g]
+    gap_tc: np.ndarray           # f64[g], critical gap t_c in seconds
+    gap_legs: np.ndarray         # intp[Dg, g]
+    delay_cap_s: float
 
 
 def _norm(x: np.ndarray, cap: float) -> np.ndarray:
@@ -288,6 +376,9 @@ def build_pack_statics(pack: GraphPack, cfg: Config) -> PackStatics:
     major_turns, major_legs = _crossing_legs(
         pack, is_straight & observed & unprotected_approach)
 
+    delay_fixed_s, gap_turns, gap_tc, gap_legs = _control_delay_statics(
+        pack, cfg["sim"]["control_delay"], ctrl, must_stop)
+
     return PackStatics(
         spd_n=spd_n,
         lanes_n=lanes_n,
@@ -313,6 +404,12 @@ def build_pack_statics(pack: GraphPack, cfg: Config) -> PackStatics:
         cross_busy_legs=busy_legs,
         cross_major_turns=major_turns,
         cross_major_legs=major_legs,
+        delay_fixed_s=delay_fixed_s,
+        edge_lanes=pack.edge_lanes.astype(np.float64),
+        gap_turns=gap_turns,
+        gap_tc=gap_tc,
+        gap_legs=gap_legs,
+        delay_cap_s=float(cfg["sim"]["control_delay"]["cap_s"]),
     )
 
 
@@ -344,17 +441,9 @@ def _crossing_legs(pack: GraphPack,
         "legs can no longer be listed statically without changing the count")
 
     turns = np.flatnonzero(gate)
-    # Incoming edges per node, padded with -1: [num_nodes, max in-degree].
-    head = pack.edge_head
-    order = np.argsort(head, kind="stable")
-    indeg = np.bincount(head, minlength=pack.num_nodes)
-    width = max(int(indeg.max(initial=0)), 1)
-    start = np.concatenate(([0], np.cumsum(indeg)[:-1]))
-    slot = np.arange(len(order)) - np.repeat(start, indeg)
-    node_in = np.full((pack.num_nodes, width), -1, dtype=np.intp)
-    node_in[head[order], slot] = order
-
-    cand = node_in[head[inn[turns]]]
+    node_in = _group_padded(pack.edge_head, np.arange(pack.num_edges),
+                            pack.num_nodes)
+    cand = node_in[pack.edge_head[inn[turns]]]
     keep = ((cand >= 0) & (cand != inn[turns, None])
             & (cand != rev[turns, None]))
     has_any = keep.any(axis=1)
@@ -367,6 +456,186 @@ def _crossing_legs(pack: GraphPack,
     pad = np.arange(depth)[None, :] >= keep.sum(axis=1)[:, None]
     cand = np.where(pad, cand[:, :1], cand)
     return turns.astype(np.intp), np.ascontiguousarray(cand.T, dtype=np.intp)
+
+
+def _group_padded(keys: np.ndarray, values: np.ndarray,
+                  num_keys: int) -> np.ndarray:
+    """`values` grouped by `keys` into a [num_keys, max group size] matrix,
+    padded with -1, each row in the original (stable) order. With keys =
+    edge_head and values = edge ids this is "incoming edges per node"."""
+    order = np.argsort(keys, kind="stable")
+    count = np.bincount(keys, minlength=num_keys)
+    width = max(int(count.max(initial=0)), 1)
+    start = np.concatenate(([0], np.cumsum(count)[:-1]))
+    slot = np.arange(len(order)) - np.repeat(start, count)
+    out = np.full((num_keys, width), -1, dtype=np.intp)
+    out[keys[order], slot] = values[order]
+    return out
+
+
+def adams_delay_s(q: np.ndarray, t_c: np.ndarray, cap_s: float) -> np.ndarray:
+    """Adams' single-vehicle gap wait for Poisson traffic, capped:
+    `E[w] = (exp(q*t_c) - q*t_c - 1) / q`, with q in veh/s and t_c in s.
+
+    Exactly +0.0 where q == 0 (the 0/0 limit is 0). The exponent is clamped
+    at `_EXP_X_MAX`, far past where the cap binds, so it cannot overflow.
+    Uses `_exp_poly`, not `np.exp` -- see there for why."""
+    x = np.minimum(q * t_c, _EXP_X_MAX)
+    # e^x >= 1 + x, but a rounding ulp at tiny x must not make a wait negative
+    # (delay >= 0 is what keeps the A* heuristic admissible).
+    num = np.maximum(_exp_poly(x) - x - 1.0, 0.0)
+    w = np.zeros(len(q), dtype=np.float64)
+    np.divide(num, q, out=w, where=q > 0.0)
+    return np.minimum(w, cap_s)
+
+
+# exp via Cody-Waite range reduction and a fixed Taylor polynomial.
+#
+# np.exp is a transcendental that numpy dispatches to different SIMD kernels
+# by CPU (an AVX-512 build differs from libm in the last ulp), which is the
+# reason tests/test_costs_golden.py refuses to pin the heuristic. The delay
+# sits inside turn_time_s and every arc_cost, which ARE pinned, so it is
+# built from IEEE-754 exact operations only (+, -, *, rint, ldexp): the same
+# bits on every machine. ~1e-15 relative error on [0, 50]; the delay needs
+# nowhere near that, but the determinism is the point.
+_LN2_HI = 6.93147180369123816490e-01   # fdlibm split: k*_LN2_HI is exact
+_LN2_LO = 1.90821492927058770002e-10
+_INV_LN2 = 1.44269504088896338700e+00
+_EXP_COEF = tuple(1.0 / math.factorial(n) for n in range(12))   # |r| <= ln2/2
+_EXP_X_MAX = 50.0
+
+
+def _exp_poly(x: np.ndarray) -> np.ndarray:
+    k = np.rint(x * _INV_LN2)
+    r = (x - k * _LN2_HI) - k * _LN2_LO
+    p = np.full(len(x), _EXP_COEF[-1], dtype=np.float64)
+    for c in reversed(_EXP_COEF[:-1]):
+        p *= r
+        p += c
+    return np.ldexp(p, k.astype(np.int32))
+
+
+def _control_delay_statics(pack: GraphPack, cd, ctrl: np.ndarray,
+                           must_stop: np.ndarray
+                           ) -> tuple[np.ndarray, np.ndarray, np.ndarray,
+                                      np.ndarray]:
+    """The (pack, cfg)-only half of the control delay: fixed waits per turn,
+    and for every gap-acceptance turn its critical gap and conflicting legs.
+    The movement table and the leg approximations are documented in the
+    module docstring ("Control delay"); this is their one implementation.
+
+    Returns `(delay_fixed_s[T], gap_turns[g], gap_tc[g], gap_legs[Dg, g])`,
+    `gap_legs` padded with the sentinel edge id E (zero flow)."""
+    E, T = pack.num_edges, pack.num_turns
+    inn = pack.turn_in_edge.astype(np.intp)
+    out = pack.turn_out_edge.astype(np.intp)
+    rev = pack.edge_reverse.astype(np.intp)
+    man = pack.turn_maneuver
+    is_straight = man == Maneuver.STRAIGHT
+    is_left = man == Maneuver.LEFT
+    is_right = man == Maneuver.RIGHT
+
+    # STRAIGHT feeders of each edge o: the incoming approaches whose straight
+    # continuation leaves the node along o, i.e. the traffic that travels o.
+    feeders = _group_padded(out[is_straight], inn[is_straight], E)
+
+    def feeders_of(edges: np.ndarray) -> np.ndarray:
+        rows = feeders[np.maximum(edges, 0)]
+        return np.where((edges >= 0)[:, None], rows, -1)
+
+    # Oncoming approach of each edge i: whatever feeds reverse(i). Empty when
+    # our road is one-way, or when nothing arrives dead ahead.
+    oncoming = feeders_of(rev)                                    # [E, F]
+
+    # --- which approach is "major" -------------------------------------
+    # See "Control delay" in the module docstring for the rule in prose.
+    rank = _road_class_ranks(pack.edge_road_class)
+    continues = np.zeros(E, dtype=bool)
+    continues[inn[is_straight]] = True
+    node_in = _group_padded(pack.edge_head, np.arange(E), pack.num_nodes)
+    others = node_in[pack.edge_head]                              # [E, W]
+    own = ((others == np.arange(E)[:, None])
+           | (others[:, :, None] == oncoming[:, None, :]).any(axis=2))
+    other_road = (others >= 0) & ~own
+    o_rank = rank[np.maximum(others, 0)]
+    outranks = ((rank[:, None] < o_rank)
+                | ((rank[:, None] == o_rank) & continues[:, None]
+                   & ~continues[np.maximum(others, 0)]))
+    major = np.where(other_road, outranks, True).all(axis=1)       # [E]
+    # Physical legs per node (distinct neighbours, either direction). Under
+    # three it is a bend or a change of way, not a junction: no other road.
+    ends = np.unique(np.stack([np.concatenate([pack.edge_head, pack.edge_tail]),
+                               np.concatenate([pack.edge_tail, pack.edge_head])]),
+                     axis=1)
+    num_legs = np.bincount(ends[0], minlength=pack.num_nodes)
+    major |= num_legs[pack.edge_head] < 3
+
+    # --- the movement table ----------------------------------------------
+    c = ctrl
+    two_way = (c == Control.STOP_2WAY) | (c == Control.YIELD)
+    none = c == Control.NONE
+    maj = major[inn]
+    uturn = man == Maneuver.UTURN
+    # Minor approach: holds a stop or give-way line, or has no control and
+    # no priority either. Waits for a gap for every movement.
+    minor = ((two_way & must_stop) | (none & ~maj)) & ~uturn
+    # Priority approach at a 2-way stop / yield / uncontrolled junction:
+    # through and right are free; a left yields to oncoming.
+    priority = (two_way & ~must_stop) | (none & maj)
+    signal = c == Control.SIGNAL_PERMISSIVE
+
+    delay_fixed_s = np.zeros(T, dtype=np.float64)
+    delay_fixed_s[(c == Control.STOP_4WAY) & ~uturn] = float(cd["all_way_stop_s"])
+    delay_fixed_s[signal & ~uturn & maj] = float(cd["signal_major_s"])
+    delay_fixed_s[signal & ~uturn & ~maj] = float(cd["signal_minor_s"])
+
+    lanes = pack.edge_lanes.astype(np.float64)
+    road_lanes = lanes[out] + np.where(rev[out] >= 0, lanes[np.maximum(rev[out], 0)], 0.0)
+    wide = road_lanes >= float(cd["left_wide_lanes_min"])
+
+    pairs_t: list[np.ndarray] = []
+    pairs_leg: list[np.ndarray] = []
+    tc = np.zeros(T, dtype=np.float64)
+
+    def add(gate: np.ndarray, cand: np.ndarray, t_c) -> None:
+        """Gap-accept at the turns in `gate`, clearing the flow on the legs
+        `cand[t]` (a [T, k] candidate matrix, -1 = no leg), with gap `t_c`."""
+        ts = np.flatnonzero(gate)
+        cand = cand[ts]
+        keep = (cand >= 0) & (cand != inn[ts, None])
+        pairs_t.append(np.broadcast_to(ts[:, None], cand.shape)[keep])
+        pairs_leg.append(cand[keep])
+        tc[ts] = t_c[ts] if isinstance(t_c, np.ndarray) else float(t_c)
+
+    # Crossing: every other incoming approach but our own in-edge and the
+    # reverse of our out-edge (== `_crossing_legs`).
+    cross = node_in[pack.edge_head[inn]]
+    add(minor & is_straight, np.where(cross == rev[out][:, None], -1, cross),
+        cd["t_c_crossing_s"])
+    # Left onto a road: both of its directions -- the near side, arriving on
+    # reverse(out), and the far side, the straight feeders of out.
+    both = np.concatenate([rev[out][:, None], feeders_of(out)], axis=1)
+    add(minor & is_left, both, np.where(wide, float(cd["t_c_left_wide_s"]),
+                          float(cd["t_c_left_s"])))
+    # Right onto a road: the near-side flow only, the lanes being joined.
+    add(minor & is_right, feeders_of(out), cd["t_c_right_s"])
+    # Left across oncoming traffic, from a priority approach or at a signal
+    # (permissive: no arrow is ever mapped) -- on top of the signal wait.
+    add((priority | signal) & is_left, oncoming[inn], cd["t_c_priority_left_s"])
+
+    t_all = np.concatenate(pairs_t)
+    leg_all = np.concatenate(pairs_leg)
+    # One row per turn; a leg listed twice would be counted twice.
+    key = np.unique(t_all.astype(np.int64) * (E + 1) + leg_all)
+    t_all, leg_all = key // (E + 1), key % (E + 1)
+    gap_turns, start, count = np.unique(t_all, return_index=True,
+                                        return_counts=True)
+    depth = max(int(count.max(initial=0)), 1)
+    slot = np.arange(len(t_all)) - np.repeat(start, count)
+    legs = np.full((depth, len(gap_turns)), E, dtype=np.intp)
+    legs[slot, np.repeat(np.arange(len(gap_turns)), count)] = leg_all
+    return (delay_fixed_s, gap_turns.astype(np.intp), tc[gap_turns],
+            np.ascontiguousarray(legs))
 
 
 def _uncontrolled_crossing(st: PackStatics, over_tau: np.ndarray,
@@ -384,6 +653,22 @@ def _uncontrolled_crossing(st: PackStatics, over_tau: np.ndarray,
     t = st.cross_major_turns
     out[t] = over_tau[t] & edge_major[st.cross_major_legs].any(axis=0)
     return out
+
+
+def control_delay_s(st: PackStatics, snap: Snapshot) -> np.ndarray:
+    """Per-turn expected control delay for this snapshot: the static fixed
+    waits, plus the gap waits -- one gather of conflicting flow, one sum, one
+    exp. Flow on an approach is volume per lane times lanes; the sentinel
+    edge E pads `gap_legs` and carries exactly zero."""
+    flow = np.empty(len(st.edge_lanes) + 1, dtype=np.float64)
+    np.multiply(snap.volume_vph_lane, st.edge_lanes, out=flow[:-1])
+    flow[-1] = 0.0
+    # axis-0 reduction over a C-contiguous [D, g] array: rows are added in
+    # order, element by element -- no pairwise regrouping, same bits anywhere.
+    q = flow[st.gap_legs].sum(axis=0) / 3600.0
+    delay = st.delay_fixed_s.copy()
+    delay[st.gap_turns] += adams_delay_s(q, st.gap_tc, st.delay_cap_s)
+    return delay
 
 
 def compute_costs(pack: GraphPack, snap: Snapshot, cfg: Config,
@@ -449,11 +734,16 @@ def compute_costs(pack: GraphPack, snap: Snapshot, cfg: Config,
     # (observed-only) count tell the same story.
     tier[(tier == TIER_UNSAFE) & ~st.observed] = TIER_CAUTION
 
+    delay = control_delay_s(st, snap)
+
     return QueryCosts(
         edge_time_s=snap.edge_time_s,
         # Gathered once here rather than on every arc_cost call: it is the same
         # array for all lambdas and all penalty-method reruns within a request.
-        turn_time_s=snap.edge_time_s[out],
+        # The control delay is time (ADR-0016), so it lives here, not in the
+        # penalty; adding an exact +0.0 leaves undelayed turns bit-identical.
+        turn_time_s=snap.edge_time_s[out] + delay,
+        turn_delay_s=delay,
         turn_penalty_s=penalty,
         turn_raw=raw,
         edge_busy=edge_busy,

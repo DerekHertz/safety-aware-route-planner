@@ -258,6 +258,39 @@ volume_mult = [0.1, 0.05, 0.05, 0.05, 0.1, 0.2, 0.45, 0.75, 0.9, 0.7, 0.55, 0.55
 speed_mult =  [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.95, 0.9, 0.85, 0.9, 0.95, 0.95, 0.95, 0.95, 0.95, 0.9, 0.85, 0.85, 0.9, 0.95, 1.0, 1.0, 1.0, 1.0]
 volume_mult = [0.1, 0.05, 0.05, 0.05, 0.1, 0.2, 0.4, 0.7, 0.8, 0.6, 0.5, 0.5, 0.55, 0.55, 0.6, 0.7, 0.8, 0.85, 0.75, 0.5, 0.35, 0.25, 0.2, 0.15]
 
+# -----------------------------------------------------------------------------
+# Control delay (ADR-0016): the expected wait at an intersection, added to
+# travel time (not to the safety penalty). Lives under [sim] on purpose, so
+# `traffic_basis.profile_version` (the hash of the parsed [sim] table, nested
+# tables included) changes whenever one of these numbers does.
+#
+# UNCALIBRATED. Every value below is a starting point taken from the Highway
+# Capacity Manual's two-way-stop base critical gaps and typical signal timing;
+# ADR-0017 (trip traces) calibrates them. Calibration changes numbers here,
+# never code. Movement rules and leg selection: pyref/costs.py docstring.
+#
+# Gap acceptance uses Adams' single-vehicle delay for Poisson traffic,
+#   E[w] = (exp(q*t_c) - q*t_c - 1) / q,   q = conflicting flow in veh/s,
+# capped at cap_s. q comes from the same [sim] volumes the busy rule uses.
+# -----------------------------------------------------------------------------
+[sim.control_delay]
+t_c_crossing_s = 6.5          # straight across the road from a stop/no control
+t_c_left_s = 7.1              # left onto a road from a minor approach...
+t_c_left_wide_s = 7.5         # ...when the road turned onto has >= 4 lanes total
+left_wide_lanes_min = 4.0     # total (both directions) lanes for the wide gap
+t_c_right_s = 6.2             # right onto a road from a minor approach
+t_c_priority_left_s = 4.1     # left from a priority approach, across oncoming
+# A driver facing a >2-minute wait goes around; that is the search's job, not
+# the delay term's. Applies to the gap wait only.
+cap_s = 120.0
+# Signal average wait, by approach. The "major" approach is the one on the
+# strictly highest-ranked road at the junction (see pyref/costs.py); a tie
+# splits the green, so both roads get the minor wait. A permissive left adds a
+# gap wait against oncoming traffic (t_c_priority_left_s) on top.
+signal_major_s = 8.0
+signal_minor_s = 22.0
+all_way_stop_s = 6.0          # every movement at an all-way stop
+
 [engine]
 impl = "cpp"                  # "pyref" | "cpp"  (cpp falls back to pyref with a
                               # warning if the sr_core extension isn't built)

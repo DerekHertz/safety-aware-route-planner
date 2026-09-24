@@ -5,19 +5,41 @@ optimal costs are hand-computable: a 1000 m edge takes exactly 100 s.
 """
 from __future__ import annotations
 
+import datetime
+
 import numpy as np
 
 from pyref.config import Config
 from pyref.costs import arc_cost, compute_costs, heuristic
 from pyref.graph import Control, GraphPack, RoadClass
 from pyref.search import PathResult, shortest_path, topo_of
-from sim.snapshot import free_flow
+from sim.snapshot import at_time, free_flow
 from tests.helpers.toy_graphs import GraphBuilder
+
+# The quiet hour, for the scenarios whose premise is "the FAST route takes the
+# unprotected maneuver" (unprotected_left_city, stop_sign_left_city).
+#
+# Since ADR-0016 the wait at an intersection is travel time. At base (rush-hour
+# scale) volume, a left across a 4-lane arterial with 1,200 veh/h each way costs
+# the capped gap wait -- two minutes -- so the fast route now goes to the light,
+# which is the point of the change. The premise is therefore a quiet-hour one:
+# at 3 am the same gap wait is about a second, while the arterial stays "busy"
+# through its ADR-0005 class floor, so the left is still counted unsafe and the
+# safe route still has something to avoid. Edge speeds at 3 am equal free
+# flow, so link times are the ones these fixtures' docstrings quote.
+QUIET_DEPARTURE = datetime.datetime(2026, 7, 24, 3, 0)
+QUIET_DEPARTURE_ISO = QUIET_DEPARTURE.isoformat()
 
 
 def make_costs(pack: GraphPack, cfg: Config | None = None):
     cfg = cfg or Config.load()
     return compute_costs(pack, free_flow(pack, cfg), cfg)
+
+
+def make_quiet_costs(pack: GraphPack, cfg: Config | None = None):
+    """Costs at QUIET_DEPARTURE (see there for why a scenario wants it)."""
+    cfg = cfg or Config.load()
+    return compute_costs(pack, at_time(pack, cfg, QUIET_DEPARTURE), cfg)
 
 
 def route_between_nodes(pack, qc, u: int, v: int, *, lam: float = 0.0,
@@ -79,6 +101,8 @@ def grid3x3() -> tuple[GraphPack, list[int]]:
 def unprotected_left_city():
     """The named scenario: the FAST route takes an unprotected left onto a
     busy arterial; the SAFE route detours one block to a protected signal.
+    The fast half holds at QUIET_DEPARTURE (see there); at rush-hour volume
+    the left's control delay sends the fast route to the signal too.
 
            A0 --- A1 --- A2 --- A3     <- busy primary arterial (E->W to A0)
                    |      |
@@ -121,7 +145,7 @@ def stop_sign_left_city(side_street_m: float = 500.0):
     the arterial does not — so a left there means finding a gap in four lanes
     of traffic, with nothing holding it back.
 
-    Origin S, destination A0 (west along the arterial).
+    Origin S, destination A0 (west along the arterial). At QUIET_DEPARTURE:
       fast: S->A2, LEFT at A2 from the stop line          [counted unsafe]
       safe: S->SW->A1, LEFT at A1 under the signal        [not counted]
 
