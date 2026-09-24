@@ -4,7 +4,12 @@ import pytest
 
 from pyref.alternatives import compute_alternatives, jaccard
 from pyref.search import topo_of
-from tests.helpers.fixtures import grid3x3, make_costs, unprotected_left_city
+from tests.helpers.fixtures import (
+    grid3x3,
+    make_costs,
+    make_quiet_costs,
+    unprotected_left_city,
+)
 
 
 def test_jaccard():
@@ -33,8 +38,10 @@ def test_safety_off_returns_single_fast(monkeypatch):
 
 
 def test_sweep_produces_distinct_fast_and_safe():
+    # Quiet hour (ADR-0016): at base volume the fast route already avoids the
+    # unprotected left on control delay alone, so fast == safe.
     pack, ids = unprotected_left_city()
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     from pyref.config import Config
     cfg = Config.load()
     seeds, dests = _node_query(pack, qc, ids["s"], ids["a0"])

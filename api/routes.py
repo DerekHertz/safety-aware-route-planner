@@ -100,6 +100,7 @@ def _artifact(r) -> dict:
         "unsafe_points": r.unsafe_points,
         "maneuvers": r.maneuvers,
         "detour_pct": r.detour_pct,
+        "control_delay_s": r.control_delay_s,
         "preference": r.preference,
         "schema_version": r.schema_version,
     }

@@ -5,7 +5,7 @@ this shape — if a key changes, this test must be updated CONSCIOUSLY."""
 import pytest
 from fastapi.testclient import TestClient
 
-from tests.helpers.fixtures import unprotected_left_city
+from tests.helpers.fixtures import QUIET_DEPARTURE_ISO, unprotected_left_city
 
 
 @pytest.fixture()
@@ -28,7 +28,9 @@ def _route_body(pack, ids, safety=True, **extra):
     return {
         "origin": {"lat": float(pack.node_lat[o]), "lon": float(pack.node_lon[o])},
         "destination": {"lat": float(pack.node_lat[d]), "lon": float(pack.node_lon[d])},
-        "departure_time": "2026-07-24T08:30:00",
+        # the quiet hour, so the fast route still takes the unprotected left
+        # the toy is built around (ADR-0016; see QUIET_DEPARTURE)
+        "departure_time": QUIET_DEPARTURE_ISO,
         "safety_enabled": safety,
         **extra,
     }
@@ -41,10 +43,12 @@ def test_route_contract_shape(client):
     assert set(data.keys()) == {"routes"}
     assert 1 <= len(data["routes"]) <= 3
     for r in data["routes"]:
+        # control_delay_s: additive, ADR-0016 (schema_version stays 2)
         assert set(r.keys()) == {"kind", "geometry", "distance_m", "eta_s",
                                  "unsafe", "segments", "unsafe_points",
-                                 "maneuvers", "detour_pct", "preference",
-                                 "schema_version"}
+                                 "maneuvers", "detour_pct", "control_delay_s",
+                                 "preference", "schema_version"}
+        assert 0.0 <= r["control_delay_s"] <= r["eta_s"]
         assert r["kind"] in ("fast", "balanced", "safe")
         # route artifact v2 (ADR-0004): self-describing preference + version.
         # Detailed assertions live in test_route_artifact_v1.py (the three
@@ -65,7 +69,9 @@ def test_route_contract_shape(client):
             assert set(seg.keys()) == {"geometry", "tier"}
             assert seg["tier"] in ("safe", "caution", "unsafe")
         for pt in r["unsafe_points"]:
-            assert set(pt.keys()) == {"lon", "lat", "type"}
+            # expected_wait_s: additive, ADR-0016
+            assert set(pt.keys()) == {"lon", "lat", "type", "expected_wait_s"}
+            assert pt["expected_wait_s"] >= 0.0
             assert pt["type"] in ("unprotected_left", "uncontrolled_crossing")
         for man in r["maneuvers"]:
             assert set(man.keys()) == {"type", "angle_deg", "offset_m",

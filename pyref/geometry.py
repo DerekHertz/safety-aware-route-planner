@@ -117,7 +117,9 @@ def route_maneuvers(pack: GraphPack, result: PathResult,
 
 
 def unsafe_points(pack: GraphPack, qc: QueryCosts, result: PathResult) -> list[dict]:
-    """Locations of flagged unsafe maneuvers (for map markers)."""
+    """Locations of flagged unsafe maneuvers (for map markers), each with the
+    expected control delay at that turn (ADR-0016): what the maneuver costs
+    in waiting, as distinct from what it risks."""
     out = []
     for t in result.turn_ids:
         kind = int(qc.turn_unsafe_type[t])
@@ -128,5 +130,6 @@ def unsafe_points(pack: GraphPack, qc: QueryCosts, result: PathResult) -> list[d
             "lon": float(pack.node_lon[node]),
             "lat": float(pack.node_lat[node]),
             "type": "unprotected_left" if kind == 1 else "uncontrolled_crossing",
+            "expected_wait_s": float(qc.turn_delay_s[t]),
         })
     return out

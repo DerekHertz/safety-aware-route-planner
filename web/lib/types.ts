@@ -45,6 +45,9 @@ export interface UnsafePoint {
   lon: number;
   lat: number;
   type: UnsafeType;
+  /** Expected control delay at this maneuver, seconds (ADR-0016): waiting
+   *  time, not a safety score. */
+  expected_wait_s: number;
 }
 
 export type ManeuverType = "left" | "right" | "uturn";
@@ -119,6 +122,9 @@ export interface RouteAlternative {
   maneuvers: Maneuver[];
   /** Extra time versus the fastest route in the same response, as a fraction. */
   detour_pct: number;
+  /** Expected intersection waits over the whole route, seconds (ADR-0016).
+   *  Already included in `eta_s`. */
+  control_delay_s: number;
   preference: Preference;
   /** Route-artifact contract version; bumped only on a breaking shape change. */
   schema_version: number;

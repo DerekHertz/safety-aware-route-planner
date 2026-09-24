@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from pyref.config import Config
 from pyref.engine import Router
-from tests.helpers.fixtures import line3, unprotected_left_city
+from tests.helpers.fixtures import QUIET_DEPARTURE_ISO, line3, unprotected_left_city
 
 CFG = Config.load()
 # v2 (ADR-0004) added traffic_basis; the v1 tiers below are unchanged by it.
@@ -37,7 +37,9 @@ def _body(pack, ids, **extra):
     return {
         "origin": {"lat": float(pack.node_lat[o]), "lon": float(pack.node_lon[o])},
         "destination": {"lat": float(pack.node_lat[d]), "lon": float(pack.node_lon[d])},
-        "departure_time": "2026-07-24T08:30:00",
+        # the quiet hour, so the fast route still takes the unprotected left
+        # the toy is built around (ADR-0016; see QUIET_DEPARTURE)
+        "departure_time": QUIET_DEPARTURE_ISO,
         "safety_enabled": True,
         **extra,
     }
@@ -85,7 +87,7 @@ def test_preference_echoes_the_resolved_detour_budget(client):
 def test_preference_carries_the_departure_basis(client):
     routes = client.post("/route", json=_body(client.pack, client.ids)).json()["routes"]
     # echoes the departure the route was actually planned for (ADR-0004).
-    assert all(r["preference"]["departure_time"].startswith("2026-07-24T08:30:00")
+    assert all(r["preference"]["departure_time"].startswith(QUIET_DEPARTURE_ISO)
                for r in routes)
 
 

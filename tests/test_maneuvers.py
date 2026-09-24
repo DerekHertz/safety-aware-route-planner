@@ -9,6 +9,7 @@ from pyref.geometry import route_maneuvers
 from pyref.metrics import compute_metrics
 from tests.helpers.fixtures import (
     make_costs,
+    make_quiet_costs,
     route_between_nodes,
     unprotected_left_city,
 )
@@ -16,9 +17,11 @@ from tests.helpers.toy_graphs import GraphBuilder
 
 
 def test_single_left_turn_offset_matches_first_edge_length():
-    """fast route: S->A2, LEFT at A2 onto the arterial, then on to A0."""
+    """fast route: S->A2, LEFT at A2 onto the arterial, then on to A0. At the
+    quiet hour: at base volume that left's control delay (ADR-0016) sends the
+    fast route round by the protected signal, with two turns instead of one."""
     pack, ids = unprotected_left_city()
-    qc = make_costs(pack)
+    qc = make_quiet_costs(pack)
     result = route_between_nodes(pack, qc, ids["s"], ids["a0"])
     assert result is not None
 
