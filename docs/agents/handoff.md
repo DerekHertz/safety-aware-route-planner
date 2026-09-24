@@ -166,7 +166,10 @@ work through it in order:
       500. `AppState.pack`/`.router` were removed (only tests used them);
       `PackRegistry.only()` stays, for tests only.
 - [ ] (7) Build a second real metro and **re-measure memory in the container**. The
-      metro-scale figure in the ADR is a guess.
+      metro-scale figure in the ADR is a guess. **PAUSED 2026-09-24 by the owner**
+      pending the Google Maps Platform discussion
+      ([ADR-0015](../adr/0015-google-routes-scored-alternatives.md), proposed): its
+      benchmark wants a dense urban metro, so the choice of second pack waits on it.
 
 **Phase 5 - commute planner** (ADR-0011). Google Sign-In, accounts, saved commutes with
 user-set departure times, the **departure-time sweep** as the headline feature, a stubbed
