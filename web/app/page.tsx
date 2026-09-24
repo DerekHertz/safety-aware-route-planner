@@ -96,6 +96,9 @@ export default function Home() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const reqSeq = useRef(0);
   const seededRef = useRef(false);
+  // The panel: a bottom sheet over the map on mobile, a column beside it on
+  // desktop. MapView measures it to frame the region clear of the sheet.
+  const sheetRef = useRef<HTMLElement>(null);
 
   const geo = useGeolocation(true);
   const heading = useHeading(geo.position);
@@ -411,6 +414,7 @@ export default function Home() {
   return (
     <main className="layout">
       <aside
+        ref={sheetRef}
         className={`sidebar${sheetOpen ? " expanded" : ""}`}
         // Focusing a field must expand the sheet: the geocoder's suggestion
         // list drops downward, and while collapsed that is off the bottom of
@@ -612,6 +616,7 @@ export default function Home() {
           originMarkerPosition={followTarget ?? origin}
           initialBounds={initialBounds}
           onViewChange={setMapCenter}
+          bottomOverlayRef={sheetRef}
         />
         {originIsLive && !cameraFollow && (
           <button
