@@ -89,7 +89,7 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
     # omitted is "now" in the pack's zone — never the server's UTC clock.
     departure = resolve_departure(body.departure_time, state.pack_tz)
     try:
-        routes = state.router.route(
+        routes = state.registry.only().router.route(
             body.origin.lat, body.origin.lon,
             body.destination.lat, body.destination.lon,
             departure=departure,
@@ -118,7 +118,7 @@ def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
     # entirely — a client mid-drive can be holding a v1 artifact (ADR-0004 v2;
     # see CarriedPreference in api/schemas.py).
     try:
-        art = state.router.reroute(
+        art = state.registry.only().router.reroute(
             body.origin.lat, body.origin.lon,
             body.destination.lat, body.destination.lon,
             level=pref.level,

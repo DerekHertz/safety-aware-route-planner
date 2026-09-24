@@ -1,7 +1,13 @@
-"""Application state: config, pack, router, limiter — loaded once at startup.
+"""Application state: config, served packs, limiters — loaded once at startup.
 
-SR_PACK_DIR env var overrides the pack directory (tests point it at a toy
-pack); otherwise <api.pack_dir>/<region.active> from config.
+The served packs live in a `PackRegistry` (api/registry.py, ADR-0014). Today
+it always holds exactly one:
+
+* `SR_PACK_DIR` set: that one directory, **named by its manifest `region`**
+  rather than by the directory (tests write toy packs to arbitrary dirs such
+  as `tmp/"bk"`), so no directory-name check applies.
+* otherwise: `<api.pack_dir>/<region.active>`, whose manifest `region` must
+  equal `region.active` — a mismatch is fatal at startup.
 """
 from __future__ import annotations
 
@@ -18,6 +24,7 @@ from api.ratelimit import (
     build_route_limiter,
     trusted_proxies,
 )
+from api.registry import PackRegistry, load_named_pack, load_pinned_pack
 from pyref.config import DEFAULT_CONFIG_PATH, Config
 from pyref.engine import Router
 from pyref.graph import GraphPack
@@ -26,8 +33,7 @@ from pyref.graph import GraphPack
 @dataclass
 class AppState:
     cfg: Config
-    pack: GraphPack
-    router: Router
+    registry: PackRegistry
     # Built here rather than lazily inside the endpoint so a misconfigured
     # shared limiter (a Redis URL with no `redis` package) fails at startup,
     # where the platform sees a crash-looping container, instead of on the
@@ -46,17 +52,28 @@ class AppState:
     # Departure times are resolved into it before the traffic-profile lookup.
     pack_tz: ZoneInfo
 
+    # Shorthands for the sole served pack. Kept because tests reach through
+    # them (e.g. spying on `app_state.router.route`); they return the very
+    # objects the registry holds, so a patch on one is seen by the handlers.
+    @property
+    def pack(self) -> GraphPack:
+        return self.registry.only().pack
+
+    @property
+    def router(self) -> Router:
+        return self.registry.only().router
+
     @classmethod
     def load(cls) -> AppState:
         cfg = Config.load(os.environ.get("SR_CONFIG", DEFAULT_CONFIG_PATH))
         pinned = os.environ.get("SR_PACK_DIR")
-        pack_dir = pinned
-        if pack_dir is None:
-            pack_dir = str(Path(cfg["api"]["pack_dir"]) / cfg.region_name)
-        pack = GraphPack.load(pack_dir)
-        tz = pack_timezone(cfg, pack.meta.get("region"),
+        if pinned is not None:
+            entry = load_pinned_pack(pinned, cfg)
+        else:
+            entry = load_named_pack(Path(cfg["api"]["pack_dir"]), cfg.region_name, cfg)
+        tz = pack_timezone(cfg, entry.pack.meta.get("region"),
                            allow_unconfigured=pinned is not None)
-        return cls(cfg=cfg, pack=pack, router=Router(pack, cfg),
+        return cls(cfg=cfg, registry=PackRegistry([entry]),
                    limiter=build_limiter(cfg),
                    route_limiter=build_route_limiter(cfg),
                    trusted_proxies=trusted_proxies(cfg),
