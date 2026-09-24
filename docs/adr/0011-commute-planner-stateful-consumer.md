@@ -1,5 +1,5 @@
 ---
-Status: accepted
+Status: accepted (amended 2026-09-24)
 Date: 2026-09-17
 ---
 
@@ -76,3 +76,13 @@ disruption that does not change your route or arrival time is not worth an inter
 - Route artifacts consumed here are half-perishable: `eta_s` and segment timings go stale
   while `unsafe` counts and tiers stay reproducible. `traffic_basis` (ADR-0004, schema v2)
   is what makes that legible.
+
+## Amendment, 2026-09-24: the service starts early, as a trip-trace ingest (ADR-0017)
+
+Before Phase 5, the commute planner service begins as one append-only endpoint that
+receives **trip traces** from beta testers, identified by a per-device tester token rather
+than an account. The predicted-versus-actual log therefore starts with the beta, not with
+the first saved commute. It covers every tested trip, not just commute corridors, which
+widens the evidence ADR-0010's first trigger is measured against. Accounts, saved
+commutes, the scheduler and the sweep are unchanged and still Phase 5. See ADR-0017 for
+what is recorded, the on-device privacy trim, and retention.

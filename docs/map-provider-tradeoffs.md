@@ -1,7 +1,7 @@
 # Map provider trade-offs: MapLibre + OpenFreeMap vs Google Maps Platform
 
 **Status:** evaluation only — no change adopted. Current stack stays.
-**Date:** 2026-07-26
+**Date:** 2026-07-26 (addendum 2026-09-24, below)
 
 ## TL;DR
 
@@ -152,6 +152,37 @@ Keep MapLibre + OpenFreeMap. Revisit only when a specific constraint binds:
 - *Product pivots to true turn-by-turn in-dash navigation* → the Google terms
   above become a first-class licensing question, and the Navigation SDK (not
   the Directions API) is the relevant product.
+
+## Addendum, 2026-09-24: Google as the *router*, re-checked
+
+The July evaluation asked whether to switch the map. In September the question became
+whether to use the **Routes API as the base router**: take Google's route, flag its
+unsafe maneuvers against OSM control data, and re-request with waypoints. Two
+same-day sessions examined it. The decision and the terms reading live in
+[ADR-0015](adr/0015-google-routes-scored-alternatives.md) and its amendment. In short:
+
+- **Not adopted for now.** Our router stays the product. Google-as-router is gated on
+  written terms clearance (ADR-0015 G0). The concern is Terms of Service §3.2.3(c), "No
+  Creating Content From Google Maps Content", not the map clause.
+- **The only Google integration decided is an "Open in Google Maps" deep link** with the
+  same origin and destination, offered as a familiar baseline. It is not a Maps Platform
+  call, so the terms above do not reach it, and it needs no key or billing account.
+- The "no use with a non-Google map" clause (§19.2) reads **"in conjunction with"**. That
+  covers overlaying a Google route on MapLibre, not just rendering Google tiles.
+- **Routes API facts, as of 2026-09-24:**
+  - Up to 25 intermediates.
+  - `via: true` passes through without adding a leg.
+  - A request with intermediates returns no alternatives.
+  - No modifier avoids points, segments or turn types.
+  - No intersection-control data in responses.
+- **Routes API pricing, per 1,000 after the monthly free cap:**
+  - Essentials: $5, 10k free.
+  - Pro: $10, 5k free. Triggered by traffic-aware routing, `heading`, `sideOfRoad`, or
+    11-25 intermediates.
+  - Enterprise: $15, 1k free.
+- The wait at an uncontrolled crossing, which prompted the question, is priced by
+  [ADR-0016](adr/0016-control-delay-is-travel-time.md), in our own engine, with no Google
+  dependency.
 
 ## Sources
 
