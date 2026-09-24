@@ -134,9 +134,18 @@ work through it in order:
       `regions` (a list; the old scalar `region` key is gone) and summed `num_edges`.
       Each `PackEntry` carries its own `tz`; `AppState.pack_tz` is gone. Tests in
       `tests/test_multi_pack_load.py` point `SR_CONFIG` at a rewritten config whose
-      `pack_dir` is `tmp_path` — no new env hook. With >1 pack, `registry.only()`
-      raises, so `/route` on a multi-pack deployment 500s until (3) lands.
-- [ ] (3) Route by coordinates; the 422 contract, on `/route` and `/reroute`.
+      `pack_dir` is `tmp_path` — no new env hook (the toy-metro helpers now live in
+      `tests/helpers/multi_pack.py`).
+- [x] (3) Route by coordinates; the 422 contract, on `/route` and `/reroute`. Done
+      2026-09-24. `api/routes.py::_select_pack` calls `registry.pack_for(o, d)` after
+      the quota dependency and before any search, and raises 422 with the selection
+      error's `.detail`; `/reroute` re-derives from position + destination. Tests in
+      `tests/test_route_by_coords.py` (spies on each served `Router`, a recording
+      limiter for the spent token, the null-bbox `SR_PACK_DIR` toy still getting the
+      snap-failure 422, and a byte-identical `berkeley_oakland` artifact through the
+      registry vs a direct `Router`). **Still one-pack only:** `/meta` and `/geocode`
+      read `registry.only()`, so on a deployment serving ≥2 packs both return 500
+      until (6) and (5) land. `AppState.pack`/`.router` are single-pack shortcuts too.
 - [x] (4) Per-pack IANA timezone for departure (#72, done before (2) and merged into
       it). `api/departure.py`: `resolve_departure` + `pack_timezone`; `timezone` on
       each `[region.presets.*]`, missing on a served pack = startup failure.

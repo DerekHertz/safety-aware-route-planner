@@ -469,6 +469,12 @@ class TestRouteEndpoint:
         c.app.state.app_state.router.route = counting
         assert c.post("/route", json=_route_body(c.pack, c.ids)).status_code == 429
         assert calls == []
+        # The spy is on the Router the handler actually selects: once the
+        # bucket refills, an admitted request is counted. Without this, an
+        # empty `calls` could mean the spy was simply never reached.
+        c.clock.advance(2.0)
+        assert c.post("/route", json=_route_body(c.pack, c.ids)).status_code == 200
+        assert calls == [1]
 
     def test_geocode_and_meta_are_not_charged_to_the_routing_quota(self, make_client):
         """Separate ceilings for separate resources: /meta is a dict lookup and

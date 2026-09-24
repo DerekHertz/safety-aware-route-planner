@@ -270,8 +270,9 @@ class PackRegistry:
         return [e.name for e in self._entries]
 
     def only(self) -> PackEntry:
-        """The sole served pack. Step-1 callers use this until the handlers
-        route by coordinates (ADR-0014 step 3)."""
+        """The sole served pack; raises with two or more. `/route` and
+        `/reroute` select by coordinates (`pack_for`); `/meta` and `/geocode`
+        still use this until ADR-0014 steps 6 and 5."""
         if len(self._entries) != 1:
             raise RuntimeError(
                 f"only() on a registry of {len(self._entries)} packs; "
