@@ -140,7 +140,7 @@ work through it in order:
 - [x] (4) Per-pack IANA timezone for departure (#72, done before (2) and merged into
       it). `api/departure.py`: `resolve_departure` + `pack_timezone`; `timezone` on
       each `[region.presets.*]`, missing on a served pack = startup failure.
-- [ ] (5) `/geocode?region=`, bounding per pack.
+- [x] (5) `/geocode?region=`, bounding per pack. Unknown region is 422 before cache/bucket.
 - [ ] (6) Additive `/meta.packs` and the client: initial view, coverage check, and a
       cross-region pre-flight.
 - [ ] (7) Build a second real metro and **re-measure memory in the container**. The
