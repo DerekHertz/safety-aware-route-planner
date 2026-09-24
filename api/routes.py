@@ -1,11 +1,21 @@
-"""POST /route — the core endpoint — and POST /reroute (ADR-0008)."""
+"""POST /route — the core endpoint — and POST /reroute (ADR-0008).
+
+Both route on the served pack whose bbox contains **both** endpoints
+(ADR-0014 decision 2); `/reroute` re-derives it from the current position and
+the original destination, so no pack identity is carried. Any other case is a
+422 with the same `{"detail": str}` shape a `RoutingError` gets, raised before
+any search runs — but after `enforce_route_quota`, so the token is still spent
+and a refusal is not a free probe of coverage.
+"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from api.departure import resolve_departure
 from api.ratelimit import LimiterUnavailable, client_key, retry_after_header
+from api.registry import PackEntry
 from api.schemas import (
+    LatLon,
     RerouteRequest,
     RerouteResponse,
     RouteRequest,
@@ -61,6 +71,22 @@ async def enforce_route_quota(request: Request) -> None:
             headers={"Retry-After": retry_after_header(retry_after)})
 
 
+def _select_pack(request: Request, origin: LatLon, destination: LatLon) -> PackEntry:
+    """The served pack containing both endpoints, or a 422 saying why not.
+
+    A bbox test per pack, so it is cheap enough to run before any search; the
+    messages are the ADR's, carried on the selection errors themselves. A sole
+    null-bbox pack (a toy) contains every point, so there the snap decides, as
+    it always has.
+    """
+    registry = request.app.state.app_state.registry
+    picked = registry.pack_for((origin.lat, origin.lon),
+                               (destination.lat, destination.lon))
+    if not isinstance(picked, str):
+        raise HTTPException(status_code=422, detail=picked.detail)
+    return registry[picked]
+
+
 def _artifact(r) -> dict:
     """The wire shape of one route artifact (ADR-0004). RouteOut carries the
     nested pieces as plain dicts; pydantic coerces them at the boundary."""
@@ -84,10 +110,9 @@ def _artifact(r) -> dict:
 def route(request: Request, body: RouteRequest) -> RouteResponse:
     # sync endpoint on purpose: FastAPI runs it in a worker thread, keeping
     # the event loop free while the (CPU-bound) search runs
-    state = request.app.state.app_state
+    entry = _select_pack(request, body.origin, body.destination)
     # Pack-local wall clock (#63): naive passes through, aware is converted,
     # omitted is "now" in the pack's zone — never the server's UTC clock.
-    entry = state.registry.only()      # routing by coordinates: ADR-0014 step 3
     departure = resolve_departure(body.departure_time, entry.tz)
     try:
         routes = entry.router.route(
@@ -111,14 +136,13 @@ def route(request: Request, body: RouteRequest) -> RouteResponse:
 def reroute(request: Request, body: RerouteRequest) -> RerouteResponse:
     # sync on purpose, like /route: FastAPI runs it in a worker thread so the
     # CPU-bound search never blocks the event loop.
-    state = request.app.state.app_state
     pref = body.preference
     # pref.traffic_basis is deliberately NOT read. It describes the artifact
     # the client is currently following; this call builds a fresh snapshot and
     # the artifact it returns reports THAT basis. It may also be absent
     # entirely — a client mid-drive can be holding a v1 artifact (ADR-0004 v2;
     # see CarriedPreference in api/schemas.py).
-    entry = state.registry.only()      # routing by coordinates: ADR-0014 step 3
+    entry = _select_pack(request, body.origin, body.destination)
     try:
         art = entry.router.reroute(
             body.origin.lat, body.origin.lon,

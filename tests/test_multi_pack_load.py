@@ -6,19 +6,15 @@ unchanged. Every served pack is loaded eagerly in `lifespan`, before `/health`
 reports ready, and startup refuses a set on which coordinate-to-pack would not
 be a function (overlap) or a pack with no timezone.
 
-The packs here are toys built by the same `GraphBuilder` the API tests use,
-under `tmp_path`, from a config that adds two presets with disjoint bboxes.
-The config reaches the app through the existing `SR_CONFIG` hook, with
-`[api] pack_dir` rewritten to `tmp_path`; `SR_PACK_DIR` stays unset, since it
-pins one pack and bypasses the served list entirely.
-
-Handlers still read `registry.only()` at this step — routing by coordinates
-is step 3 — so nothing here calls `/route` on a two-pack deployment.
+The packs here are the two toy metros of `tests/helpers/multi_pack.py`,
+reached through the existing `SR_CONFIG` hook with `[api] pack_dir` rewritten
+to `tmp_path`; `SR_PACK_DIR` stays unset, since it pins one pack and bypasses
+the served list entirely. Routing across them (step 3) is
+`tests/test_route_by_coords.py`.
 """
 from __future__ import annotations
 
 import shutil
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -27,52 +23,14 @@ from fastapi.testclient import TestClient
 from api.registry import PackConfigError, served_regions
 from pyref.config import DEFAULT_CONFIG_PATH, Config
 from tests.helpers.fixtures import unprotected_left_city
-from tests.helpers.toy_graphs import GraphBuilder
-
-# Disjoint toy metros, [west, south, east, north], nowhere near a real preset.
-A_BBOX = [10.0, 10.0, 10.02, 10.01]
-B_BBOX = [20.0, 20.0, 20.02, 20.01]
-A_OVERLAPPING_B = [19.99, 19.99, 20.01, 20.005]
-
-
-def _preset(name: str, bbox: list[float], tz: str | None) -> str:
-    lines = [f"[region.presets.{name}]", f"bbox = {bbox!r}"]
-    if tz is not None:
-        lines.append(f'timezone = "{tz}"')
-    return "\n".join(lines) + "\n"
-
-
-def _write_config(tmp_path: Path, *, presets: dict[str, tuple[list[float], str | None]],
-                  regions: list[str] | None = None, active: str | None = None) -> Path:
-    """The shipped config, with `pack_dir` -> `tmp_path/packs`, extra presets
-    appended, and optionally `[api] regions` / `region.active` set."""
-    text = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8")
-    pack_root = (tmp_path / "packs").as_posix()
-    old_dir = 'pack_dir = "data/packs"'
-    assert old_dir in text
-    text = text.replace(old_dir, f"pack_dir = '{pack_root}'")
-    if regions is not None:
-        assert "\n[api]\n" in text
-        text = text.replace("\n[api]\n", f"\n[api]\nregions = {regions!r}\n", 1)
-    if active is not None:
-        old_active = 'active = "berkeley_oakland"'
-        assert old_active in text
-        text = text.replace(old_active, f'active = "{active}"')
-    text += "\n" + "\n".join(_preset(n, b, tz) for n, (b, tz) in presets.items())
-    path = tmp_path / "config.toml"
-    path.write_text(text, encoding="utf-8")
-    return path
-
-
-def _build_toy(cfg: Config, name: str, root: Path) -> None:
-    """A two-node pack whose manifest `region` is `name` and whose bbox is
-    stamped from `cfg`'s preset, written to `root/name`."""
-    west, south, east, north = cfg.bbox(name)
-    b = GraphBuilder(cfg)
-    n0 = b.node(south + (north - south) / 3, west + (east - west) / 3)
-    n1 = b.node(south + 2 * (north - south) / 3, west + 2 * (east - west) / 3)
-    b.edge(n0, n1, length_m=200.0)
-    b.build(region=name).write(root / name)
+from tests.helpers.multi_pack import (
+    A_BBOX,
+    A_OVERLAPPING_B,
+    B_BBOX,
+    TWO,
+    build_toy,
+    write_config,
+)
 
 
 @pytest.fixture()
@@ -92,17 +50,13 @@ def env(tmp_path, monkeypatch):
 
 def _deploy(env, *, presets, build, **cfg_kw):
     tmp_path, monkeypatch, _ = env
-    cfg_path = _write_config(tmp_path, presets=presets, **cfg_kw)
+    cfg_path = write_config(tmp_path, presets=presets, **cfg_kw)
     monkeypatch.setenv("SR_CONFIG", str(cfg_path))
     cfg = Config.load(cfg_path)
     for name in build:
-        _build_toy(cfg, name, tmp_path / "packs")
+        build_toy(cfg, name, tmp_path / "packs")
     from api.main import create_app
     return TestClient(create_app())
-
-
-TWO = {"metro_a": (A_BBOX, "America/Los_Angeles"),
-       "metro_b": (B_BBOX, "America/New_York")}
 
 
 # --- loading N packs --------------------------------------------------------------
@@ -186,8 +140,8 @@ def test_default_served_set_is_region_active(env):
 
 
 def test_single_served_pack_is_the_sole_entry_with_its_zone(env):
-    """One served pack is today's deployment: the handlers' `only()` finds it,
-    and departures are resolved in that pack's zone."""
+    """One served pack is today's deployment: `only()` finds it, and
+    departures are resolved in that pack's zone."""
     client = _deploy(env, presets=TWO, build=["metro_a"], regions=["metro_a"])
     with client:
         state = client.app.state.app_state

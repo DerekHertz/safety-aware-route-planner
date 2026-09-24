@@ -57,9 +57,10 @@ class AppState:
     # the answer to change under a live limiter.
     trusted_proxies: int
 
-    # Shorthands for the sole served pack. Kept because tests reach through
-    # them (e.g. spying on `app_state.router.route`); they return the very
-    # objects the registry holds, so a patch on one is seen by the handlers.
+    # Shorthands for the sole served pack; they raise with two or more. The
+    # handlers select per request (`registry.pack_for`), but these return the
+    # very objects the registry holds, so on a one-pack deployment a patch
+    # through one (a spy on `app_state.router.route`) is seen by the handlers.
     @property
     def pack(self) -> GraphPack:
         return self.registry.only().pack
