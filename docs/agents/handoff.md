@@ -176,19 +176,35 @@ recorded in ADR-0016, ADR-0017, and amendments to ADR-0006, ADR-0010, ADR-0011 a
 ADR-0015. **Google Routes is not adopted.** Our router stays the product, and
 Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
 
-- [ ] (1) **IN PROGRESS — WIP on branch `feat/control-delay` (pushed, no PR yet).** Read
-      its head commit message first: goldens re-pinned (99 moved, 45 added); still needs
-      the green bar with `sr_core`, `types.ts` + schema-sync `PAIRS`, perf, and the PR.
-      **Control delay in the time term** (ADR-0016). Gap-acceptance delay from
-      conflicting `[sim]` volume, per-class signal waits and an all-way-stop constant, all
-      in config and covered by `profile_version`. Additive contract fields:
-      `UnsafePoint.expected_wait_s` and `RouteAlternative.control_delay_s`, mirrored into
-      `types.ts` and the schema-sync `PAIRS`. **Golden digests move and are re-pinned
-      deliberately; build `sr_core`** (see below). Pin with the grocery-run scenario: at
-      peak the `fast` route takes the signal a block away, at 3 am the direct crossing.
-- [ ] (2) **PR #82 open, reviewed, awaiting merge.** **"Open in Google Maps" link** with the same origin and destination: a
-      client-only deep link, with no Maps Platform call and no key.
-- [ ] (3) Phase 4 item (7) above.
+- [x] (1) **Control delay in the time term** (ADR-0016). Done 2026-09-24 (#84).
+      Constants live in `[sim.control_delay]`, so `profile_version` covers them. Waits are
+      in `turn_time_s` and ETA. `UnsafePoint.expected_wait_s` and
+      `RouteAlternative.control_delay_s` are on the wire. The grocery-run test is
+      `tests/test_scenario_control_delay.py`. 99 golden `arc_cost` digests moved on
+      purpose, and 45 `turn_delay_s` digests were added. `compute_costs` +0.33 ms.
+      Things to know before touching it:
+  - **The exp is `_exp_poly`, not `np.exp`.** It is a fixed polynomial, so the digests
+    do not depend on numpy's SIMD dispatch. There is no direct test of it against
+    `np.exp` yet (small follow-up).
+  - **Which road counts as major:** the one with the strictly higher road class, or the
+    road that runs through a T-junction. Equal-class signal junctions give both approaches
+    the 22 s minor wait.
+  - **The 120 s cap covers only the gap wait,** so a permissive left at a signal can reach
+    142 s.
+  - **Open questions for calibration (ADR-0017):**
+    - whether equal-class signals should get 22 s;
+    - whole-road volume overcounts the traffic a turn actually waits for;
+    - the crossing legs overcount at some T-junctions.
+  - **"Fast takes the unprotected left" scenarios moved to 3 am.** At peak they now take
+    the signal, which is the intended behavior.
+  - **Not done yet:** the comparison UI does not display the new fields. Next small web PR.
+- [x] (2) **"Open in Google Maps" link** (#82): "Compare in Google Maps ↗" under the route
+      cards. It uses `web/lib/googleMapsLink.ts`, a Maps URLs Directions link with no key.
+      Maps URLs have no departure-time parameter, so Google plans for "now".
+- [ ] (2b) **Show the waits in the comparison UI.** "Fast: 2 uncontrolled crossings, ~3
+      min waiting" from `control_delay_s`, and the per-marker `expected_wait_s`. Client
+      only; the fields are already in `types.ts`.
+- [ ] (3) Phase 4 item (7) above. **This is next.**
 - [ ] (4) **Trip-trace collection** (ADR-0017). The first slice of the commute planner
       service: one ingest endpoint and a tester token per device. The client buffers to
       IndexedDB, uploads chunks about every 2 minutes and at trip end, and trims 300 m
