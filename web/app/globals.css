@@ -330,6 +330,27 @@ body {
   gap: 8px;
 }
 
+/* Secondary action under the route cards: styled like .reset, but a real
+   link (ADR-0015 amendment). */
+.gmaps-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35em;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--foreground);
+  font-size: 0.85rem;
+  text-decoration: none;
+}
+
+.gmaps-link:focus-visible {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
 .start-nav {
   flex: 1;
   padding: 7px 14px;
@@ -576,6 +597,7 @@ body {
 @media (hover: hover) and (pointer: fine) {
   .locate:hover,
   .reset:hover,
+  .gmaps-link:hover,
   .search-results button:hover {
     background: #f1f5f9;
   }
@@ -710,7 +732,8 @@ body {
   .unit-toggle button,
   .segmented button,
   .search-results button,
-  .reset {
+  .reset,
+  .gmaps-link {
     min-height: 44px;
   }
 
