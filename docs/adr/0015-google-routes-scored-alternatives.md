@@ -1,5 +1,5 @@
 ---
-Status: proposed
+Status: proposed (amended 2026-09-24: the fallback is the current path; G0 is the reopen trigger)
 Date: 2026-09-24
 ---
 
@@ -159,3 +159,48 @@ own live navigation (ADR-0008). It is worth its own ADR if it is chosen.
   already uses a k-d tree and takes microseconds. Request time is graph search plus
   cost precompute (ADR-0009). Under this ADR, most of the search would move to Google
   anyway.
+
+## Amendment, 2026-09-24 (later): the fallback is the path now; G0 reopens the rest
+
+A second grilling session the same day, run without this ADR in view, reached the
+**Fallback** from the other end. The owner then chose to reconcile the two this way:
+**our router is the product today, and the Google-as-base-router direction waits on G0**.
+Nothing above is withdrawn. G0, B1-B3 and the decision point remain the path back if
+clearance ever arrives. What changes is what gets built in the meantime.
+
+**Why the fallback wins by default.**
+- §3.2.3(c) is unresolved, and nothing that calls the Routes API may merge before G0.
+  Waiting on G0 with no engine work would leave the grocery-run failure below unfixed.
+- **The motivating case is a control-delay failure, not a traffic failure.** Google
+  routed the owner twice across a busy four-lane street with no signal. Each crossing
+  cost more than a minute of gap-waiting, next to a signal a block or two away. Google's
+  better *link* speeds did not prevent it. Pricing that wait needs conflicting *volume*,
+  which no live speed feed carries (ADR-0010). ADR-0016 adds that delay to our own time
+  term, and it fixes the case with no Google dependency.
+- Coverage outside the served packs comes from **building more packs** (ADR-0014 step 7
+  onward), not from Google.
+- Real-traffic ETAs are **staged by evidence** (ADR-0010's 2026-09-24 amendment), starting
+  from free sources. Any paid feed must permit feeding our engine, which the Routes API
+  does not.
+
+**The deep link actually decided is a different one from the Fallback above.** The owner
+chose an **"Open in Google Maps" link with the same origin and destination**: Google's
+own route, in Google's own app, shown as a familiar baseline next to our alternatives'
+unsafe counts. It makes no Maps Platform call, stores nothing and carries none of our
+data, so neither §19 nor §3.2.3 reaches it.
+
+The Fallback's other idea is handing *our* `safe` route to Google Maps with waypoints
+pinned at each departure from `fast`. It is not decided. It remains a candidate
+alternative to un-parking live navigation (ADR-0008) and still wants its own ADR if
+chosen.
+
+**Also found while checking the Routes API on 2026-09-24:**
+- A request with intermediate waypoints returns **no alternatives**, so the via step
+  always yields exactly one route.
+- `location.heading` on a via point, the only way to hint the direction of travel
+  through an intersection, moves the request to the **Pro** SKU. Pro is $10 per 1,000
+  after 5,000 free a month; Essentials is $5 per 1,000 after 10,000.
+- There is still no modifier that avoids points, segments or turn types.
+
+**One sequencing change:** ADR-0014 step 7 is un-paused. Pick a dense urban metro for it:
+that serves ADR-0017's calibration now and B1's benchmark if G0 ever clears.

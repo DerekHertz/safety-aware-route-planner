@@ -36,6 +36,14 @@ raise but never lower. It is what stops a four-lane arterial from reading as ben
 parameter on purpose (`busy_floor_by_class`), never an emergent property of weight tuning.
 _Avoid_: busy minimum, static threshold.
 
+**Control delay**:
+The expected time spent waiting at an intersection because of how it is controlled: for
+a signal, an all-way stop, or a usable gap in conflicting traffic. It is **time**, not
+safety: it belongs in a route's ETA and in the fast route's choice, independent of λ. An
+unprotected maneuver usually carries both a control delay and a safety penalty, and the
+two must not be conflated.
+_Avoid_: intersection penalty (that is the safety term), turn cost, wait time (too loose).
+
 **Unsafe action**:
 An instance of one of the committed maneuvers that clears the counting threshold on a
 route. Reported per route as an **unsafe-action count**, split by type. Distinct from a
@@ -149,6 +157,12 @@ artifact, never by a separate traffic-monitoring system. Currently a **stub**: u
 deterministic traffic two replans of the same commute are byte-identical, so nothing can
 fire (ADR-0010).
 _Avoid_: incident (that is one possible source of a disruption, not the concept), delay.
+
+**Trip trace**:
+The recorded GPS track of one real drive, together with the route artifact being
+followed, collected from consenting testers. It is evidence for calibrating the model
+and measuring ETA error, and never a direct input to a live route.
+_Avoid_: probe data (that names a commercial product), GPS log, telemetry.
 
 **Parity core**:
 The pairing of the pure-Python reference engine (`pyref/`) and the C++ engine

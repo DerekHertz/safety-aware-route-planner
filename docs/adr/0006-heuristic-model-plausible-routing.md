@@ -17,3 +17,11 @@ on main roads at commute times) is sufficient to demonstrate the safety tradeoff
 same volume signal feeds the time-dynamic component of the busy-road rule (ADR-0005), so
 the traffic sim earns its keep twice. Investing in real traffic would be scope-drift
 against the thesis.
+
+**Amended 2026-09-24 (ADR-0016): base routing is no longer link time only.** The time
+term now includes an expected **control delay** per turn: the wait at a signal, an
+all-way stop, or for a gap in conflicting traffic. It is driven by the same synthetic
+volume, and it is still deterministic. "Plausible, not competitive" stands. The change
+exists because a `fast` route that crosses a busy arterial without a signal to save ten
+seconds of driving, then waits a minute for a gap, is not plausible. Real traffic stays
+deferred (ADR-0010); see that ADR's 2026-09-24 amendment for how it is now staged.

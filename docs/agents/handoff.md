@@ -166,18 +166,46 @@ work through it in order:
       500. `AppState.pack`/`.router` were removed (only tests used them);
       `PackRegistry.only()` stays, for tests only.
 - [ ] (7) Build a second real metro and **re-measure memory in the container**. The
-      metro-scale figure in the ADR is a guess. **PAUSED 2026-09-24 by the owner**
-      pending the Google Maps Platform discussion
-      ([ADR-0015](../adr/0015-google-routes-scored-alternatives.md), proposed): its
-      benchmark wants a dense urban metro, so the choice of second pack waits on it.
+      metro-scale figure in the ADR is a guess. Paused and then **un-paused 2026-09-24**
+      (ADR-0015 amendment): pick a **dense urban** metro. That serves trip-trace
+      calibration (ADR-0017) now and ADR-0015's benchmark if its terms gate G0 ever
+      clears. Sequenced in **Phase 4b** below, after items 1-2.
+
+**Phase 4b - control delay and trip traces.** Decided 2026-09-24 in a grilling session;
+recorded in ADR-0016, ADR-0017, and amendments to ADR-0006, ADR-0010, ADR-0011 and
+ADR-0015. **Google Routes is not adopted.** Our router stays the product, and
+Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
+
+- [ ] (1) **Control delay in the time term** (ADR-0016). Gap-acceptance delay from
+      conflicting `[sim]` volume, per-class signal waits and an all-way-stop constant, all
+      in config and covered by `profile_version`. Additive contract fields:
+      `UnsafePoint.expected_wait_s` and `RouteAlternative.control_delay_s`, mirrored into
+      `types.ts` and the schema-sync `PAIRS`. **Golden digests move and are re-pinned
+      deliberately; build `sr_core`** (see below). Pin with the grocery-run scenario: at
+      peak the `fast` route takes the signal a block away, at 3 am the direct crossing.
+- [ ] (2) **"Open in Google Maps" link** with the same origin and destination: a
+      client-only deep link, with no Maps Platform call and no key.
+- [ ] (3) Phase 4 item (7) above.
+- [ ] (4) **Trip-trace collection** (ADR-0017). The first slice of the commute planner
+      service: one ingest endpoint and a tester token per device. The client buffers to
+      IndexedDB, uploads chunks about every 2 minutes and at trip end, and trims 300 m
+      at each end of the trip on the device. Raw traces are kept 90 days. **Move this
+      ahead of (3) if beta testing starts first**, or those drives go uncollected.
+- [ ] (5) **Wait extraction and calibration** (ADR-0017). Match traces against the
+      followed route, count time below 2 m/s in the last 60 m, and fit ADR-0016's
+      constants on pooled data. The output is config, never live lookups.
+- [ ] (6) **Free traffic sources** (ADR-0010 amendment, rung 2): 511 WZDx closures as
+      hard blocks, PeMS freeway speeds. The HERE corridor feed (rung 3) waits for
+      measured ETA error and a check of HERE §6.4(b), its ODbL clause.
 
 **Phase 5 - commute planner** (ADR-0011). Google Sign-In, accounts, saved commutes with
 user-set departure times, the **departure-time sweep** as the headline feature, a stubbed
-disruption-source interface, a daily brief, and predicted-vs-actual ETA logging.
+disruption-source interface, a daily brief, and predicted-vs-actual ETA logging. The
+service itself starts earlier, as Phase 4b (4)'s trip-trace ingest (ADR-0011 amendment).
 
-**Phase 6 - trigger-gated** (see ADR-0010's triggers). Free event feeds first (511.org,
-WZDx, PeMS pending its access terms), then a paid speed layer only if the Phase 5
-measurements justify it. Then Protomaps tile self-hosting, calendar-derived departure,
+**Phase 6 - trigger-gated** (see ADR-0010's triggers and its 2026-09-24 ladder). Free
+feeds are pulled forward into Phase 4b (6). Then the HERE per-route corridor feed, and
+a Mapbox Traffic Data quote after it, only if measured ETA error justifies them. Then Protomaps tile self-hosting, calendar-derived departure,
 live speed into the safety severity term, measured volume profiles.
 
 ### Standing risk
