@@ -14,3 +14,9 @@ Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-trac
 ### Domain docs
 
 Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+### Vendored skills
+
+`/grill-me` and `/grill-with-docs` (plus the `grilling` and `domain-modeling`
+skills they call) are vendored from mattpocock/skills into `.claude/skills/`.
+See `.claude/skills/README.md`.
