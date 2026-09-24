@@ -146,7 +146,7 @@ def test_single_served_pack_is_the_sole_entry_with_its_zone(env):
     with client:
         state = client.app.state.app_state
         assert state.registry.only().tz == ZoneInfo("America/Los_Angeles")
-        assert state.pack is state.registry["metro_a"].pack
+        assert state.registry.only() is state.registry["metro_a"]
 
 
 def test_sr_regions_overrides_the_config_list(env):

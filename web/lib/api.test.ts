@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchReroute } from "./api";
+import { fetchMeta, fetchReroute, geocode } from "./api";
 import {
   CarriedPreference,
   LatLon,
@@ -104,5 +104,38 @@ describe("fetchReroute", () => {
     await expect(fetchReroute(ORIGIN, DEST, PREF)).rejects.toThrow(
       "reroute failed (500)",
     );
+  });
+});
+
+describe("geocode", () => {
+  it("passes the region the map is in", async () => {
+    const fetchMock = mockFetchOnce(200, { results: [] });
+    await geocode("main st", "berkeley_oakland");
+    const url = new URL(fetchMock.mock.calls[0][0], "http://x");
+    expect(url.pathname).toBe("/api/geocode");
+    expect(url.searchParams.get("q")).toBe("main st");
+    expect(url.searchParams.get("region")).toBe("berkeley_oakland");
+  });
+
+  it("omits region when it is unknown", async () => {
+    const fetchMock = mockFetchOnce(200, { results: [] });
+    await geocode("main st");
+    const url = new URL(fetchMock.mock.calls[0][0], "http://x");
+    expect(url.searchParams.has("region")).toBe(false);
+  });
+});
+
+describe("fetchMeta", () => {
+  it("fills in packs for a server that predates them", async () => {
+    const old = { region: "toy", bbox: [1, 2, 3, 4], num_edges: 7 };
+    mockFetchOnce(200, old);
+    expect(await fetchMeta()).toEqual({ ...old, packs: [old] });
+  });
+
+  it("keeps the server's packs, default first", async () => {
+    const a = { region: "a", bbox: [1, 2, 3, 4], num_edges: 7 };
+    const b = { region: "b", bbox: [5, 6, 7, 8], num_edges: 9 };
+    mockFetchOnce(200, { ...a, packs: [a, b] });
+    expect((await fetchMeta()).packs).toEqual([a, b]);
   });
 });

@@ -160,9 +160,23 @@ export interface GeocodeResult {
   lon: number;
 }
 
+/** One served pack's coverage (ADR-0014 decision 6). */
+export interface ServedPack {
+  region: string;
+  /** [west, south, east, north]; null when the pack declares no coverage
+   *  (only ever the sole served pack: a toy/test deployment). */
+  bbox: number[] | null;
+  num_edges: number;
+}
+
+/** GET /meta. The top-level fields describe the DEFAULT pack (the first
+ *  served); `packs` lists every served pack, default first. A server that
+ *  predates `packs` omits it — `fetchMeta` fills it in, so everything past
+ *  that boundary can rely on it. */
 export interface PackMeta {
   region: string;
   /** [west, south, east, north]; null when the pack declares no coverage. */
   bbox: number[] | null;
   num_edges: number;
+  packs: ServedPack[];
 }

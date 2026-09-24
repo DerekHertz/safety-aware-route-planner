@@ -11,6 +11,7 @@ import {
 import "maplibre-gl/dist/maplibre-gl.css";
 import type { Feature, FeatureCollection } from "geojson";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { bboxToLngLatBounds } from "@/lib/coverage";
 import { LatLon, RouteAlternative, RouteKind } from "@/lib/types";
 
 // OpenFreeMap: genuinely free vector tiles, no API key. (MapLibre demotiles
@@ -77,6 +78,20 @@ interface Props {
    *  for routing requests) is deliberately pinned, e.g. while on-route and
    *  navigating, to avoid rerouting on every fix. */
   originMarkerPosition?: LatLon | null;
+  /**
+   * The coverage bbox, `[west, south, east, north]`, to frame when the map is
+   * created. Read ONCE, at construction; later changes are ignored (the
+   * first-GPS-fix flyTo moves the camera from there).
+   *
+   * `undefined` means "not known yet" (/meta in flight): the map is not
+   * constructed at all until it is, so it never renders MapLibre's default
+   * 0,0 view and then jumps. `null` means "known, and there is nothing to
+   * frame" (/meta failed, or a toy pack with no bbox): the whole world.
+   */
+  initialBounds?: number[] | null;
+  /** Fired with the map's center after it loads and after every move, so the
+   *  caller can tell which served pack the map is showing. */
+  onViewChange?: (center: LatLon) => void;
 }
 
 const emptyFC = (): FeatureCollection => ({
@@ -99,6 +114,8 @@ export default function MapView({
   heading = null,
   onUserGesture,
   originMarkerPosition = origin,
+  initialBounds,
+  onViewChange,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MLMap | null>(null);
@@ -122,6 +139,8 @@ export default function MapView({
     onSetPoint,
     onSelect,
     onUserGesture,
+    onViewChange,
+    initialBounds,
   });
   const routesRef = useRef({ routes, selected });
   useEffect(() => {
@@ -131,6 +150,8 @@ export default function MapView({
       onSetPoint,
       onSelect,
       onUserGesture,
+      onViewChange,
+      initialBounds,
     };
     routesRef.current = { routes, selected };
   });
@@ -294,13 +315,24 @@ export default function MapView({
     [syncRoutes],
   );
 
+  // Flips false -> true once, when the caller knows what to frame. A boolean
+  // rather than the bbox itself, so a later bbox change can never tear the map
+  // down and rebuild it.
+  const viewKnown = initialBounds !== undefined;
+
   useEffect(() => {
-    if (!containerRef.current || mapRef.current) return;
+    if (!containerRef.current || mapRef.current || !viewKnown) return;
+    const bounds = stateRef.current.initialBounds;
     const map = new MLMap({
       container: containerRef.current,
       style: STYLE_URL,
-      center: [-122.268, 37.845], // Berkeley/Oakland
-      zoom: 12.5,
+      // Framed without padding: MapLibre refuses a fit whose padding exceeds
+      // the canvas (the mobile sheet inset on a not-yet-sized 400x300
+      // canvas) and then leaves the camera at 0,0 — the very flash this
+      // avoids.
+      ...(bounds
+        ? { bounds: bboxToLngLatBounds(bounds) }
+        : { center: [0, 0] as [number, number], zoom: 1 }),
       // Compact on small screens: the attribution is an ODbL obligation, so it
       // must stay reachable, but the expanded form eats a phone's width.
       attributionControl: { compact: true },
@@ -372,6 +404,13 @@ export default function MapView({
     const onGesture = (e: { originalEvent?: unknown }) => {
       if (e.originalEvent) stateRef.current.onUserGesture?.();
     };
+    const reportView = () => {
+      const c = map.getCenter();
+      stateRef.current.onViewChange?.({ lat: c.lat, lon: c.lng });
+    };
+    map.on("load", reportView);
+    map.on("moveend", reportView);
+
     map.on("dragstart", onGesture);
     map.on("zoomstart", onGesture);
     map.on("rotatestart", onGesture);
@@ -402,7 +441,7 @@ export default function MapView({
       mapRef.current = null;
       layersReady.current = false;
     };
-  }, [initLayers]);
+  }, [initLayers, viewKnown]);
 
   // routes/selection -> layers, and fit the viewport to the new routes.
   // Skipped while cameraFollow is on: otherwise every reroute yanks the
@@ -424,7 +463,9 @@ export default function MapView({
         );
       }
     }
-  }, [routes, selected, syncRoutes, fitPadding, cameraFollow]);
+    // viewKnown: the map is built late (see initialBounds), so anything that
+    // arrived before it must be applied once it exists.
+  }, [routes, selected, syncRoutes, fitPadding, cameraFollow, viewKnown]);
 
   // explicit recenter request (e.g. first GPS fix, or the locate button)
   useEffect(() => {
@@ -512,7 +553,8 @@ export default function MapView({
     };
     sync(originMarker, originMarkerPosition, "#0f766e", "origin", originIsLive);
     sync(destMarker, destination, "#b91c1c", "destination", false);
-  }, [originMarkerPosition, destination, originIsLive, heading]);
+    // viewKnown: re-run once the late-built map exists (see initialBounds).
+  }, [originMarkerPosition, destination, originIsLive, heading, viewKnown]);
 
   return (
     <div className="map-root">

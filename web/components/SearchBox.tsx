@@ -9,6 +9,9 @@ interface Props {
   value: string;
   onPick: (r: GeocodeResult) => void;
   onTextChange: (text: string) => void;
+  /** The served pack to bound the search to — the one the map or GPS fix is
+   *  in (ADR-0014 decision 5). Omitted when unknown. */
+  region?: string;
 }
 
 export default function SearchBox({
@@ -16,6 +19,7 @@ export default function SearchBox({
   value,
   onPick,
   onTextChange,
+  region,
 }: Props) {
   const [results, setResults] = useState<GeocodeResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -45,7 +49,7 @@ export default function SearchBox({
     // 600 ms debounce keeps us polite to the Nominatim proxy
     timer.current = setTimeout(async () => {
       try {
-        const rs = await geocode(value.trim());
+        const rs = await geocode(value.trim(), region);
         setResults(rs);
         setOpen(true);
       } catch {
@@ -55,7 +59,7 @@ export default function SearchBox({
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [value]);
+  }, [value, region]);
 
   return (
     <div className="searchbox">
