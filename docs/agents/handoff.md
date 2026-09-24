@@ -126,10 +126,20 @@ work through it in order:
       as overlap**; a null bbox contains everything and is legal only alone.
       `SR_PACK_DIR` names its pack from the manifest `region`, not the directory.
       Handlers still read `registry.only()`; `pack_for` is not wired in until (3).
-- [ ] (2) `[api] regions` / `SR_REGIONS`, eager load of N packs, real `/health` count.
+- [x] (2) `[api] regions` / `SR_REGIONS`, eager load of N packs, real `/health` count.
+      Done 2026-09-23. `served_regions(cfg)` in `api/registry.py`: `SR_REGIONS`, else
+      `[api] regions`, else `[region.active]` (shipped config leaves the key commented
+      out, so one-pack deployments are unchanged). `lifespan` fetches and loads every
+      served pack before `/health` is ready; `/health` now reports `packs_loaded`,
+      `regions` (a list; the old scalar `region` key is gone) and summed `num_edges`.
+      Each `PackEntry` carries its own `tz`; `AppState.pack_tz` is gone. Tests in
+      `tests/test_multi_pack_load.py` point `SR_CONFIG` at a rewritten config whose
+      `pack_dir` is `tmp_path` — no new env hook. With >1 pack, `registry.only()`
+      raises, so `/route` on a multi-pack deployment 500s until (3) lands.
 - [ ] (3) Route by coordinates; the 422 contract, on `/route` and `/reroute`.
-- [ ] (4) Per-pack IANA timezone for departure. This is also a latent bug today: an
-      omitted `departure_time` falls back to naive `now()` in a UTC container.
+- [x] (4) Per-pack IANA timezone for departure (#72, done before (2) and merged into
+      it). `api/departure.py`: `resolve_departure` + `pack_timezone`; `timezone` on
+      each `[region.presets.*]`, missing on a served pack = startup failure.
 - [ ] (5) `/geocode?region=`, bounding per pack.
 - [ ] (6) Additive `/meta.packs` and the client: initial view, coverage check, and a
       cross-region pre-flight.

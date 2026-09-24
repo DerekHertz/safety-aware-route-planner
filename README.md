@@ -201,12 +201,12 @@ Packs are not baked in — the container downloads them at boot from the bucket
 pinned in `packs.lock` (see *Pack distribution*), so adding a region is an
 upload and a restart rather than an image rebuild.
 
-`/health` reports readiness, not just liveness: 503 until a pack is actually
+`/health` reports readiness, not just liveness: 503 until every served pack is
 loaded, and it includes `engine` so a silent downgrade to the pure-Python path
 is visible from outside without reading logs.
 
 ```json
-{"status":"ok","packs_loaded":1,"region":"berkeley_oakland","num_edges":20678,"engine":"cpp"}
+{"status":"ok","packs_loaded":1,"regions":["berkeley_oakland"],"num_edges":20678,"engine":"cpp"}
 ```
 
 ### On a phone, via a tunnel
@@ -261,7 +261,7 @@ either call it by full path or add that directory to your user PATH.
 
 Nothing here is host-specific — it is a container that reads its configuration
 from the environment (`SR_CORS_ORIGINS`, `SR_CORS_ORIGIN_REGEX`,
-`SR_PACKS_URL`, `SR_NOMINATIM_CONTACT`, `SR_REDIS_URL`,
+`SR_PACKS_URL`, `SR_REGIONS`, `SR_NOMINATIM_CONTACT`, `SR_REDIS_URL`,
 `SR_TRUSTED_PROXIES`). Four constraints carry over to any host:
 
 - **HTTPS is mandatory**, for the geolocation reason above.

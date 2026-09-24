@@ -149,13 +149,13 @@ def _fast(client, body):
 def test_toy_pack_serves_utc(toy_env):
     client, _, _ = _client(toy_env)
     with client:
-        assert client.app.state.app_state.pack_tz == ZoneInfo("UTC")
+        assert client.app.state.app_state.registry.only().tz == ZoneInfo("UTC")
 
 
 def test_preset_pack_serves_its_config_zone(toy_env):
     client, _, _ = _client(toy_env, region="berkeley_small")
     with client:
-        assert client.app.state.app_state.pack_tz == LA
+        assert client.app.state.app_state.registry.only().tz == LA
 
 
 def test_served_preset_without_timezone_fails_startup(toy_env, tmp_path, monkeypatch):
