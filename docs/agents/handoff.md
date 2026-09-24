@@ -205,11 +205,22 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
       min waiting" from `control_delay_s`, and the per-marker `expected_wait_s`. Client
       only; the fields are already in `types.ts`.
 - [ ] (3) Phase 4 item (7) above. **This is next.**
-- [ ] (4) **Trip-trace collection** (ADR-0017). The first slice of the commute planner
-      service: one ingest endpoint and a tester token per device. The client buffers to
-      IndexedDB, uploads chunks about every 2 minutes and at trip end, and trims 300 m
-      at each end of the trip on the device. Raw traces are kept 90 days. **Move this
-      ahead of (3) if beta testing starts first**, or those drives go uncollected.
+- [ ] (4) **Trip-trace collection** (ADR-0017). Beta testing starts soon, so this runs
+      alongside (3) rather than after it; otherwise those drives go uncollected.
+  - [x] (4a) **Server ingest.** Done 2026-09-24: the commute planner service starts as
+        `commute/` (`uvicorn commute.app:app`, SQLite, tester tokens via
+        `python -m commute.tokens`), wire contract and client obligations in
+        [ADR-0018](../adr/0018-trip-trace-ingest-contract.md).
+  - [ ] (4b) **Client recorder. Next.** IndexedDB buffer, a chunk flush about every 2 min
+        and at trip end, retry of anything unsent on launch, the 300 m trim at both ends
+        (of the fixes **and** of every uploaded artifact's geometry; ADR-0018), and a
+        one-time opt-in per device that stores a tester token (`GET /v1/me` checks it).
+        Needs `NEXT_PUBLIC_ENABLE_LIVE_NAV` on in the beta build. The wire types are
+        already in `web/lib/types.ts` (`TraceChunk`, `TripEnd`, ...).
+  - [ ] (4c) **Deploy the commute service** (follow-up). Image and host, `SR_COMMUTE_DB`
+        on a persistent volume, `SR_COMMUTE_CORS_ORIGINS` or a same-origin proxy like
+        `/api`, a daily `python -m commute.retention purge`, and minting the testers'
+        tokens. Until then it runs under uvicorn only.
 - [ ] (5) **Wait extraction and calibration** (ADR-0017). Match traces against the
       followed route, count time below 2 m/s in the last 60 m, and fit ADR-0016's
       constants on pooled data. The output is config, never live lookups.

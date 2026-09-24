@@ -37,14 +37,14 @@ select = [
 "tests/test_parity_cpp.py" = ["E402"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["api", "core", "ingestion", "pyref", "sim", "tests"]
+known-first-party = ["api", "commute", "core", "ingestion", "pyref", "sim", "tests"]
 
 [tool.mypy]
 # Matches the project floor. numpy 2.5's bundled stubs also use PEP 695 `type`
 # statements, which mypy refuses to parse below 3.12 — it aborts before
 # checking anything at all.
 python_version = "3.12"
-files = ["api", "pyref", "sim", "ingestion"]
+files = ["api", "commute", "pyref", "sim", "ingestion"]
 # Starting lenient: the codebase has never been type-checked, so this
 # catches real errors without demanding annotations everywhere. Tighten
 # disallow_untyped_defs once the obvious issues are gone.

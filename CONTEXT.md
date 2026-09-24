@@ -164,6 +164,12 @@ followed, collected from consenting testers. It is evidence for calibrating the 
 and measuring ETA error, and never a direct input to a live route.
 _Avoid_: probe data (that names a commercial product), GPS log, telemetry.
 
+**Tester token**:
+The credential one beta device presents to the commute planner in place of an account,
+issued by the owner and revocable. It identifies a device, not a person, and a trip trace
+belongs to the token that uploaded it. A stand-in until the commute planner has accounts.
+_Avoid_: API key, user id, account.
+
 **Parity core**:
 The pairing of the pure-Python reference engine (`pyref/`) and the C++ engine
 (`sr_core`, built from `core/`). They are held bitwise-identical by the parity test

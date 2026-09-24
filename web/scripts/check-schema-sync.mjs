@@ -1,6 +1,10 @@
-// Verify web/lib/types.ts still matches the server's OpenAPI schema.
+// Verify web/lib/types.ts still matches the servers' OpenAPI schema.
 //
 // Usage:  node scripts/check-schema-sync.mjs <openapi.json>
+//
+// The document is scripts/dump_openapi.py's: the route service's schema with
+// the commute planner's (commute/, ADR-0018) merged in, so both services are
+// held to types.ts by this one check.
 //
 // WHAT IS COMPARED: property names, and whether each is required or optional.
 // WHAT IS NOT: types.
@@ -52,6 +56,18 @@ const PAIRS = {
   MetaResponse: "PackMeta",
   // One entry of MetaResponse.packs (ADR-0014 decision 6).
   ServedPack: "ServedPack",
+
+  // The commute planner's trip-trace ingest (commute/schemas.py, ADR-0018).
+  // A separate service; scripts/dump_openapi.py merges its schemas into the
+  // document this script reads.
+  TraceFix: "TraceFix",
+  FollowedArtifact: "FollowedArtifact",
+  TraceChunk: "TraceChunk",
+  ChunkReceipt: "ChunkReceipt",
+  EtaPrediction: "EtaPrediction",
+  TripEnd: "TripEnd",
+  TripEndReceipt: "TripEndReceipt",
+  TesterInfo: "TesterInfo",
 };
 
 const IGNORED = new Set([
@@ -164,7 +180,8 @@ for (const [schemaName, interfaceName] of Object.entries(PAIRS)) {
 
 if (problems.length > 0) {
   console.error(
-    "[schema-sync] web/lib/types.ts has drifted from api/schemas.py:\n",
+    "[schema-sync] web/lib/types.ts has drifted from api/schemas.py or " +
+      "commute/schemas.py:\n",
   );
   for (const p of problems) console.error(`  - ${p}`);
   console.error(
