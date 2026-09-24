@@ -217,6 +217,13 @@ golden digests as unverified.
   fails the build on a style diff (this bit PR #35). Run `npm run format` to
   auto-fix before committing.
 
+- **Node 22 for `web/`** — what CI uses, pinned in `web/.nvmrc`; `package.json`
+  `engines` only demands `>=20.9.0`. Two local traps: under WSL, `/usr/bin/node`
+  is v18 and nvm is loaded from `~/.bashrc`, which a non-interactive `bash -lc`
+  skips — load nvm from `~/.profile` too or you silently get v18. On the
+  Windows side, a `~/.npmrc` with `os=linux` makes `npm ci` skip the win32
+  native binaries vitest needs; use `npm ci --os=win32` there.
+
 - **Build `sr_core` locally, or you are not running the parity suite.**
   `tests/test_parity_cpp.py` opens with `pytest.importorskip("sr_core")`, so a
   machine without the built extension reports a green bar having *skipped* the
