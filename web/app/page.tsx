@@ -14,6 +14,7 @@ import {
   preflight,
   regionLabel as labelOf,
 } from "@/lib/coverage";
+import { googleMapsDirectionsUrl } from "@/lib/googleMapsLink";
 import { compareRoutes } from "@/lib/routeComparison";
 import {
   DEFAULT_DETOUR_BUDGET,
@@ -72,6 +73,10 @@ export default function Home() {
   const [detourBudget, setDetourBudget] = useState(DEFAULT_DETOUR_BUDGET);
   const [units, setUnits] = useState<UnitSystem>(DEFAULT_UNITS);
   const [routes, setRoutes] = useState<RouteAlternative[]>([]);
+  // "Compare in Google Maps" (ADR-0015 amendment): built from the endpoints
+  // THIS set of routes was requested for, not the live origin/destination,
+  // which may already have moved while the debounced re-route is pending.
+  const [googleMapsHref, setGoogleMapsHref] = useState<string | null>(null);
   const [selected, setSelected] = useState<RouteKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -256,6 +261,7 @@ export default function Home() {
       );
       if (seq !== reqSeq.current) return; // stale response
       setRoutes(resp.routes);
+      setGoogleMapsHref(googleMapsDirectionsUrl(origin, destination));
       // Results are the reason to look at the panel, so raise it. Done here in
       // the response handler rather than in an effect watching `routes`: this
       // is a reaction to an event, not derived state.
@@ -585,6 +591,21 @@ export default function Home() {
                 />
               ))}
             </div>
+            {routes.length > 0 && googleMapsHref && (
+              // A plain link: no key, no Google script, no prefetch. Nothing
+              // is sent to Google until it is followed.
+              <a
+                className="gmaps-link"
+                href={googleMapsHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Compare in Google Maps (opens in a new tab)"
+                title="Google's own route for the same start and destination"
+              >
+                Compare in Google Maps
+                <span aria-hidden="true">↗</span>
+              </a>
+            )}
             {routes.length > 0 && selected && (
               <p className="hint">
                 The selected route is colored by maneuver safety tier (green /
