@@ -117,8 +117,9 @@ needs a pack registry and a memory budget for N resident packs, not lazy costs.
 bboxes must be disjoint, and a request goes to the pack that contains both of its
 endpoints. Otherwise it gets a 422 with the existing `{detail}` shape, and no `/route`
 wire field changes. All packs are loaded eagerly. Measured cost: about 20 MiB
-resident per `berkeley_oakland`-sized pack. The ADR ends with a 7-step PR sequence;
-work through it in order:
+resident per `berkeley_oakland`-sized pack. In the container that is about 27 MiB, and
+`san_francisco` is about 43 MiB (ADR-0014's 2026-09-24 amendment). The ADR ends with
+a 7-step PR sequence; work through it in order:
 
 - [x] (1) `PackRegistry` of one + pure `pack_for(o, d)` + startup validation. Done
       2026-09-23 in `api/registry.py`. Pinned: points are `(lat, lon)`, bboxes
@@ -170,6 +171,14 @@ work through it in order:
       (ADR-0015 amendment): pick a **dense urban** metro. That serves trip-trace
       calibration (ADR-0017) now and ADR-0015's benchmark if its terms gate G0 ever
       clears. Sequenced in **Phase 4b** below, after items 1-2.
+      **Built locally and measured 2026-09-24; publishing is pending.** The
+      `san_francisco` preset is in config. Its pack has 28,163 directed edges, 1.36x
+      `berkeley_oakland`, so the "200k-500k edges" guess was wrong for a city. It takes
+      about 43 MiB of container `memory.current`, against about 27 MiB for
+      `berkeley_oakland`. Budget 1.5 KiB per edge. See ADR-0014's 2026-09-24 amendment,
+      and read its `packs.lock` single-tag trap before running `build-packs`. Still
+      needed, on the owner's OK: publish the pack, paste its `packs.lock` line, then set
+      `[api] regions`. The pack exists only in the main checkout's `data/packs/`.
 
 **Phase 4b - control delay and trip traces.** Decided 2026-09-24 in a grilling session;
 recorded in ADR-0016, ADR-0017, and amendments to ADR-0006, ADR-0010, ADR-0011 and
@@ -204,7 +213,8 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
 - [ ] (2b) **Show the waits in the comparison UI.** "Fast: 2 uncontrolled crossings, ~3
       min waiting" from `control_delay_s`, and the per-marker `expected_wait_s`. Client
       only; the fields are already in `types.ts`.
-- [ ] (3) Phase 4 item (7) above. **This is next.**
+- [ ] (3) Phase 4 item (7) above. **Built locally and measured 2026-09-24. Publishing
+      is pending** and needs the owner's OK to dispatch `build-packs`.
 - [ ] (4) **Trip-trace collection** (ADR-0017). The first slice of the commute planner
       service: one ingest endpoint and a tester token per device. The client buffers to
       IndexedDB, uploads chunks about every 2 minutes and at trip end, and trims 300 m

@@ -35,6 +35,16 @@ timezone = "America/Los_Angeles"
 bbox = [-122.32, 37.77, -122.22, 37.90]
 timezone = "America/Los_Angeles"
 
+[region.presets.san_francisco]
+# Second real metro (ADR-0014 step 7), dense urban per ADR-0015's amendment:
+# the City and County of San Francisco, Ocean Beach to Hunters Point and the
+# county line to the Golden Gate, Treasure Island included. The east edge
+# (-122.355) stays clear of berkeley_oakland's west edge (-122.32), because
+# served bboxes must be disjoint and touching counts. Built locally, not yet
+# published: it is absent from packs.lock, so do not serve it until it is.
+bbox = [-122.515, 37.705, -122.355, 37.833]
+timezone = "America/Los_Angeles"
+
 # -----------------------------------------------------------------------------
 # Attribute defaults applied when OSM tags are missing.
 # Speeds in km/h; lanes are PER DIRECTION.

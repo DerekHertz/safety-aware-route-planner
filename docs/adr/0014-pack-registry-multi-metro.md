@@ -1,5 +1,5 @@
 ---
-Status: accepted
+Status: accepted (amended 2026-09-24: step 7 measured; a city pack is ~28k edges, not 200k-500k)
 Date: 2026-09-20
 ---
 
@@ -22,7 +22,9 @@ The short version:
   in different packs: **422** with the existing `{"detail": str}` shape. No
   cross-pack routing.
 - **All served packs are loaded eagerly at startup. No LRU.** An
-  Oakland-sized pack costs about **20 MiB resident**.
+  Oakland-sized pack costs about **20 MiB resident**. In the shipped container
+  that is about 27 MiB, and a `san_francisco`-sized pack is about 43 MiB. See the
+  2026-09-24 amendment.
 - `/meta` grows an additive `packs` list. `/geocode` takes an optional `region`
   parameter. The client's hard-coded Berkeley map center goes away.
 
@@ -102,7 +104,9 @@ each request in flight. At 512 MiB with generous concurrency headroom, that leav
 for **about 15-18 Oakland-sized packs**. Multi-metro does not bind on memory at the
 sizes this repo builds today.
 
-**Guessed, not measured:** a real metro is bigger than `berkeley_oakland`, which is
+**Superseded 2026-09-24 by the amendment at the end of this ADR**, which builds
+`san_francisco` and measures it in the real container. The guess is kept below as
+written. **Guessed, not measured:** a real metro is bigger than `berkeley_oakland`, which is
 roughly 9 × 14 km. At about 1 KiB per edge, a whole-metro pack of 200k-500k directed
 edges would be 200-500 MiB, so one to three would fit per 1 GiB replica. No pack that
 size has been built, and the edge counts are an order-of-magnitude guess, not a
@@ -341,3 +345,178 @@ multi-metro service usable from the reference client.
 - `region.active` and `[api] regions` both exist and mean different things: the
   ingestion target and the served set. The config comments must say so where each
   appears.
+
+## Amendment, 2026-09-24: step 7 measured — a city pack is ~28k edges, ~43 MiB in the container
+
+Step 7's measurement half is done. The publishing half is not. A second real pack,
+`san_francisco`, was built locally and measured two ways: with the methodology of the
+table above, and inside the shipped Docker image. **It replaces the "whole-metro pack of
+200k-500k directed edges" guess.** That guess described a whole metropolitan region, and
+pack-per-metro never builds one of those.
+
+### What was built
+
+`[region.presets.san_francisco]`, `bbox = [-122.515, 37.705, -122.355, 37.833]`, is the
+City and County of San Francisco, Treasure Island included. It is the dense urban metro
+that ADR-0015's amendment asked for. Its east edge (-122.355) is 0.035° (about 3 km)
+clear of `berkeley_oakland`'s west edge (-122.32), and a test in
+`tests/test_pack_registry.py` pins the two shipped presets as disjoint.
+
+- **N = 10,229 nodes, E = 28,163 directed edges, T = 86,679 turns**, with 167,951
+  geometry points and 139,788 snap segments. That is **1.36x `berkeley_oakland`'s
+  edges**. The densest street grid on the West Coast is not an order of magnitude
+  larger than Berkeley plus North Oakland.
+- On disk the pack is 5.97 MiB, and it packages to a 3.53 MB `.tar.gz`
+  (`berkeley_oakland`: 4.50 MiB and 2.69 MB).
+- `python -m ingestion.build_pack --region san_francisco` took **57 s wall**, including
+  one Overpass pull (a single 16 MB response, which the simplified and the raw graph
+  share through OSMnx's cache). It used 36 s of CPU and peaked at **1.17 GiB RSS**,
+  most of that the unsimplified graph (80,388 nodes, 140,177 edges).
+- **Control harvesting works on dense data.** 52.1% of approaches are OBSERVED
+  (`berkeley_oakland`: 55.8%). The observed approaches are 5,555 signal, 4,860 all-way
+  stop, 3,860 two-way stop, 314 roundabout and 77 yield. San Francisco's all-way stops
+  show up as they should: 4,860 observed, against 812 in `berkeley_oakland`.
+- Speed is defaulted from road class on **74.1%** of edges (`berkeley_oakland`:
+  57.4%), because San Francisco's `maxspeed` tagging is sparser.
+- **Served next to `berkeley_oakland`,** `/health` reports `packs_loaded: 2`. Nine
+  San Francisco O/D pairs each returned 2-3 alternatives with 0-2 counted unsafe
+  maneuvers, Treasure Island to the Ferry Building included. A Berkeley pair still
+  routes, and cross-bay pairs get the "different regions" 422. At 08:00, 0.51% of
+  allowed turns count as unsafe (`berkeley_oakland`: 2.35%), because signals and
+  all-way stops are everywhere. The bbox cuts the Golden Gate Bridge and the Bay
+  Bridge's eastbound span, which leaves one-way dead ends where they cross it. The
+  parts cut off are outside the city, so no in-city route needs them. The largest
+  strongly connected component holds 99.4% of nodes (`berkeley_oakland`: 99.2%).
+
+### In-process, the table's methodology, three fresh processes each
+
+The table above was measured on Windows. Both packs are re-measured here on **Linux**:
+WSL2 Ubuntu, CPython 3.12.3, numpy 2.5.1, scipy 1.18.0, the pure-Python engine, and the
+same six random-pair `Router.route()` calls. RSS/USS come from `/proc/self`, not
+`psutil`, and "traced" is `tracemalloc`. The Router is split into its parts with
+traceback filters on `pyref/snap.py` and `pyref/costs.py`.
+
+| | `berkeley_oakland` (table above, Windows) | `berkeley_oakland` (Linux) | `san_francisco` (Linux) |
+|---|---|---|---|
+| on-disk pack | 4.50 MiB | 4.50 MiB | 5.97 MiB |
+| `GraphPack` arrays (traced) | 4.75 MiB | 4.74 MiB | 6.31 MiB |
+| `Router` on top of that (traced) | 11.28 MiB | 12.19 MiB | 15.64 MiB |
+| — of which `SnapIndex` | 7.79 MiB | 7.79 MiB | 9.82 MiB |
+| — of which `PackStatics` | 3.49 MiB | 4.40 MiB | 5.82 MiB |
+| **resident, pack + Router (RSS delta)** | **~20.4 MiB** (5.4 + 15.0) | **~31.9 MiB** (5.5 + 26.3) | **~46.4 MiB** (7.3 + 39.1) |
+| — still resident after `malloc_trim(0)` | — | ~21.1 MiB | ~26.8 MiB |
+| transient peak inside one request (traced) | 4.39 MiB | 4.21 MiB | 5.95 MiB |
+| cold load: `GraphPack.load` + `Router()` | 101 + 226 ms | 119-128 + 117-136 ms | 132-395 + 182-210 ms |
+| interpreter + numpy + scipy baseline (RSS) | ~67 MiB | ~62 MiB | ~62 MiB |
+
+Across runs, RSS deltas agreed to within 0.6 MiB and traced figures to within 0.01 MiB.
+USS matched RSS to within 0.5 MiB. Two things in the table need explaining:
+
+- **`PackStatics` grew from 3.49 to 4.40 MiB on the same pack.** The `_crossing_legs`
+  index arrays (ADR-0009, 2026-09-20) and ADR-0016's control-delay statics landed
+  after the original table. That growth is real code, not measurement noise.
+- **Linux holds about 11-20 MiB more than the live set.** Router construction makes
+  large temporaries: the per-segment Python lists in `SnapIndex`, and numpy scratch in
+  `build_pack_statics`. glibc keeps those pages after they are freed. Once it frees one
+  large block, its dynamic mmap threshold rises, and later blocks go on the heap and stay
+  resident. Calling `malloc_trim(0)` right after `Router()` gives back 10.8 MiB on
+  `berkeley_oakland` and 19.6 MiB on `san_francisco`. What is left, ~21 and ~27 MiB, is
+  the live set. The table's **~1 KiB per directed edge** still holds for the live set
+  (1.05 and 0.97 KiB). The Windows heap had returned those pages, so the 20.4 MiB above
+  was always the live set, not what a Linux replica holds.
+
+### In the real container
+
+These runs use the repo `Dockerfile`, built from this branch: `python:3.12-slim`,
+`sr_core` built, and `/health` reporting `"engine":"cpp"`. The host was Docker Desktop
+29.5.3 on WSL2 (kernel 6.6.87, cgroup v2). Packs were bind-mounted read-only at
+`/app/data/packs`. `SR_PACKS_URL` pointed at a closed port, so any download attempt would
+have failed startup. `SR_TRUSTED_PROXIES=1` and a distinct `X-Forwarded-For` per request
+kept the per-client quota out of the way, and every request returned 200. Each run
+was a fresh container. It idled 15 s after `/health` went 200 and was read. It then got
+50 sequential `/route` calls at 08:15 (AM peak) over 10 fixed O/D pairs in the served
+pack(s), settled 5 s, and was read again. The table reports the cgroup's
+**`memory.current`**, which is what a container memory limit enforces, with PID 1's
+(uvicorn's) `VmRSS` in brackets. Each cell is the mean of 3 runs, and runs agreed to
+within 1.2 MiB. `berkeley_small` (1,827 edges) stands in for the no-pack baseline,
+since the app cannot start without a pack.
+
+| served | idle after startup | after 50 `/route` |
+|---|---|---|
+| `berkeley_small` (≈ baseline) | 63.7 MiB (96.0) | 64.6 MiB (96.7) |
+| `berkeley_oakland` | 90.9 MiB (123.6) | 96.5 MiB (129.3) |
+| `san_francisco` | 106.3 MiB (138.3) | 113.8 MiB (146.3) |
+| both | 130.4 MiB (162.8) | 138.1 MiB (170.7) |
+
+- **Per pack, over the baseline, at idle:** `berkeley_oakland` +27.2 MiB (1.35 KiB per
+  edge), `san_francisco` +42.6 MiB (1.55 KiB per edge), and both together +66.7 MiB.
+  That is 3 MiB under the sum, because the second pack's build reuses heap that the
+  first one freed. For sizing, use **1.5 KiB per directed edge**.
+- **Serving traffic adds a one-time high-water mark** of about 6-8 MiB: the freed
+  request temporaries, kept by glibc as above. The figure does not grow with the number
+  of packs (+7.7 MiB with both). Concurrent requests each add their own transient on top
+  (the traced 4.2 / 6.0 MiB per request above).
+- **`VmRSS` runs about 32 MiB above `memory.current`.** Those are shared file-backed
+  pages (the interpreter and the numpy/scipy shared objects) that were not charged to
+  this cgroup. `memory.stat` `file` read 0 in every run. On a cold host those pages can
+  be charged to the first container that touches them, as reclaimable page cache.
+  **Size limits on `memory.current`, and treat `VmRSS` as the conservative ceiling.**
+- **One allocator knob, measured but not adopted.** `MALLOC_MMAP_THRESHOLD_=65536`
+  pins the threshold, so large temporaries are mmapped and returned on free. On "both"
+  it measured 105.1-105.9 MiB idle and 105.9-106.6 MiB after the 50 requests (3 runs).
+  That is **about 25 MiB less at idle and 32 MiB less after load**. But the same 50
+  sequential requests took 3.8-4.0 s instead of 2.8-3.2 s. That is plausibly the
+  mmap/munmap and page faults on every per-request array, and it was not benchmarked.
+  Adopting it needs a latency measurement first. Calling `malloc_trim(0)` once after
+  `lifespan` loads the packs is the other candidate: it recovers the load-time half
+  with no per-request cost.
+
+### What this implies
+
+- **The guess is replaced.** A dense city pack is **~28k directed edges and ~43 MiB in
+  the container**, not 200k-500k edges and 200-500 MiB. `berkeley_oakland` is ~27 MiB
+  there, against the 20 MiB this ADR has been quoting.
+- **N resident packs per replica:** about 64 MiB baseline, plus 1.5 KiB × E per pack,
+  plus about 8 MiB of warm high-water, plus 4-6 MiB per request in flight. At **512
+  MiB** with 20 requests in flight (~120 MiB), that leaves room for about **7
+  `san_francisco`-sized or 10-11 `berkeley_oakland`-sized packs**. The count above
+  ("about 15-18 Oakland-sized packs") used the Windows live set and an import-only
+  baseline, and is superseded. Decision 3's revisit trigger (served packs pass half the limit) fires
+  at about 6 San Francisco-sized packs on a 512 MiB replica, or about 12 on 1 GiB.
+  **Eager loading with no LRU stands.**
+- **"Several deployments, each serving a subset of regions" (Consequences) is not
+  needed** at city scale. Ten city-sized metros fit in one 1 GiB replica. It would
+  become the answer again only for a region-scale pack: a nine-county Bay Area at a
+  guessed 200-500k edges would be 300-750 MiB at 1.5 KiB per edge. Pack-per-metro does
+  not call for that pack, so the note stays deferred, and the trigger above is what
+  would revive it.
+- **The `SnapIndex` is still the largest single structure,** 37% of the live set on
+  `san_francisco` (9.82 of ~26.8 MiB), the same share as before. If memory ever
+  binds, the order of levers is now: the allocator first (above, no code), then the
+  `SnapIndex`.
+
+### What step 7 still needs (owner decision)
+
+This PR adds the preset only. `packs.lock` and `[api] regions` are untouched, so nothing
+serves `san_francisco` yet. Having a preset that is not in `packs.lock` breaks nothing.
+CI's fetch step asks for `berkeley_small` only, and the CI docker job serves
+`region.active`. `ensure_packs` only looks at served regions. A deployment that set
+`SR_REGIONS=...,san_francisco` today would stop at boot with the existing "configured to
+be served but are not published in packs.lock" error. **One trap for the publish:**
+`packs.lock` has a single `tag` for every region, and `url_for` puts each region under
+it. `build-packs` with only `regions=san_francisco` and a blank tag would publish to a
+new `packs-v2-<date>` directory. Pasting that tag would then point `berkeley_*` at a
+directory that does not hold them. There are two ways out, and the owner chooses:
+
+1. Publish into the existing tag, adding one new object and overwriting none:
+   `gh workflow run build-packs.yml --ref main -f regions=san_francisco -f
+   tag=packs-v2-20260728 -f publish=true`, then add only the `san_francisco` line to
+   `[regions]`. This bends the lock file's "never overwrite a published tag" rule in
+   spirit, though no object changes.
+2. Rebuild every preset under a new tag: `gh workflow run build-packs.yml --ref main -f
+   publish=true` (blank `regions` means every preset). Then paste the whole stanza. The
+   Berkeley packs are then rebuilt from whatever OSM data the Overpass cache holds, so
+   their routes can change.
+
+After either one, set `[api] regions = ["berkeley_oakland", "san_francisco"]`, or
+`SR_REGIONS` on the deployment.

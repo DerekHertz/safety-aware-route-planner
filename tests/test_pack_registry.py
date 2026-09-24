@@ -235,3 +235,31 @@ class TestRegistry:
         reg = PackRegistry([load_named_pack(tmp_path, "berkeley_small", cfg)])
         assert reg.pack_for((37.87, -122.27), (37.871, -122.269)) == "berkeley_small"
         assert isinstance(reg.pack_for((0.0, 0.0), (37.87, -122.27)), OriginOutside)
+
+
+# ------------------------------------------------- the shipped presets
+class TestShippedPresets:
+    """The second real metro (ADR-0014 step 7) must be servable beside the
+    first. These read `config/config.toml` itself, so a bbox edit that makes
+    the two touch fails here rather than at a deployment's startup."""
+
+    SERVED_TOGETHER = ("berkeley_oakland", "san_francisco")
+
+    def _pairs(self, cfg):
+        return [(n, cfg.bbox(n)) for n in self.SERVED_TOGETHER]
+
+    def test_berkeley_oakland_and_san_francisco_are_disjoint(self, cfg):
+        validate_coverage(self._pairs(cfg))
+
+    @pytest.mark.parametrize("point, expected", [
+        ((37.7599, -122.4148), "san_francisco"),    # the Mission
+        ((37.7802, -122.4839), "san_francisco"),    # the Richmond
+        ((37.8235, -122.3706), "san_francisco"),    # Treasure Island
+        ((37.8715, -122.2680), "berkeley_oakland"),  # downtown Berkeley
+    ])
+    def test_landmarks_land_in_the_right_pack(self, cfg, point, expected):
+        assert pack_for(self._pairs(cfg), point, point) == expected
+
+    def test_across_the_bay_is_the_cross_region_error(self, cfg):
+        got = pack_for(self._pairs(cfg), (37.7599, -122.4148), (37.8715, -122.2680))
+        assert got == DifferentPacks("san_francisco", "berkeley_oakland")
