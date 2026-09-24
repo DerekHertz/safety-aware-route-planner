@@ -143,13 +143,15 @@ work through it in order:
       `tests/test_route_by_coords.py` (spies on each served `Router`, a recording
       limiter for the spent token, the null-bbox `SR_PACK_DIR` toy still getting the
       snap-failure 422, and a byte-identical `berkeley_oakland` artifact through the
-      registry vs a direct `Router`). **Still one-pack only:** `/meta` and `/geocode`
-      read `registry.only()`, so on a deployment serving ≥2 packs both return 500
-      until (6) and (5) land. `AppState.pack`/`.router` are single-pack shortcuts too.
+      registry vs a direct `Router`). **Still one-pack only:** `/meta` reads
+      `registry.only()`, so on a deployment serving ≥2 packs it returns 500 until (6)
+      lands. `AppState.pack`/`.router` are single-pack shortcuts too.
 - [x] (4) Per-pack IANA timezone for departure (#72, done before (2) and merged into
       it). `api/departure.py`: `resolve_departure` + `pack_timezone`; `timezone` on
       each `[region.presets.*]`, missing on a served pack = startup failure.
-- [x] (5) `/geocode?region=`, bounding per pack. Unknown region is 422 before cache/bucket.
+- [x] (5) `/geocode?region=`, bounding per pack (#75). Unknown region is 422 before
+      cache/bucket; several packs and no region = one unbounded query (limit 20),
+      post-filtered to served bboxes, top 5 returned. Cache keys on `(q, region)`.
 - [ ] (6) Additive `/meta.packs` and the client: initial view, coverage check, and a
       cross-region pre-flight.
 - [ ] (7) Build a second real metro and **re-measure memory in the container**. The
