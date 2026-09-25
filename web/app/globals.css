@@ -351,6 +351,39 @@ body {
   outline-offset: 2px;
 }
 
+/* Trip-recording opt-in (ADR-0017): folded away, since it is set once. */
+.trace-settings {
+  font-size: 0.85rem;
+}
+
+.trace-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.trace-settings[open] {
+  border-top: 1px solid var(--border);
+  padding-top: 8px;
+}
+
+.trace-settings > * + * {
+  margin-top: 8px;
+}
+
+.trace-token {
+  display: flex;
+  gap: 8px;
+}
+
+.trace-token input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+
 .start-nav {
   flex: 1;
   padding: 7px 14px;
@@ -720,6 +753,7 @@ body {
      Every tap on the search box did that. This is the fix — locking zoom via
      the viewport tag would "work" too, at the cost of accessibility. */
   .searchbox input,
+  .trace-token input,
   .controls-row input[type="datetime-local"] {
     font-size: 16px;
   }

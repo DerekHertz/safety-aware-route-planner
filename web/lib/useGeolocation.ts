@@ -3,9 +3,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { LatLon } from "./types";
 
+/** One reading, whole: what the trip-trace recorder stores (ADR-0017).
+ *  `t` is `GeolocationPosition.timestamp` (epoch ms, possibly fractional);
+ *  speed and heading are whatever the device reported, null or NaN included. */
+export interface GeoReading {
+  t: number;
+  lat: number;
+  lon: number;
+  accuracy_m: number;
+  speed_mps: number | null;
+  heading_deg: number | null;
+}
+
 export interface GeoState {
   position: LatLon | null;
   accuracy: number | null;
+  /** The latest reading, a new object per fix (null before the first). */
+  reading: GeoReading | null;
   error: string | null;
   /** true once we've either got a fix or conclusively failed */
   settled: boolean;
@@ -21,6 +35,8 @@ export interface GeoState {
 // Stripped in production builds — never reachable outside `next dev`.
 export interface MockGeoPoint extends LatLon {
   accuracy?: number;
+  /** m/s; reported as null (no speed) when omitted. */
+  speed?: number;
 }
 export interface MockGeoOptions {
   /** Milliseconds between fixes. Default 1000. */
@@ -65,15 +81,25 @@ export function useGeolocation(
   const [state, setState] = useState<GeoState>({
     position: null,
     accuracy: null,
+    reading: null,
     error: null,
     settled: false,
   });
   const watchId = useRef<number | null>(null);
 
   const onOk = useCallback((pos: GeolocationPosition) => {
+    const { latitude: lat, longitude: lon, accuracy } = pos.coords;
     setState({
-      position: { lat: pos.coords.latitude, lon: pos.coords.longitude },
-      accuracy: pos.coords.accuracy,
+      position: { lat, lon },
+      accuracy,
+      reading: {
+        t: pos.timestamp,
+        lat,
+        lon,
+        accuracy_m: accuracy,
+        speed_mps: pos.coords.speed,
+        heading_deg: pos.coords.heading,
+      },
       error: null,
       settled: true,
     });
@@ -143,9 +169,18 @@ export function useGeolocation(
         // — `timer` isn't assigned until after emit() returns — so the interval
         // fires once more and would otherwise index past the end.
         const p = points[Math.min(i, points.length - 1)];
+        const accuracy = p.accuracy ?? 5;
         setState({
           position: { lat: p.lat, lon: p.lon },
-          accuracy: p.accuracy ?? 5,
+          accuracy,
+          reading: {
+            t: Date.now(),
+            lat: p.lat,
+            lon: p.lon,
+            accuracy_m: accuracy,
+            speed_mps: p.speed ?? null,
+            heading_deg: null,
+          },
           error: null,
           settled: true,
         });

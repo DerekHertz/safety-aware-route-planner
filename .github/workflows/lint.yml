@@ -63,3 +63,7 @@ jobs:
       # .next/types/**, both gitignored, so tsc alone fails on a fresh
       # checkout. typegen generates them without a full build.
       - run: npm run typecheck
+
+      # Vitest: the pure lib/ logic, including the trip-trace privacy trim
+      # (ADR-0017/0018), whose scenario tests are the only check on it.
+      - run: npm test
