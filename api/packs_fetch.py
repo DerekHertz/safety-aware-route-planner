@@ -54,12 +54,16 @@ class PackSpec:
     region: str
     sha256: str
     size_bytes: int | None = None
+    # The release directory this region was published under, when it is not
+    # the lock's top-level `tag`. Lets one region be (re)published under a new
+    # immutable tag without touching the entries, digests or URLs of the others.
+    tag: str | None = None
 
 
 @dataclass(frozen=True)
 class PacksLock:
     base_url: str
-    tag: str
+    tag: str            # the default release directory, for entries with no own tag
     format_version: int
     regions: dict[str, PackSpec]
 
@@ -73,9 +77,15 @@ class PacksLock:
         """
         return bool(self.base_url) and bool(self.regions)
 
+    def tag_for(self, region: str) -> str:
+        """The region's own `tag` if its entry has one, else the top-level one."""
+        spec = self.regions.get(region)
+        return spec.tag if spec is not None and spec.tag is not None else self.tag
+
     def url_for(self, region: str) -> str:
         base = self.base_url if self.base_url.endswith("/") else self.base_url + "/"
-        prefix = f"{self.tag}/" if self.tag else ""
+        tag = self.tag_for(region)
+        prefix = f"{tag}/" if tag else ""
         return f"{base}{prefix}{region}.tar.gz"
 
 
@@ -96,6 +106,7 @@ def load_lock(path: str | Path | None = None) -> PacksLock | None:
             region=name,
             sha256=str(entry["sha256"]).lower(),
             size_bytes=entry.get("bytes"),
+            tag=None if entry.get("tag") is None else str(entry["tag"]),
         )
         for name, entry in (raw.get("regions") or {}).items()
     }

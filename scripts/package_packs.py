@@ -94,14 +94,19 @@ def main(argv: list[str] | None = None) -> int:
         )
         entries.append((region, sha, size))
 
+    # Each line carries its own `tag`, and no top-level `tag` line is printed.
+    # packs.lock's top-level tag is the default for every entry without one, so
+    # pasting a new default would silently re-point regions this run did not
+    # publish at a directory that does not hold them. Per-line tags make a
+    # one-region publish a one-line paste that cannot move anything else.
     print("\n--- paste into packs.lock ---")
     if args.base_url:
-        print(f'base_url = "{args.base_url}"')
-    if args.tag:
-        print(f'tag = "{args.tag}"')
-    print("\n[regions]")
+        print(f"# base_url for this run: {args.base_url}")
+    print("# Replace each region's existing line under [regions], or add it.")
+    print("[regions]")
     for region, sha, size in entries:
-        print(f'{region} = {{ sha256 = "{sha}", bytes = {size} }}')
+        tag = f', tag = "{args.tag}"' if args.tag else ""
+        print(f'{region} = {{ sha256 = "{sha}", bytes = {size}{tag} }}')
     return 0
 
 

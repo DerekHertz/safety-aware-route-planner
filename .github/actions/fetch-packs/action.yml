@@ -32,6 +32,9 @@ runs:
     # Requires httpx, i.e. requirements.txt already installed by the caller.
     # Deliberately reuses api/packs_fetch.py rather than reimplementing the
     # download in shell: one tested code path, no drift between CI and runtime.
+    # That includes URL resolution: a [regions] entry with its own `tag` is
+    # fetched from that release directory, one without from the top-level
+    # `tag`. Never build a pack URL here from the top-level tag alone.
     - name: Restore cached packs
       id: cache
       uses: actions/cache@v4

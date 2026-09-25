@@ -3,8 +3,10 @@
 # service, so it must never run per-push or per-PR.
 #
 # Output: one reproducible <region>.tar.gz per region, plus the packs.lock
-# stanza pinning their digests. Open a PR with that stanza to roll the
-# deployment forward; revert it to roll back.
+# stanza pinning their digests. Each stanza line carries its own `tag`, so
+# publishing one region under a new tag is a one-line paste that leaves the
+# other regions' entries untouched. Open a PR with it to roll the deployment
+# forward; revert it to roll back.
 name: build-packs
 
 on:
@@ -137,7 +139,9 @@ jobs:
           {
             echo "## packs.lock stanza"
             echo
-            echo 'Paste into `packs.lock` and open a PR to roll the deployment forward.'
+            echo 'Each line carries its own `tag`. Paste each one under `[regions]` in `packs.lock`,'
+            echo 'replacing that region'"'"'s existing line, and open a PR to roll the deployment'
+            echo 'forward. Leave the top-level `tag` alone: it is the default for entries without one.'
             echo
             echo '```toml'
             sed -n '/--- paste into packs.lock ---/,$p' package.log | tail -n +2

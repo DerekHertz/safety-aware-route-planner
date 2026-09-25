@@ -16,8 +16,9 @@
 #      fetches over plain HTTPS with no credentials and no secrets on the
 #      server. Only the upload side (CI) needs keys.
 #   2. Set `base_url` below to the bucket's public URL.
-#   3. Run the `build-packs` workflow (manual dispatch). It prints a ready-made
-#      `[regions]` block; paste it here and open a PR.
+#   3. Run the `build-packs` workflow (manual dispatch). It prints one line per
+#      region it built, each carrying its own `tag`; paste each under
+#      `[regions]` (replacing that region's line) and open a PR.
 #
 # While `base_url` is empty, pack fetching is DISABLED and the API reads only
 # from local disk — which is exactly what you want for local development.
@@ -31,6 +32,13 @@ base_url = "https://pub-0316308e85f3439ab800d022c77d67e7.r2.dev"
 # Immutable release directory inside the bucket. Artifacts are addressed as
 # {base_url}{tag}/{region}.tar.gz. Never overwrite a published tag — bump it,
 # so a rollback is just reverting this file.
+#
+# This top-level `tag` is the DEFAULT: a [regions] entry may carry its own
+# `tag = "..."`, which wins for that region only. That is how one region is
+# published (or republished) under a new tag without rebuilding the others or
+# re-pointing their entries at a directory that does not hold them. Changing
+# this default moves every entry that has no tag of its own, so leave it
+# alone unless all of those were republished under the new value.
 tag = "packs-v2-20260728"
 
 # Must equal pyref.graph.PACK_FORMAT_VERSION. Checked at startup: a mismatch
@@ -40,7 +48,8 @@ tag = "packs-v2-20260728"
 # republishes the packs.
 format_version = 2
 
-# One entry per published region. `sha256` is over the .tar.gz artifact.
+# One entry per published region. `sha256` is over the .tar.gz artifact, and an
+# optional `tag` overrides the default above for that region.
 #
 # These MUST come from the build-packs run that actually uploaded them, and
 # cannot be re-derived by rebuilding: ingestion/pack.py stamps `created_utc`
