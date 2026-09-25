@@ -206,20 +206,32 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
     - the crossing legs overcount at some T-junctions.
   - **"Fast takes the unprotected left" scenarios moved to 3 am.** At peak they now take
     the signal, which is the intended behavior.
-  - **Not done yet:** the comparison UI does not display the new fields. Next small web PR.
 - [x] (2) **"Open in Google Maps" link** (#82): "Compare in Google Maps ↗" under the route
       cards. It uses `web/lib/googleMapsLink.ts`, a Maps URLs Directions link with no key.
       Maps URLs have no departure-time parameter, so Google plans for "now".
-- [ ] (2b) **Show the waits in the comparison UI.** "Fast: 2 uncontrolled crossings, ~3
+- [x] (2b) **Show the waits in the comparison UI.** "Fast: 2 uncontrolled crossings, ~3
       min waiting" from `control_delay_s`, and the per-marker `expected_wait_s`. Client
       only; the fields are already in `types.ts`.
+      Done 2026-09-24: each route card shows "~6 min waiting", and an unsafe-marker popup
+      shows "Expected wait: ~5 s". The formatting is in `web/lib/controlDelay.ts`.
 - [ ] (3) Phase 4 item (7) above. **Built locally and measured 2026-09-24. Publishing
       is pending** and needs the owner's OK to dispatch `build-packs`.
-- [ ] (4) **Trip-trace collection** (ADR-0017). The first slice of the commute planner
-      service: one ingest endpoint and a tester token per device. The client buffers to
-      IndexedDB, uploads chunks about every 2 minutes and at trip end, and trims 300 m
-      at each end of the trip on the device. Raw traces are kept 90 days. **Move this
-      ahead of (3) if beta testing starts first**, or those drives go uncollected.
+- [ ] (4) **Trip-trace collection** (ADR-0017). Beta testing starts soon, so this runs
+      alongside (3) rather than after it; otherwise those drives go uncollected.
+  - [x] (4a) **Server ingest.** Done 2026-09-24: the commute planner service starts as
+        `commute/` (`uvicorn commute.app:app`, SQLite, tester tokens via
+        `python -m commute.tokens`), wire contract and client obligations in
+        [ADR-0018](../adr/0018-trip-trace-ingest-contract.md).
+  - [ ] (4b) **Client recorder. Next.** IndexedDB buffer, a chunk flush about every 2 min
+        and at trip end, retry of anything unsent on launch, the 300 m trim at both ends
+        (of the fixes **and** of every uploaded artifact's geometry; ADR-0018), and a
+        one-time opt-in per device that stores a tester token (`GET /v1/me` checks it).
+        Needs `NEXT_PUBLIC_ENABLE_LIVE_NAV` on in the beta build. The wire types are
+        already in `web/lib/types.ts` (`TraceChunk`, `TripEnd`, ...).
+  - [ ] (4c) **Deploy the commute service** (follow-up). Image and host, `SR_COMMUTE_DB`
+        on a persistent volume, `SR_COMMUTE_CORS_ORIGINS` or a same-origin proxy like
+        `/api`, a daily `python -m commute.retention purge`, and minting the testers'
+        tokens. Until then it runs under uvicorn only.
 - [ ] (5) **Wait extraction and calibration** (ADR-0017). Match traces against the
       followed route, count time below 2 m/s in the last 60 m, and fit ADR-0016's
       constants on pooled data. The output is config, never live lookups.

@@ -21,6 +21,7 @@ core/        C++17 routing engine (pybind11 module `sr_core`)
 pyref/       pure-Python reference engine — the parity twin of core/
 sim/         deterministic synthetic time-of-day traffic profiles
 api/         FastAPI service (POST /route, GET /geocode) over the engine
+commute/     commute planner service; so far the beta trip-trace ingest (ADR-0018)
 web/         Next.js + React + MapLibre GL front-end (OpenFreeMap tiles)
 config/      config.toml — every tunable number lives here
 tests/       unit, safety-rule, scenario, contract and parity suites

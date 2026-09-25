@@ -529,7 +529,8 @@ body {
   color: #b45309;
 }
 
-.detour-cost {
+.detour-cost,
+.control-delay {
   color: var(--muted);
 }
 

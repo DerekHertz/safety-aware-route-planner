@@ -1,5 +1,6 @@
 // API contract types — mirroring api/schemas.py, which is the source of truth
-// (a future mobile client reuses this shape).
+// (a future mobile client reuses this shape). The trip-trace ingest types at
+// the end mirror commute/schemas.py instead: a separate service (ADR-0018).
 //
 // Field names and optionality are enforced against the server's OpenAPI schema
 // by .github/workflows/schema-sync.yml. TYPES are deliberately not compared:
@@ -185,4 +186,87 @@ export interface PackMeta {
   bbox: number[] | null;
   num_edges: number;
   packs: ServedPack[];
+}
+
+// ---------------------------------------------------------------------------
+// Commute planner: trip-trace ingest (ADR-0017, contract in ADR-0018).
+//
+// A SEPARATE service from the route service, mirroring commute/schemas.py and
+// held to it by the same schema-sync check. Every `/v1` call carries
+// `Authorization: Bearer <tester token>`. Both writes are idempotent: an
+// identical resend answers 200, a different body under the same key 409.
+// Every error body is `{ detail: string }`, 422 included.
+//
+// Client obligations the server cannot check (ADR-0018): the 300 m trim at
+// both ends of the trip applies to the fixes AND to every uploaded artifact's
+// geometry, maneuvers and unsafe points; a sealed chunk's content never
+// changes; `fixes[].t` is strictly increasing within a chunk.
+
+/** Milliseconds since the Unix epoch, UTC, as an INTEGER: the unit of
+ *  `GeolocationPosition.timestamp`, rounded. Never seconds, never ISO. */
+export type EpochMs = number;
+
+/** One GPS fix. `speed_mps` and `heading_deg` are null when the device does
+ *  not report them (send null for NaN, too). At most 600 per chunk. */
+export interface TraceFix {
+  t: EpochMs;
+  lat: number;
+  lon: number;
+  speed_mps: number | null;
+  accuracy_m: number;
+  heading_deg: number | null;
+}
+
+/** A route artifact the client began following at `effective_at`: the one
+ *  navigation started with, or a reroute's replacement. Clipped by 300 m at
+ *  each end before upload; the server stores it opaquely. */
+export interface FollowedArtifact {
+  effective_at: EpochMs;
+  artifact: RouteAlternative;
+}
+
+/** Body of `PUT /v1/trips/{trip_id}/chunks/{seq}`. At least one fix or one
+ *  artifact; `artifacts` strictly increasing in `effective_at`. Body limit
+ *  1 MiB. */
+export interface TraceChunk {
+  fixes: TraceFix[];
+  artifacts?: FollowedArtifact[];
+}
+
+/** 201 when stored, 200 (`created: false`) for an identical replay. */
+export interface ChunkReceipt {
+  trip_id: string;
+  seq: number;
+  created: boolean;
+}
+
+/** What the artifact being followed when the trip ended predicted: its
+ *  `eta_s`, counted from `effective_at`, its `preference.level`, and its
+ *  `preference.traffic_basis.profile_version` (null for a v1 artifact). */
+export interface EtaPrediction {
+  effective_at: EpochMs;
+  eta_s: number;
+  level: RouteKind;
+  profile_version: string | null;
+}
+
+/** Body of `POST /v1/trips/{trip_id}/end`: one predicted-versus-actual ETA
+ *  log row. Times only, never a place. `arrived` is false when navigation was
+ *  stopped before arrival; `prediction` is null only with no artifact. */
+export interface TripEnd {
+  ended_at: EpochMs;
+  arrived: boolean;
+  prediction: EtaPrediction | null;
+}
+
+/** 201 when logged, 200 (`created: false`) for an identical replay. */
+export interface TripEndReceipt {
+  trip_id: string;
+  created: boolean;
+}
+
+/** `GET /v1/me`: the label the owner gave this tester token. For checking a
+ *  token at opt-in; 401 means it is unknown or revoked. */
+export interface TesterInfo {
+  label: string;
 }
