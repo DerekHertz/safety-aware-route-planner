@@ -211,12 +211,12 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
         `commute/` (`uvicorn commute.app:app`, SQLite, tester tokens via
         `python -m commute.tokens`), wire contract and client obligations in
         [ADR-0018](../adr/0018-trip-trace-ingest-contract.md).
-  - [ ] (4b) **Client recorder. Next.** IndexedDB buffer, a chunk flush about every 2 min
-        and at trip end, retry of anything unsent on launch, the 300 m trim at both ends
-        (of the fixes **and** of every uploaded artifact's geometry; ADR-0018), and a
-        one-time opt-in per device that stores a tester token (`GET /v1/me` checks it).
-        Needs `NEXT_PUBLIC_ENABLE_LIVE_NAV` on in the beta build. The wire types are
-        already in `web/lib/types.ts` (`TraceChunk`, `TripEnd`, ...).
+  - [x] (4b) **Client recorder.** Done 2026-09-25 (#89). `web/lib/tripRecorder.ts` (seal,
+        outbox, retry/backoff, relaunch recovery) over `traceStorage.ts` (IndexedDB), with
+        every privacy rule in `tracePrivacy.ts`; opt-in in `components/TraceSettings.tsx`,
+        on when `NEXT_PUBLIC_COMMUTE_URL` and `NEXT_PUBLIC_ENABLE_LIVE_NAV` are both set.
+        Scenario tests in `tripRecorder.test.ts` run against a fake server that validates
+        like `commute/schemas.py`.
   - [ ] (4c) **Deploy the commute service** (follow-up). Image and host, `SR_COMMUTE_DB`
         on a persistent volume, `SR_COMMUTE_CORS_ORIGINS` or a same-origin proxy like
         `/api`, a daily `python -m commute.retention purge`, and minting the testers'
@@ -224,6 +224,9 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
 - [ ] (5) **Wait extraction and calibration** (ADR-0017). Match traces against the
       followed route, count time below 2 m/s in the last 60 m, and fit ADR-0016's
       constants on pooled data. The output is config, never live lookups.
+      **Read the uploaded artifacts as clipped (4b):** their `offset_m` and `distance_m`
+      are along the clipped line, while `eta_s` still covers the whole route. The first
+      and last ~300 m of every trip are absent by design, so waits there are never measured.
 - [ ] (6) **Free traffic sources** (ADR-0010 amendment, rung 2): 511 WZDx closures as
       hard blocks, PeMS freeway speeds. The HERE corridor feed (rung 3) waits for
       measured ETA error and a check of HERE §6.4(b), its ODbL clause.

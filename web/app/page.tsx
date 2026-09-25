@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import NavHud from "@/components/NavHud";
 import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
+import TraceSettings from "@/components/TraceSettings";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
 import {
   coverageLabel,
@@ -41,6 +42,7 @@ import {
   useMediaQuery,
 } from "@/lib/useMediaQuery";
 import { useNavigation } from "@/lib/useNavigation";
+import { useTripRecorder } from "@/lib/useTripRecorder";
 import { useWakeLock } from "@/lib/useWakeLock";
 
 // MapLibre touches `window` at import time — client-only bundle
@@ -127,6 +129,14 @@ export default function Home() {
     geo.accuracy,
   );
   const progress = nav.progress;
+  // Trip-trace recording (ADR-0017): automatic for the nav session once this
+  // device has opted in, inert otherwise.
+  useTripRecorder(
+    navigating ? nav.route : null,
+    nav.phase,
+    destination,
+    geo.reading,
+  );
   // Held for exactly the mounted-nav session (ADR-0012) — same gate NavHud
   // renders on below, NOT "a route is planned", so a phone sitting on a desk
   // between trips doesn't drain its battery over nothing.
@@ -616,6 +626,8 @@ export default function Home() {
                 OpenStreetMap says nothing about, shows amber instead.
               </p>
             )}
+            {/* Recording only ever runs inside live nav (ADR-0017). */}
+            {LIVE_NAV_ENABLED && <TraceSettings />}
           </>
         )}
       </aside>
