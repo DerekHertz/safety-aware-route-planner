@@ -610,10 +610,10 @@ export default function Home() {
               <p className="hint">
                 The selected route is colored by maneuver safety tier (green /
                 amber / red). Red markers flag unsafe maneuvers: L = unprotected
-                left, X = uncontrolled crossing. Only maneuvers where the map
-                data actually records the traffic control are flagged — a
-                signalized left, or an intersection OpenStreetMap says nothing
-                about, shows amber instead.
+                left, X = uncontrolled crossing; tap one for its expected wait.
+                Only maneuvers where the map data actually records the traffic
+                control are flagged — a signalized left, or an intersection
+                OpenStreetMap says nothing about, shows amber instead.
               </p>
             )}
           </>

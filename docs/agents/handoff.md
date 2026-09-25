@@ -197,13 +197,14 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
     - the crossing legs overcount at some T-junctions.
   - **"Fast takes the unprotected left" scenarios moved to 3 am.** At peak they now take
     the signal, which is the intended behavior.
-  - **Not done yet:** the comparison UI does not display the new fields. Next small web PR.
 - [x] (2) **"Open in Google Maps" link** (#82): "Compare in Google Maps ↗" under the route
       cards. It uses `web/lib/googleMapsLink.ts`, a Maps URLs Directions link with no key.
       Maps URLs have no departure-time parameter, so Google plans for "now".
-- [ ] (2b) **Show the waits in the comparison UI.** "Fast: 2 uncontrolled crossings, ~3
+- [x] (2b) **Show the waits in the comparison UI.** "Fast: 2 uncontrolled crossings, ~3
       min waiting" from `control_delay_s`, and the per-marker `expected_wait_s`. Client
       only; the fields are already in `types.ts`.
+      Done 2026-09-24: each route card shows "~6 min waiting", and an unsafe-marker popup
+      shows "Expected wait: ~5 s". The formatting is in `web/lib/controlDelay.ts`.
 - [ ] (3) Phase 4 item (7) above. **This is next.**
 - [ ] (4) **Trip-trace collection** (ADR-0017). The first slice of the commute planner
       service: one ingest endpoint and a tester token per device. The client buffers to
