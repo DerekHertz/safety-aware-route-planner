@@ -73,8 +73,8 @@ inside `web/` itself — fails with `ENOENT: … web/package.json`.
 
 The C++ core and a locally-built graph pack are **not** required for everyday
 front-end/API work: `sr_core` falls back to the pure-Python engine with a
-warning if it isn't built, and the API downloads a prebuilt pack
-automatically on first request (see *Pack distribution* below). Use the quick
+warning if it isn't built, and the API downloads the prebuilt packs it serves
+automatically at startup (see *Pack distribution* below). Use the quick
 start below unless you're changing `core/` or `ingestion/`.
 
 ### Quick start (macOS / Linux)
@@ -88,7 +88,7 @@ pip install -r requirements.txt
 Then, in two terminals, from the repository root:
 
 ```bash
-# terminal 1 — API on :8000 (fetches the pack automatically on first request)
+# terminal 1 — API on :8000 (fetches its packs automatically at startup)
 .venv/bin/python -m uvicorn api.main:app --port 8000
 ```
 
@@ -163,8 +163,18 @@ the API reads local disk only. To enable it:
    never runs per-push). It builds each region, publishes reproducible
    `<region>.tar.gz` artifacts under an immutable tag, and prints the
    `packs.lock` stanza.
-3. Paste that stanza into `packs.lock` and open a PR. Rolling forward is
-   merging it; rolling back is reverting it.
+3. Paste each stanza line under `[regions]` in `packs.lock` and open a PR.
+   Rolling forward is merging it; rolling back is reverting it.
+
+Each stanza line carries its own `tag`, and the lock's top-level `tag` is only
+the default for entries without one. So one region can be published, or
+republished, under a new tag with a one-line paste that leaves every other
+region's entry and URL alone. That is how `san_francisco` was added next to the
+older Berkeley packs:
+
+```bash
+gh workflow run build-packs.yml -f regions=san_francisco -f tag=packs-v2-20260925 -f publish=true
+```
 
 Archiving is deterministic — sorted entries, normalized mtime/uid/mode, fixed
 gzip header — so packaging the same pack directory twice gives byte-identical
@@ -178,8 +188,12 @@ artifacts; they cannot be re-derived by rebuilding.
 To pull published packs into a fresh checkout without building from Overpass:
 
 ```bash
-python -m api.packs_fetch --regions berkeley_small,berkeley_oakland
+python -m api.packs_fetch --regions berkeley_small,berkeley_oakland,san_francisco
 ```
+
+The API serves the packs in `[api] regions` in `config/config.toml`:
+`berkeley_oakland` and `san_francisco`, with the first as the default
+(ADR-0014). `SR_REGIONS=berkeley_oakland` narrows a deployment to one.
 
 ## Running it (including on a phone)
 
@@ -207,8 +221,12 @@ loaded, and it includes `engine` so a silent downgrade to the pure-Python path
 is visible from outside without reading logs.
 
 ```json
-{"status":"ok","packs_loaded":1,"regions":["berkeley_oakland"],"num_edges":20678,"engine":"cpp"}
+{"status":"ok","packs_loaded":2,"regions":["berkeley_oakland","san_francisco"],"num_edges":48841,"engine":"cpp"}
 ```
+
+Serving both packs takes about 130 MiB of container memory at idle, measured as
+cgroup `memory.current`. `berkeley_oakland` alone takes about 91 MiB (ADR-0014's
+2026-09-24 amendment).
 
 ### On a phone, via a tunnel
 

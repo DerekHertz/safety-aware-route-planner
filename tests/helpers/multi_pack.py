@@ -8,6 +8,7 @@ one pack and bypasses the served list entirely.
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from pyref.config import DEFAULT_CONFIG_PATH, Config
@@ -34,8 +35,13 @@ def write_config(tmp_path: Path, *, presets: dict[str, tuple[list[float], str | 
                  pack_root: Path | None = None) -> Path:
     """The shipped config, with `pack_dir` -> `pack_root` (default
     `tmp_path/packs`), extra presets appended, and optionally `[api] regions` /
-    `region.active` set."""
+    `region.active` set.
+
+    The shipped `[api] regions` (the real deployment's served set) is always
+    removed first: it names real metros these toys do not have, and leaving it
+    would both shadow `active` and collide with a `regions` written here."""
     text = DEFAULT_CONFIG_PATH.read_text(encoding="utf-8")
+    text = re.sub(r"(?m)^regions = .*\n", "", text)
     root = (pack_root if pack_root is not None else tmp_path / "packs").as_posix()
     old_dir = 'pack_dir = "data/packs"'
     assert old_dir in text

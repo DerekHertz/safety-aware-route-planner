@@ -117,7 +117,8 @@ jobs:
           cache-to: type=gha,mode=max
 
       # Building is not the same as working. This boots the real image, which
-      # downloads packs from object storage exactly as production does.
+      # downloads packs from object storage exactly as production does: every
+      # pack in the shipped [api] regions, each from its own packs.lock tag.
       - name: Boot the image and check it serves
         run: |
           set -euo pipefail
@@ -136,13 +137,21 @@ jobs:
           echo "$health" | grep -q '"engine":"cpp"' \
             || { docker logs sr-ci; echo "::error::image fell back to the pure-Python engine"; exit 1; }
 
-          curl -fsS -X POST http://localhost:8080/route \
-            -H 'Content-Type: application/json' \
-            -d '{"origin":{"lat":37.8715,"lon":-122.2680},
-                 "destination":{"lat":37.8044,"lon":-122.2712},
-                 "safety_enabled":true}' \
-            | grep -q '"routes"' \
-            || { docker logs sr-ci; echo "::error::image did not serve a route"; exit 1; }
+          # The shipped served set is two metros (ADR-0014 step 7).
+          echo "$health" | grep -q '"packs_loaded":2' \
+            || { docker logs sr-ci; echo "::error::image did not load both served packs"; exit 1; }
+
+          # One route inside each served pack: Berkeley -> Oakland, Mission -> Richmond.
+          for od in '37.8715,-122.2680,37.8044,-122.2712' '37.7524,-122.4184,37.7830,-122.4643'; do
+            IFS=, read -r olat olon dlat dlon <<< "$od"
+            curl -fsS -X POST http://localhost:8080/route \
+              -H 'Content-Type: application/json' \
+              -d "{\"origin\":{\"lat\":$olat,\"lon\":$olon},
+                   \"destination\":{\"lat\":$dlat,\"lon\":$dlon},
+                   \"safety_enabled\":true}" \
+              | grep -q '"routes"' \
+              || { docker logs sr-ci; echo "::error::image did not serve a route for $od"; exit 1; }
+          done
 
           echo "image size: $(docker image inspect sr-api:ci --format '{{.Size}}' | numfmt --to=iec)"
           docker rm -f sr-ci >/dev/null

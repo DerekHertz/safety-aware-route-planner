@@ -8,7 +8,7 @@
 # Active region preset (key into [region.presets]): the INGESTION target, i.e.
 # what `ingestion.build_pack` builds when no --region is given. It is NOT the
 # list of packs the API serves — that is `[api] regions` (ADR-0014), which
-# defaults to [active] when absent, so a single-pack deployment needs neither.
+# defaults to [active] when absent. It is set below, with active first.
 active = "berkeley_oakland"
 network_type = "drive"
 
@@ -33,6 +33,16 @@ timezone = "America/Los_Angeles"
 # Confirmed initial target: Berkeley + North Oakland
 # (Albany/El Cerrito down to Lake Merritt).
 bbox = [-122.32, 37.77, -122.22, 37.90]
+timezone = "America/Los_Angeles"
+
+[region.presets.san_francisco]
+# Second real metro (ADR-0014 step 7), dense urban per ADR-0015's amendment:
+# the City and County of San Francisco, Ocean Beach to Hunters Point and the
+# county line to the Golden Gate, Treasure Island included. The east edge
+# (-122.355) stays clear of berkeley_oakland's west edge (-122.32), because
+# served bboxes must be disjoint and touching counts. Published under its own
+# packs.lock tag (the Berkeley packs predate it) and served by [api] regions.
+bbox = [-122.515, 37.705, -122.355, 37.833]
 timezone = "America/Los_Angeles"
 
 # -----------------------------------------------------------------------------
@@ -299,13 +309,18 @@ impl = "cpp"                  # "pyref" | "cpp"  (cpp falls back to pyref with a
 # The SERVED set (ADR-0014): the packs this deployment loads, each from
 # `<pack_dir>/<name>`, all eagerly at startup. Distinct from [region] active,
 # which is only the ingestion target. When this key is absent the served set is
-# [active], which is today's single-pack deployment; set it to serve several:
-#   regions = ["berkeley_oakland", "another_metro"]
+# [active]. The FIRST entry is the default pack (/meta's top-level fields, the
+# client's initial view), so keep [region] active first.
 # SR_REGIONS (comma-separated) overrides it per deployment. Every served name
 # must be a [region.presets] entry with a `timezone`, its manifest `region`
 # must equal its directory name, and the served bboxes must be pairwise
 # disjoint (touching counts) — any violation fails startup. SR_PACK_DIR pins a
 # single pack directory instead and ignores this list.
+#
+# Every name here must also be published in packs.lock: a fresh container has
+# no packs and fetches each served one at boot (api/packs_fetch.py), and an
+# unpublished name stops startup. tests/test_multi_pack_load.py checks this.
+regions = ["berkeley_oakland", "san_francisco"]
 host = "127.0.0.1"
 port = 8000
 cors_origins = ["http://localhost:3000"]

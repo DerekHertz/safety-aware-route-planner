@@ -143,6 +143,62 @@ def test_archive_escaping_the_destination_is_rejected(tmp_path):
     assert not (root / "toyland").exists()
 
 
+def test_mixed_tags_fetch_each_region_from_its_own_release(tmp_path):
+    """Per-region tags, end to end: parse a lock whose entries live under two
+    release directories, then fetch both from one bucket. A region published
+    later goes under its own immutable tag without moving the others."""
+    staged = tmp_path / "staged"
+    bucket = tmp_path / "bucket"
+    shas = {}
+    for region, tag in (("oldtown", "packs-v2-old"), ("newtown", "packs-v2-new")):
+        _make_pack(staged, region)
+        (bucket / tag).mkdir(parents=True)
+        shas[region] = _tar_gz(staged / region, bucket / tag / f"{region}.tar.gz", region)
+
+    root = tmp_path / "packs"
+    with _serving(bucket) as base_url:
+        p = tmp_path / "packs.lock"
+        p.write_text(
+            f'base_url = "{base_url}"\ntag = "packs-v2-old"\nformat_version = 2\n'
+            "[regions]\n"
+            f'oldtown = {{ sha256 = "{shas["oldtown"]}", bytes = 1 }}\n'
+            f'newtown = {{ sha256 = "{shas["newtown"]}", bytes = 1, tag = "packs-v2-new" }}\n'
+        )
+        fetched = ensure_packs(["oldtown", "newtown"], root, load_lock(p))
+    assert fetched == ["oldtown", "newtown"]
+    for region in fetched:
+        manifest = json.loads((root / region / "manifest.json").read_text())
+        assert manifest["region"] == region
+
+
+def test_printed_stanza_pastes_into_a_lock_without_moving_other_regions(
+        tmp_path, capsys):
+    """The writer/reader contract: `scripts/package_packs.py` (what the
+    build-packs workflow runs) prints lines that, pasted under an existing
+    lock's `[regions]`, resolve to the tag that run uploaded to, while an
+    entry already there keeps resolving under the top-level tag."""
+    from scripts.package_packs import main as package_main
+
+    _make_pack(tmp_path / "built", "newtown")
+    assert package_main(["--regions", "newtown", "--packs-dir", str(tmp_path / "built"),
+                         "--out", str(tmp_path / "dist"), "--tag", "packs-v2-new"]) == 0
+    printed = capsys.readouterr().out.split("--- paste into packs.lock ---")[1]
+    lines = [ln for ln in printed.splitlines() if ln.startswith("newtown = ")]
+    assert len(lines) == 1
+    # Pasting must not be able to move the default tag everyone else uses.
+    assert not any(ln.startswith("tag =") for ln in printed.splitlines())
+
+    p = tmp_path / "packs.lock"
+    p.write_text('base_url = "https://b.test/"\ntag = "packs-v2-old"\nformat_version = 2\n'
+                 '[regions]\noldtown = { sha256 = "ab", bytes = 1 }\n' + lines[0] + "\n")
+    lock = load_lock(p)
+    assert lock is not None
+    assert lock.url_for("newtown") == "https://b.test/packs-v2-new/newtown.tar.gz"
+    assert lock.url_for("oldtown") == "https://b.test/packs-v2-old/oldtown.tar.gz"
+    sha = hashlib.sha256((tmp_path / "dist" / "newtown.tar.gz").read_bytes()).hexdigest()
+    assert lock.regions["newtown"].sha256 == sha
+
+
 def test_http_error_is_wrapped(tmp_path, published):
     bucket, sha = published
     lock = _lock("", sha, tag="wrong-tag")
@@ -187,6 +243,19 @@ class TestLockFile:
         lock = load_lock(p)
         assert lock is not None and lock.enabled
         assert lock.url_for("r") == "https://example.test/t/r.tar.gz"
+
+    def test_region_tag_overrides_and_absent_tag_falls_back(self, tmp_path):
+        p = tmp_path / "packs.lock"
+        p.write_text(
+            'base_url = "https://b.test"\ntag = "packs-v2-top"\nformat_version = 2\n'
+            "[regions]\n"
+            'plain = { sha256 = "ab", bytes = 1 }\n'
+            'pinned = { sha256 = "cd", bytes = 2, tag = "packs-v2-own" }\n'
+        )
+        lock = load_lock(p)
+        assert lock is not None
+        assert lock.url_for("plain") == "https://b.test/packs-v2-top/plain.tar.gz"
+        assert lock.url_for("pinned") == "https://b.test/packs-v2-own/pinned.tar.gz"
 
     def test_committed_lock_file_is_parseable_and_matches_code(self):
         """packs.lock ships with fetching disabled, but it must always parse and
