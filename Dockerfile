@@ -5,7 +5,7 @@
 #
 # Kept separate so the runtime image ships no compiler and no build headers.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim AS builder
+FROM python:3.14-slim AS builder
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends g++ \
@@ -23,7 +23,7 @@ RUN pip install --no-cache-dir "pybind11>=2.12" "setuptools>=68" wheel \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime.
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim
+FROM python:3.14-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
