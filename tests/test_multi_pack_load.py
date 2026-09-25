@@ -1,10 +1,11 @@
 """ADR-0014 step 2: a deployment serves the packs `[api] regions` names.
 
 `[api] regions` (overridable by `SR_REGIONS`) is the *served* set; it defaults
-to `[region.active]`, the *ingestion* target, so a single-pack deployment is
-unchanged. Every served pack is loaded eagerly in `lifespan`, before `/health`
-reports ready, and startup refuses a set on which coordinate-to-pack would not
-be a function (overlap) or a pack with no timezone.
+to `[region.active]`, the *ingestion* target. The shipped config sets it to
+both real metros (step 7), and the toy deployments below strip that key.
+Every served pack is loaded eagerly in `lifespan`, before `/health` reports
+ready, and startup refuses a set on which coordinate-to-pack would not be a
+function (overlap) or a pack with no timezone.
 
 The packs here are the two toy metros of `tests/helpers/multi_pack.py`,
 reached through the existing `SR_CONFIG` hook with `[api] pack_dir` rewritten
@@ -207,6 +208,32 @@ class TestServedRegions:
         with pytest.raises(PackConfigError, match="regions"):
             served_regions(self._cfg([]), env={})
 
-    def test_shipped_config_serves_region_active(self):
+    def test_shipped_config_serves_both_metros_with_region_active_first(self):
         cfg = Config.load(DEFAULT_CONFIG_PATH)
-        assert served_regions(cfg, env={}) == [cfg.region_name]
+        served = served_regions(cfg, env={})
+        assert served == ["berkeley_oakland", "san_francisco"]
+        assert served[0] == cfg.region_name   # the default pack is the ingestion target
+
+
+# --- the shipped deployment can boot ---------------------------------------------------
+
+def test_every_shipped_served_region_can_be_fetched_and_served():
+    """What a fresh container needs from the committed files, checked without
+    the network: every region the shipped config serves is published in
+    packs.lock (else `ensure_packs` stops boot), has a preset timezone (else
+    load stops boot), and the served bboxes are disjoint (else the registry
+    stops boot)."""
+    from api.departure import pack_timezone
+    from api.packs_fetch import load_lock
+    from api.registry import validate_coverage
+
+    cfg = Config.load(DEFAULT_CONFIG_PATH)
+    served = served_regions(cfg, env={})
+    lock = load_lock("packs.lock")
+    assert lock is not None and lock.enabled
+    unpublished = [r for r in served if r not in lock.regions]
+    assert not unpublished, f"served but not in packs.lock: {unpublished}"
+    for r in served:
+        pack_timezone(cfg, r, allow_unconfigured=False)
+        assert lock.url_for(r).endswith(f"/{lock.tag_for(r)}/{r}.tar.gz")
+    validate_coverage([(r, cfg.bbox(r)) for r in served])

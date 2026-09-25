@@ -16,7 +16,9 @@ Delete what doesn't apply.
       established precedent (`detour_budget_pct`), response changes are not.
 - [ ] **Changed `[region.presets]`, `INGEST_SCHEMA_VERSION`, or
       `PACK_FORMAT_VERSION`?** Re-ran `build-packs` under a **new tag** and
-      updated `packs.lock`. Published tags are immutable — overwriting one
+      pasted its stanza lines into `packs.lock`. Each line carries its own `tag`,
+      so it re-points only the regions that run published. Published tags are
+      immutable — overwriting one
       breaks every pinned checkout. Remember digests can only come from the run
       that published; they cannot be re-derived by rebuilding, because
       `ingestion/pack.py` stamps `created_utc` into each manifest.

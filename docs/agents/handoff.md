@@ -166,19 +166,9 @@ a 7-step PR sequence; work through it in order:
       (`/route`, `/reroute`, `/geocode`, `/meta`, `/health`) now answers without a
       500. `AppState.pack`/`.router` were removed (only tests used them);
       `PackRegistry.only()` stays, for tests only.
-- [ ] (7) Build a second real metro and **re-measure memory in the container**. The
-      metro-scale figure in the ADR is a guess. Paused and then **un-paused 2026-09-24**
-      (ADR-0015 amendment): pick a **dense urban** metro. That serves trip-trace
-      calibration (ADR-0017) now and ADR-0015's benchmark if its terms gate G0 ever
-      clears. Sequenced in **Phase 4b** below, after items 1-2.
-      **Built locally and measured 2026-09-24; publishing is pending.** The
-      `san_francisco` preset is in config. Its pack has 28,163 directed edges, 1.36x
-      `berkeley_oakland`, so the "200k-500k edges" guess was wrong for a city. It takes
-      about 43 MiB of container `memory.current`, against about 27 MiB for
-      `berkeley_oakland`. Budget 1.5 KiB per edge. See ADR-0014's 2026-09-24 amendment,
-      and read its `packs.lock` single-tag trap before running `build-packs`. Still
-      needed, on the owner's OK: publish the pack, paste its `packs.lock` line, then set
-      `[api] regions`. The pack exists only in the main checkout's `data/packs/`.
+- [x] (7) Second real metro, memory re-measured in the container. **Done 2026-09-25
+      (#88):** `san_francisco` (28k edges, ~43 MiB) is published under its own
+      `packs.lock` tag and served beside `berkeley_oakland`; see ADR-0014's amendment.
 
 **Phase 4b - control delay and trip traces.** Decided 2026-09-24 in a grilling session;
 recorded in ADR-0016, ADR-0017, and amendments to ADR-0006, ADR-0010, ADR-0011 and
@@ -214,8 +204,7 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
       only; the fields are already in `types.ts`.
       Done 2026-09-24: each route card shows "~6 min waiting", and an unsafe-marker popup
       shows "Expected wait: ~5 s". The formatting is in `web/lib/controlDelay.ts`.
-- [ ] (3) Phase 4 item (7) above. **Built locally and measured 2026-09-24. Publishing
-      is pending** and needs the owner's OK to dispatch `build-packs`.
+- [x] (3) Phase 4 item (7) above. Done 2026-09-25 (#88): San Francisco is served.
 - [ ] (4) **Trip-trace collection** (ADR-0017). Beta testing starts soon, so this runs
       alongside (3) rather than after it; otherwise those drives go uncollected.
   - [x] (4a) **Server ingest.** Done 2026-09-24: the commute planner service starts as

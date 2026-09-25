@@ -60,3 +60,4 @@ format_version = 2
 [regions]
 berkeley_small = { sha256 = "98bae4afb3834b804aa4fcb95d29658f5c6f493e59f84fb6b8eb4601b544d73b", bytes = 215292 }
 berkeley_oakland = { sha256 = "08457c2f3c3b32778a96dfd9ce91851be9f4e7c81c7aa02c1f37e9bebad37660", bytes = 2688707 }
+san_francisco = { sha256 = "8bd6c7e108f3d01e91e0b2e9e5e8512afe9486a527c8f90c74a586877a58129e", bytes = 3531939, tag = "packs-v2-20260925" }

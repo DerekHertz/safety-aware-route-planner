@@ -1,5 +1,5 @@
 ---
-Status: accepted (amended 2026-09-24: step 7 measured; a city pack is ~28k edges, not 200k-500k)
+Status: accepted (amended 2026-09-24: step 7 measured, a city pack is ~28k edges; 2026-09-25: san_francisco published under a per-region tag and served)
 Date: 2026-09-20
 ---
 
@@ -348,7 +348,8 @@ multi-metro service usable from the reference client.
 
 ## Amendment, 2026-09-24: step 7 measured — a city pack is ~28k edges, ~43 MiB in the container
 
-Step 7's measurement half is done. The publishing half is not. A second real pack,
+Step 7 is done: measured on 2026-09-24, then published and served on 2026-09-25 (last
+subsection). A second real pack,
 `san_francisco`, was built locally and measured two ways: with the methodology of the
 table above, and inside the shipped Docker image. **It replaces the "whole-metro pack of
 200k-500k directed edges" guess.** That guess described a whole metropolitan region, and
@@ -495,28 +496,36 @@ since the app cannot start without a pack.
   binds, the order of levers is now: the allocator first (above, no code), then the
   `SnapIndex`.
 
-### What step 7 still needs (owner decision)
+### Publishing: per-region tags in `packs.lock` (2026-09-25)
 
-This PR adds the preset only. `packs.lock` and `[api] regions` are untouched, so nothing
-serves `san_francisco` yet. Having a preset that is not in `packs.lock` breaks nothing.
-CI's fetch step asks for `berkeley_small` only, and the CI docker job serves
-`region.active`. `ensure_packs` only looks at served regions. A deployment that set
-`SR_REGIONS=...,san_francisco` today would stop at boot with the existing "configured to
-be served but are not published in packs.lock" error. **One trap for the publish:**
-`packs.lock` has a single `tag` for every region, and `url_for` puts each region under
-it. `build-packs` with only `regions=san_francisco` and a blank tag would publish to a
-new `packs-v2-<date>` directory. Pasting that tag would then point `berkeley_*` at a
-directory that does not hold them. There are two ways out, and the owner chooses:
+`san_francisco` is published and served. **The owner chose a third option instead of
+the two first drafted here.** Both drafts dodged the same problem. `packs.lock` had
+one `tag` for every region, so publishing one region under a new tag would have
+re-pointed the others at a directory that does not hold them. The drafts were to
+reuse the old tag directory, or to rebuild every preset.
 
-1. Publish into the existing tag, adding one new object and overwriting none:
-   `gh workflow run build-packs.yml --ref main -f regions=san_francisco -f
-   tag=packs-v2-20260728 -f publish=true`, then add only the `san_francisco` line to
-   `[regions]`. This bends the lock file's "never overwrite a published tag" rule in
-   spirit, though no object changes.
-2. Rebuild every preset under a new tag: `gh workflow run build-packs.yml --ref main -f
-   publish=true` (blank `regions` means every preset). Then paste the whole stanza. The
-   Berkeley packs are then rebuilt from whatever OSM data the Overpass cache holds, so
-   their routes can change.
-
-After either one, set `[api] regions = ["berkeley_oakland", "san_francisco"]`, or
-`SR_REGIONS` on the deployment.
+- **A `[regions]` entry may carry its own `tag`,** and the top-level `tag` is now only
+  the default for entries without one. `api/packs_fetch.py` resolves each region's URL
+  through it (`PacksLock.tag_for`). The `fetch-packs` action calls that code, so it
+  follows the same rule. `scripts/package_packs.py`, which prints `build-packs`'s
+  stanza, now puts `tag` on every line and prints no top-level `tag`. A one-region
+  publish is therefore a one-line paste that cannot move another region.
+- **Published** by one dispatch of `build-packs` (run 36157065575), with
+  `regions=san_francisco` and `tag=packs-v2-20260925`. Publish and public-read
+  verification both passed. The entry is `san_francisco = { sha256 =
+  "8bd6c7e1…129e", bytes = 3531939, tag = "packs-v2-20260925" }`. The Berkeley
+  entries and their tag are byte-for-byte unchanged. The CI build pulled fresh OSM data
+  and has 43 more geometry points than the local build measured above, with identical
+  node, edge and turn counts.
+- **Served:** `[api] regions = ["berkeley_oakland", "san_francisco"]`, with
+  `region.active` first as the default pack. `tests/test_multi_pack_load.py` now checks
+  that every region the shipped config serves is in `packs.lock` and has a timezone,
+  and that the served bboxes are disjoint. Those are the three things that would stop a
+  fresh container at boot. The toy multi-pack tests strip the shipped `regions` key.
+  The CI `docker image` job asserts `packs_loaded: 2` and routes one pair in each pack,
+  fetching both from R2 as production does.
+- **Checked on the real path:** an API with the shipped config and an empty pack
+  directory fetched both packs from R2, each under its own tag, and verified their
+  digests. `/health` reported `packs_loaded: 2` (48,841 edges: the published
+  `berkeley_oakland` is 20,678), and one San Francisco pair and one Berkeley pair both
+  routed.
