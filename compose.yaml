@@ -1,0 +1,95 @@
+# The beta deployment: the whole app on one machine, reached through a
+# Cloudflare named tunnel (Phase 4b (4c), ADR-0018). See README
+# "Beta deployment (compose + named tunnel)".
+#
+#     docker compose up -d --build                    # local only, :3000
+#     docker compose --profile tunnel up -d --build   # plus the public tunnel
+#
+# Only `web` is reachable from outside the compose network. It forwards /api/*
+# to `api` and /commute/* to `commute` (web/next.config.ts), so the browser
+# sees one origin.
+
+# Pinned, not derived from the checkout's directory name: the volume holding
+# every tester's traces is `<name>_commute-data`, and a worktree or a renamed
+# clone must find the same one instead of starting an empty database.
+name: safety-route-planner
+
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      # Nominatim asks for a real contact in the User-Agent (ADR-0013).
+      SR_NOMINATIM_CONTACT: ${SR_NOMINATIM_CONTACT:-}
+      # X-Forwarded-For entries written by infrastructure we run. Cloudflare's
+      # edge appends the caller's address; Next's rewrite proxy passes the
+      # header through untouched and appends nothing (probed 2026-09-25), so
+      # the caller is the last entry. Without this every /route caller shares
+      # the web container's address, and one per-client quota bucket.
+      SR_TRUSTED_PROXIES: ${SR_TRUSTED_PROXIES:-1}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s   # packs download from object storage at startup
+      start_interval: 3s
+      retries: 3
+
+  commute:
+    build:
+      context: .
+      dockerfile: commute/Dockerfile
+    image: sr-commute
+    restart: unless-stopped
+    volumes:
+      # A named volume, not a bind mount: SQLite locking is only reliable on
+      # the Docker VM's own filesystem, never across the Windows file share.
+      - commute-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8100/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      start_interval: 2s
+      retries: 3
+
+  # Raw traces are kept 90 days (ADR-0017). Same image and volume as commute;
+  # the purge is idempotent, so a restart that re-runs it early is harmless.
+  retention:
+    image: sr-commute
+    restart: unless-stopped
+    depends_on:
+      commute:
+        condition: service_started
+    volumes:
+      - commute-data:/data
+    command: ["sh", "-c", "while true; do python -m commute.retention purge; sleep 86400; done"]
+
+  web:
+    build: web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+      commute:
+        condition: service_healthy
+    ports:
+      # Loopback only: the public way in is the tunnel, not the LAN.
+      - "127.0.0.1:3000:3000"
+
+  # Needs TUNNEL_TOKEN from a Cloudflare named tunnel whose public hostname
+  # points at http://web:3000. In a profile so local runs need no token.
+  cloudflared:
+    image: cloudflare/cloudflared:2026.9.3
+    profiles: ["tunnel"]
+    restart: unless-stopped
+    depends_on:
+      - web
+    command: ["tunnel", "--no-autoupdate", "run"]
+    environment:
+      # Not `:?`: compose interpolates the whole file, so a required variable
+      # would break plain `docker compose up` without the tunnel profile too.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+
+volumes:
+  commute-data:

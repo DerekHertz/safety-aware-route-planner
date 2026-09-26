@@ -217,10 +217,20 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
         on when `NEXT_PUBLIC_COMMUTE_URL` and `NEXT_PUBLIC_ENABLE_LIVE_NAV` are both set.
         Scenario tests in `tripRecorder.test.ts` run against a fake server that validates
         like `commute/schemas.py`.
-  - [ ] (4c) **Deploy the commute service** (follow-up). Image and host, `SR_COMMUTE_DB`
-        on a persistent volume, `SR_COMMUTE_CORS_ORIGINS` or a same-origin proxy like
-        `/api`, a daily `python -m commute.retention purge`, and minting the testers'
-        tokens. Until then it runs under uvicorn only.
+  - [x] (4c) **Deploy the commute service.** Done 2026-09-25. The owner chose their own
+        PC plus a Cloudflare named tunnel over a paid host. `compose.yaml` runs api,
+        commute (SQLite on the `commute-data` volume), a daily retention purge, web, and
+        cloudflared (`tunnel` profile). Web forwards `/commute/*` like `/api/*`, so
+        recording is same-origin and needs no CORS. README "Beta deployment" has the
+        setup. `scripts/compose_smoke.py` checks the stack through the web proxy, and the
+        `compose stack` CI job runs it on every PR. Things to know:
+    - **Owner actions left:** create the named tunnel and put `TUNNEL_TOKEN` in `.env`,
+      then mint testers' tokens.
+    - `SR_TRUSTED_PROXIES` defaults to **1**. Next's rewrite proxy passes
+      `X-Forwarded-For` through and appends nothing (probed with an echo server). Once
+      the tunnel is live, re-probe to confirm cloudflared adds no hop either.
+    - The compose project name is pinned (`safety-route-planner`), so every checkout
+      finds the same trace volume.
 - [ ] (5) **Wait extraction and calibration** (ADR-0017). Match traces against the
       followed route, count time below 2 m/s in the last 60 m, and fit ADR-0016's
       constants on pooled data. The output is config, never live lookups.

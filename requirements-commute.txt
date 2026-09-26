@@ -1,0 +1,11 @@
+# Runtime dependencies of the commute planner service (commute/), and the
+# whole of its Docker image. It imports only these and the standard library
+# (sqlite3 included); tests/test_commute_boundary.py keeps it off the engine.
+#
+# Same pins as requirements.txt. Bump the two files together, so the API and
+# the commute service never run different FastAPI/Pydantic versions against
+# the one artifact contract.
+
+fastapi==0.141.1
+pydantic==2.13.5
+uvicorn[standard]==0.53.0

@@ -155,3 +155,25 @@ jobs:
 
           echo "image size: $(docker image inspect sr-api:ci --format '{{.Size}}' | numfmt --to=iec)"
           docker rm -f sr-ci >/dev/null
+
+  compose:
+    name: compose stack
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The beta deployment (compose.yaml) booted whole, and exercised through
+      # the web container the way a phone reaches it: /api and /commute both
+      # go through Next's rewrites. No tunnel profile, so no secret is needed.
+      - name: Boot the stack
+        run: docker compose up -d --build --wait --wait-timeout 300
+
+      - name: Smoke test through the web proxy
+        run: |
+          set -euo pipefail
+          docker compose exec -T commute python -m commute.tokens issue --label ci \
+            | python3 scripts/compose_smoke.py
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs --no-color --tail 100
