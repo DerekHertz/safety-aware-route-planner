@@ -44,6 +44,14 @@ unprotected maneuver usually carries both a control delay and a safety penalty, 
 two must not be conflated.
 _Avoid_: intersection penalty (that is the safety term), turn cost, wait time (too loose).
 
+**Control confidence**:
+How the engine knows an intersection approach's control. OBSERVED means an OSM tag said
+so. INFERRED means it was guessed from road class, which is how every "no control" case
+arises, because OSM never tags an absence. VERIFIED means an imagery-derived label
+confirmed it, and it counts as OBSERVED only for label classes that cleared the precision
+bar.
+_Avoid_: certainty, accuracy (those name measurements, not this label).
+
 **Unsafe action**:
 An instance of one of the committed maneuvers that clears the counting threshold on a
 route. Reported per route as an **unsafe-action count**, split by type. Distinct from a
@@ -139,9 +147,9 @@ the route service has -- and reaches the engine only through route artifacts.
 _Avoid_: commute service (that names the deployment, not the concept), traffic watcher.
 
 **Commute**:
-One saved origin/destination pair plus a habitual departure time, owned by the commute
-planner. The unit its scheduling and measurement are keyed on.
-_Avoid_: trip, route (a commute is the standing intent; a route is one answer to it).
+A saved, recurring Trip plus a habitual departure time, owned by the commute planner.
+The unit its scheduling and measurement are keyed on.
+_Avoid_: route (a commute is the standing intent; a route is one answer to it).
 
 **Departure-time sweep**:
 The commute planner's headline output: the same origin/destination planned across a range
@@ -159,7 +167,7 @@ fire (ADR-0010).
 _Avoid_: incident (that is one possible source of a disruption, not the concept), delay.
 
 **Trip trace**:
-The recorded GPS track of one real drive, together with the route artifact being
+The recorded GPS track of one driven Trip, together with the route artifact being
 followed, collected from consenting testers. It is evidence for calibrating the model
 and measuring ETA error, and never a direct input to a live route.
 _Avoid_: probe data (that names a commercial product), GPS log, telemetry.
@@ -169,6 +177,59 @@ The credential one beta device presents to the commute planner in place of an ac
 issued by the owner and revocable. It identifies a device, not a person, and a trip trace
 belongs to the token that uploaded it. A stand-in until the commute planner has accounts.
 _Avoid_: API key, user id, account.
+
+**Trip planner**:
+The consumer that turns a Request into route-service inputs, then selects and explains
+one of the route alternatives the service returns. It never creates or edits a route.
+_Avoid_: assistant, agent, chatbot.
+
+### Asking and answering (Trip planner)
+
+**Trip**:
+An ordered journey from an origin to a destination. A Trip is what the user wants; a
+route is how they get there.
+_Avoid_: journey, ride, drive, route.
+
+**Request**:
+What the user says they want for a Trip, in natural language.
+_Avoid_: query, prompt, intent.
+
+**Constraint**:
+A hard rule derived from a Request. A route alternative that violates it is discarded.
+_Avoid_: rule, filter, avoid (as a noun).
+
+**Tradeoff**:
+A weighted cost derived from a Request, traded against the others. Ambiguous clauses
+default to a Tradeoff. Tradeoffs resolve into the reproducer params recorded in a
+route's **Preference**.
+_Avoid_: preference (reserved for the artifact's reproducer record), weight, soft
+constraint, priority.
+
+**Unsupported clause**:
+A part of a Request that the Trip planner recognizes but cannot express as a Constraint
+or Tradeoff. Always named in the Explanation; never silently dropped.
+_Avoid_: ignored clause, unknown intent.
+
+**Relaxation**:
+Downgrading a Constraint to a Tradeoff so an infeasible Trip gets Candidate Routes.
+Only with the user's confirmation; never automatic.
+_Avoid_: fallback, loosening, override.
+
+**Candidate Route**:
+A route alternative that satisfies every Constraint of its Trip. Only the route service
+creates routes, so every Candidate Route is one of its alternatives.
+_Avoid_: option, suggestion.
+
+**Choice**:
+The single Candidate Route selected for the user.
+_Avoid_: recommendation, pick, best route.
+
+**Explanation**:
+A short statement of why the Choice was made, naming the tradeoff, any clause treated
+as a Tradeoff rather than a Constraint, and any Unsupported clause.
+_Avoid_: rationale, reasoning, summary.
+
+### Engine internals
 
 **Parity core**:
 The pairing of the pure-Python reference engine (`pyref/`) and the C++ engine

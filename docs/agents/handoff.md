@@ -231,6 +231,35 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
       hard blocks, PeMS freeway speeds. The HERE corridor feed (rung 3) waits for
       measured ETA error and a check of HERE §6.4(b), its ODbL clause.
 
+**Phase 4c - Trip planner (LLM layer)** ([ADR-0019](../adr/0019-llms-at-the-edges.md)).
+Decided 2026-09-25 in a grilling session. It is a portfolio piece as well as a feature, so
+every LLM component ships with a measured number and a baseline it has to beat. Order:
+Phase 4b (4c) deploy first, since `planner/` joins that deploy. Then:
+
+- [ ] **PR A - `/plan` end to end.**
+  - A new `planner/` app with a boundary test like `commute/`'s, tester tokens from
+    `commute.tokens`, and a daily spend cap.
+  - Request → structured parse → `/route` over HTTP → Candidate filter → Choice →
+    grounded Explanation. Relaxation for infeasible Trips.
+  - The frozen rule baseline.
+  - An eval harness that replays recorded model replies in CI.
+  - In `web/`, the text box, the Explanation panel, the highlighted Choice, and a blind
+    pick mode.
+- [ ] **PR B - measure.** `evals/requests.jsonl` (40 owner-written plus 60 synthesized,
+      owner-reviewed, 70/30 split), live runs for parse accuracy, latency and grounding,
+      30+ blind Trip picks against the baseline, and fixes they reveal. A smaller model is
+      the owner's call on these numbers.
+- [ ] **Control verification** (1-2 PRs). **Owner action first:** register a free
+      Mapillary app for a token. Then:
+  - A coverage script, gated at 50% or better of INFERRED busy crossings having imagery
+    under 3 years old. Below the gate, park the work.
+  - Mapillary `/map_features` as the baseline.
+  - VLM labels (signal / stop / none) through the Batch API, scored against Oakland's
+    2024 signal layer, fetched at run time and never committed.
+  - The `VERIFIED` overlay at pack build. It moves golden digests on purpose.
+- **Not in this phase:** Bike (LTS, elevation, GPX; needs an ADR-0003 amendment), Stops,
+  and the UI polish pass, which the owner runs as a separate design session.
+
 **Phase 5 - commute planner** (ADR-0011). Google Sign-In, accounts, saved commutes with
 user-set departure times, the **departure-time sweep** as the headline feature, a stubbed
 disruption-source interface, a daily brief, and predicted-vs-actual ETA logging. The
