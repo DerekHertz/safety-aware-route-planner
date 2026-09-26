@@ -23,10 +23,24 @@ const nextConfig: NextConfig = {
   //
   // Unused in production: when NEXT_PUBLIC_API_URL is set, lib/api.ts uses that
   // absolute URL and never touches /api.
+  //
+  // /commute/* does the same for the commute planner service (ADR-0018), so a
+  // build with NEXT_PUBLIC_COMMUTE_URL=/commute records trip traces
+  // same-origin: no SR_COMMUTE_CORS_ORIGINS, and one tunnel or certificate.
   async rewrites() {
-    const target = process.env.API_PROXY_TARGET ?? "http://localhost:8000";
-    return [{ source: "/api/:path*", destination: `${target}/:path*` }];
+    const api = process.env.API_PROXY_TARGET ?? "http://localhost:8000";
+    const commute = process.env.COMMUTE_PROXY_TARGET ?? "http://localhost:8100";
+    return [
+      { source: "/api/:path*", destination: `${api}/:path*` },
+      { source: "/commute/:path*", destination: `${commute}/:path*` },
+    ];
   },
+
+  // Only web/Dockerfile sets this: the container runs the traced standalone
+  // server, while `next start` and `next dev` keep the default output.
+  ...(process.env.NEXT_OUTPUT === "standalone"
+    ? { output: "standalone" as const }
+    : {}),
 };
 
 export default nextConfig;

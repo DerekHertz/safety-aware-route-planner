@@ -276,6 +276,77 @@ On Windows the cloudflared MSI installs to
 `C:\Program Files (x86)\cloudflared\` **without** adding itself to PATH, so
 either call it by full path or add that directory to your user PATH.
 
+### Beta deployment (compose + named tunnel)
+
+For the beta, the whole app runs on one machine under `compose.yaml` and is
+published through a Cloudflare **named** tunnel (Phase 4b (4c), ADR-0018):
+
+| Service | What it is |
+|---|---|
+| `api` | the route service image (`Dockerfile`) |
+| `commute` | the commute planner service (`commute/Dockerfile`); SQLite on the `commute-data` volume |
+| `retention` | the same image, running `python -m commute.retention purge` once a day |
+| `web` | the reference client (`web/Dockerfile`); forwards `/api/*` and `/commute/*`, so the browser sees one origin |
+| `cloudflared` | the tunnel, in the `tunnel` profile |
+
+**Why a named tunnel, not a quick one.** A trip still waiting to upload sits in
+the phone's IndexedDB, which is scoped to the page's origin. A quick tunnel
+hands out a new hostname every session, and each new hostname strands whatever
+the old one had queued. A named tunnel keeps one hostname.
+
+One-time setup:
+
+1. In Cloudflare (free plan, with a domain on it): **Zero Trust → Networks →
+   Tunnels → Create a tunnel → Cloudflared**. Copy the token it shows.
+2. Add a public hostname, e.g. `beta.<your-domain>`, with service **HTTP**,
+   URL **`web:3000`**. That is the compose service name, not localhost.
+3. Put the token in `.env` at the repo root (`.gitignore`d) as
+   `TUNNEL_TOKEN=...`, and set `SR_NOMINATIM_CONTACT` there too (see
+   `.env.example`).
+
+Run it:
+
+```bash
+docker compose --profile tunnel up -d --build
+```
+
+Without `--profile tunnel` the same stack runs locally on
+`http://127.0.0.1:3000` only. Every service restarts on its own, so turn on
+Docker Desktop's "Start when you sign in" and the beta comes back after a
+reboot. It is offline whenever the machine is.
+
+Mint a token for each tester's phone. The plaintext is printed once; send it
+privately:
+
+```bash
+docker compose exec commute python -m commute.tokens issue --label "<name>'s phone"
+docker compose exec commute python -m commute.tokens list
+docker compose exec commute python -m commute.tokens revoke <id>
+```
+
+Update after a merge with `git pull`, then the same `up` command. The
+`commute-data` volume survives `down` and rebuilds; only `docker compose down
+-v` deletes it. That volume holds real people's location history, so back it
+up somewhere private:
+
+```bash
+docker compose exec commute python -c "import sqlite3; sqlite3.connect('/data/commute.sqlite3').backup(sqlite3.connect('/data/backup.sqlite3'))"
+docker compose cp commute:/data/backup.sqlite3 ./commute-backup.sqlite3
+```
+
+Check the whole stack the way a phone reaches it. CI runs the same check
+against a throwaway stack. The script writes one synthetic trip under the
+token it is given, so revoke that token afterwards:
+
+```bash
+docker compose exec -T commute python -m commute.tokens issue --label smoke | python scripts/compose_smoke.py
+```
+
+Build-time settings: the `web` image bakes in `NEXT_PUBLIC_ENABLE_LIVE_NAV=1`,
+because the recorder runs only during live nav, and
+`NEXT_PUBLIC_COMMUTE_URL=/commute`. Change them with build args in
+`web/Dockerfile`, then `docker compose build web`.
+
 ### If you deploy it later
 
 Nothing here is host-specific — it is a container that reads its configuration

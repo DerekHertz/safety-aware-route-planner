@@ -47,6 +47,11 @@ from commute.store import Clock, Outcome, TraceStore, resolve_db_path, wall_cloc
 
 router = APIRouter()
 
+# How much of an oversized body BodySizeLimit reads and discards before its
+# 413, so a proxy in front sees a response rather than a reset. Past this the
+# connection is closed half-read.
+DRAIN_LIMIT_BYTES = 16 * MAX_BODY_BYTES
+
 _bearer = HTTPBearer(
     auto_error=False,
     description="A tester token, minted by `python -m commute.tokens issue`.")
@@ -197,7 +202,8 @@ class BodySizeLimit:
                 return                      # the client went away
             body += message.get("body", b"")
             if len(body) > self.max_bytes:
-                await self._too_large(scope, receive, send)
+                await self._too_large(scope, receive, send,
+                                      more_body=message.get("more_body", False))
                 return
             if not message.get("more_body", False):
                 break
@@ -213,7 +219,21 @@ class BodySizeLimit:
 
         await self.app(scope, replay, send)
 
-    async def _too_large(self, scope: Scope, receive: Receive, send: Send) -> None:
+    async def _too_large(self, scope: Scope, receive: Receive, send: Send,
+                         more_body: bool = True) -> None:
+        # Drain (and discard) the rest of the body first. Answering while the
+        # peer is still sending makes the server close a half-read connection,
+        # and a proxy in front (the web container's /commute rewrite) sees
+        # ECONNRESET and turns our 413 into a 500. The client retries a 500
+        # forever but drops a 413, so the status has to survive the proxy.
+        # Bounded, so an endless body still ends in a reset, not a sink.
+        drained = 0
+        while more_body and drained <= DRAIN_LIMIT_BYTES:
+            message = await receive()
+            if message["type"] != "http.request":
+                return                      # the client went away
+            drained += len(message.get("body", b""))
+            more_body = message.get("more_body", False)
         response = JSONResponse(
             {"detail": f"request body exceeds {self.max_bytes} bytes"}, status_code=413)
         await response(scope, receive, send)

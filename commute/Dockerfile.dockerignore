@@ -1,0 +1,9 @@
+# Allowlist for commute/Dockerfile (BuildKit uses <Dockerfile>.dockerignore
+# instead of the root .dockerignore). Only the service and its pins go in.
+*
+!commute/
+!requirements-commute.txt
+
+commute/Dockerfile*
+**/__pycache__/
+**/*.py[cod]

@@ -11,6 +11,7 @@ particular order. What this file pins:
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from types import SimpleNamespace
@@ -323,6 +324,37 @@ def test_an_oversized_body_without_content_length_is_413(env):
     resp = env.client.put(chunk_url(new_trip_id(), 0), content=stream(),
                           headers={**bearer(env.alice), "Content-Type": "application/json"})
     assert resp.status_code == 413
+
+
+def test_an_oversized_body_is_drained_before_the_413_is_sent():
+    """A 413 sent while the peer is still writing makes the server close a
+    half-read connection, and a proxy in front (the web container's /commute
+    rewrite) reports ECONNRESET as a 500, which the client retries forever.
+    Seen in the compose-stack CI job. So every body message is consumed first.
+    """
+    from commute.app import BodySizeLimit
+
+    parts = [b"x" * 65536] * 20
+    messages = [{"type": "http.request", "body": p, "more_body": i < len(parts) - 1}
+                for i, p in enumerate(parts)]
+    events: list[str] = []
+
+    async def receive():
+        events.append("receive")
+        return messages.pop(0)
+
+    async def send(message):
+        events.append(message["type"])
+
+    async def app(scope, receive, send):  # never reached
+        raise AssertionError("an oversized body reached the app")
+
+    scope = {"type": "http", "headers": [(b"content-length", str(20 * 65536).encode())]}
+    asyncio.run(BodySizeLimit(app, max_bytes=65536)(scope, receive, send))
+
+    assert messages == []
+    assert events[:20] == ["receive"] * 20            # every body message read ...
+    assert events[20] == "http.response.start"        # ... before the 413 starts
 
 
 # --- privacy -----------------------------------------------------------------
