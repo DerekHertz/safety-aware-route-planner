@@ -1,0 +1,27 @@
+{
+  "_comment": "Frozen /route answers the Choice eval runs against, so it needs no pack and no route service. Only the fields the planner reads. A: the usual shape (safe costs a few minutes, fast takes the risky turns). B: a long trip where safe is much slower and balanced trades a left for the crossings. C: a near tie, fast and balanced identical.",
+  "A": [
+    {"kind": "fast", "eta_s": 600, "detour_pct": 0.0, "control_delay_s": 90,
+     "unsafe": {"unprotected_left": 2, "uncontrolled_crossing": 1, "total": 3}},
+    {"kind": "balanced", "eta_s": 660, "detour_pct": 0.1, "control_delay_s": 75,
+     "unsafe": {"unprotected_left": 0, "uncontrolled_crossing": 1, "total": 1}},
+    {"kind": "safe", "eta_s": 780, "detour_pct": 0.3, "control_delay_s": 120,
+     "unsafe": {"unprotected_left": 0, "uncontrolled_crossing": 0, "total": 0}}
+  ],
+  "B": [
+    {"kind": "fast", "eta_s": 1500, "detour_pct": 0.0, "control_delay_s": 200,
+     "unsafe": {"unprotected_left": 0, "uncontrolled_crossing": 3, "total": 3}},
+    {"kind": "balanced", "eta_s": 1560, "detour_pct": 0.04, "control_delay_s": 230,
+     "unsafe": {"unprotected_left": 1, "uncontrolled_crossing": 0, "total": 1}},
+    {"kind": "safe", "eta_s": 2400, "detour_pct": 0.6, "control_delay_s": 300,
+     "unsafe": {"unprotected_left": 0, "uncontrolled_crossing": 0, "total": 0}}
+  ],
+  "C": [
+    {"kind": "fast", "eta_s": 420, "detour_pct": 0.0, "control_delay_s": 40,
+     "unsafe": {"unprotected_left": 1, "uncontrolled_crossing": 0, "total": 1}},
+    {"kind": "balanced", "eta_s": 420, "detour_pct": 0.0, "control_delay_s": 40,
+     "unsafe": {"unprotected_left": 1, "uncontrolled_crossing": 0, "total": 1}},
+    {"kind": "safe", "eta_s": 455, "detour_pct": 0.083, "control_delay_s": 45,
+     "unsafe": {"unprotected_left": 0, "uncontrolled_crossing": 0, "total": 0}}
+  ]
+}

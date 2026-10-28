@@ -236,15 +236,21 @@ Decided 2026-09-25 in a grilling session. It is a portfolio piece as well as a f
 every LLM component ships with a measured number and a baseline it has to beat. Order:
 Phase 4b (4c) deploy first, since `planner/` joins that deploy. Then:
 
-- [ ] **PR A - `/plan` end to end.**
-  - A new `planner/` app with a boundary test like `commute/`'s, tester tokens from
-    `commute.tokens`, and a daily spend cap.
-  - Request → structured parse → `/route` over HTTP → Candidate filter → Choice →
-    grounded Explanation. Relaxation for infeasible Trips.
-  - The frozen rule baseline.
-  - An eval harness that replays recorded model replies in CI.
-  - In `web/`, the text box, the Explanation panel, the highlighted Choice, and a blind
-    pick mode.
+- [x] **PR A - `/plan` end to end.** Done 2026-10-27, with **Jev** instead of Claude Opus
+      (ADR-0019's 2026-10-27 amendment). `uvicorn planner.app:app`, `POST /v1/plan`;
+      env vars are listed in `planner/app.py`'s docstring. The parse is one Jev request
+      (`planner/parse.py`), the Choice a second (`planner/choose.py`), the Explanation a
+      template (`planner/explain.py`, grounding pinned by `tests/test_planner_explain.py`).
+      The frozen baseline is `planner/baseline.py`. The web panel shows only when
+      `NEXT_PUBLIC_PLANNER_URL` is set. **Still open from PR A:**
+  - [ ] The first live run, `python -m planner.eval --live` with `TYPESAFE_API_KEY`: it
+        writes `evals/recordings/jev.jsonl`, which CI then replays. Commit it with a
+        test asserting zero replay misses. Any change to a question's wording or the
+        model id changes the request hash, so it needs a re-record.
+  - [ ] Blind pick mode in `web/` (moved to PR B, which uses it).
+  - [ ] Every planner call reaches `/route` from one address, so all its users share
+        one rate-limit bucket until the deploy sets `SR_TRUSTED_PROXIES` to count the
+        planner hop (it forwards the user's address in `X-Forwarded-For`).
 - [ ] **PR B - measure.** `evals/requests.jsonl` (40 owner-written plus 60 synthesized,
       owner-reviewed, 70/30 split), live runs for parse accuracy, latency and grounding,
       30+ blind Trip picks against the baseline, and fixes they reveal. A smaller model is

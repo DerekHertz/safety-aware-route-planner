@@ -134,3 +134,52 @@ For control verification:
   job only, never of the route service.
 - Order of work: deploy the commute service (Phase 4b (4c)) first, then Trip planner PR A
   and PR B, then control verification. See `docs/agents/handoff.md`.
+
+## Amendment, 2026-10-27 — Jev replaces Claude Opus; the Explanation is a template
+
+Decided by the owner on 2026-10-27 for the two-day MVP. The Trip planner's model is
+**Jev** (TypeSafe's System One model, pinned to `jev-1.14.0`), not Claude Opus. Jev
+returns typed judgments with probabilities (Noul, Choice, Score) and generates no text.
+It costs $0.042 per million input tokens, output is free, and one request answers many
+questions in parallel. That changes three parts of "The Trip planner, v1" above.
+
+- **Parse.** One Jev request per Request, every question answered in parallel over the
+  same state (the Request text, and the Request split into clauses by code):
+  - Noul: firmly rules out unprotected lefts. Noul: firmly rules out uncontrolled
+    crossings. A soft wish ("fewer lefts if possible") is not a Constraint, so it lands
+    in the Tradeoff, as the "ambiguous clauses default to a Tradeoff" rule requires.
+  - Noul: asks to avoid *all* left turns, so the Explanation can say it narrowed that to
+    unprotected lefts.
+  - Score: the safety-versus-speed Tradeoff, five described levels, read as -2..+2.
+  - Choice: the detour budget, over fixed buckets (none, ~5/10/15/20/30 minutes,
+    ~10/20/30/50 percent, or some other amount). Code maps a bucket to
+    `detour_budget_pct`; a minute bucket is converted against the fastest route's ETA.
+    "Some other amount" is an Unsupported clause.
+  - Choice: departure (now, weekday AM peak, weekday PM peak, off-peak midday, night, or
+    a time none of those express). Code turns a bucket into a pack-local wall-clock time
+    from the client's clock, so no date arithmetic is asked of the model (Jev reads dates
+    as text). The last bucket is an Unsupported clause and the Trip plans for now. `night`
+    is an addition to the four buckets first proposed: the 3 am busy floor (ADR-0005) is
+    an engine behaviour a "late at night" Request should reach.
+  - Noul per clause, plus one over the whole Request: asks for something beyond the
+    above. A clause scoring yes is quoted verbatim in the Explanation as Unsupported.
+    Jev selects; it never writes the words, so nothing is silently dropped or invented.
+  Code owns every number and every policy; Jev only judges.
+- **Choice.** A second Jev request, a Choice over the Candidate Routes' summaries
+  (minutes, extra minutes against the fastest, unprotected lefts, uncontrolled crossings,
+  minutes waiting) plus the Request. It is skipped when there is one Candidate. It is
+  measured against the frozen rule baseline of decision 4 (`planner/baseline.py`,
+  committed before `evals/requests.jsonl`), which is not changed by this amendment.
+- **Explanation.** A code template filled only from the route summaries and the parse.
+  It is **grounded by construction**: every number and route name is copied from the
+  summaries the Choice was made over. The "regenerate once, then fall back to a template"
+  path goes away, because the template is the only path. Measurement 4 ("zero ungrounded
+  Explanations") becomes a unit test over the template instead of a live metric.
+- **Model line above.** Replace "Claude Opus 5 at `low` effort, structured outputs" with
+  Jev over HTTP (`POST /v1/systemone`, `httpx`, no SDK dependency), the key read from
+  `TYPESAFE_API_KEY` on the server only. The Anthropic SDK is no longer a `planner/`
+  dependency; it remains the plan for the offline control-verification job.
+- **Unchanged.** Decisions 1-5, Relaxation (proposed, never automatic), the failure rule
+  (on any Jev error or timeout, the plain three-route comparison with no Choice), no
+  Request text stored, tester tokens, the daily spend cap (503), and the measurement
+  plan, whose eval harness now replays recorded Jev replies in CI.

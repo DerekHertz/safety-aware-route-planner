@@ -6,6 +6,7 @@ import NavHud from "@/components/NavHud";
 import RouteCard from "@/components/RouteCard";
 import SearchBox from "@/components/SearchBox";
 import TraceSettings from "@/components/TraceSettings";
+import TripPlanner from "@/components/TripPlanner";
 import { fetchMeta, fetchRoutes } from "@/lib/api";
 import {
   coverageLabel,
@@ -16,6 +17,7 @@ import {
   regionLabel as labelOf,
 } from "@/lib/coverage";
 import { googleMapsDirectionsUrl } from "@/lib/googleMapsLink";
+import { PLANNER_URL } from "@/lib/planner";
 import { compareRoutes } from "@/lib/routeComparison";
 import {
   DEFAULT_DETOUR_BUDGET,
@@ -23,6 +25,7 @@ import {
   GeocodeResult,
   LatLon,
   PackMeta,
+  PlanResponse,
   RouteAlternative,
   RouteKind,
 } from "@/lib/types";
@@ -80,6 +83,9 @@ export default function Home() {
   // which may already have moved while the debounced re-route is pending.
   const [googleMapsHref, setGoogleMapsHref] = useState<string | null>(null);
   const [selected, setSelected] = useState<RouteKind | null>(null);
+  // The Trip planner's Choice among the current `routes` (ADR-0019); cleared
+  // whenever a plain /route answer replaces them.
+  const [choice, setChoice] = useState<RouteKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [meta, setMeta] = useState<PackMeta | null>(null);
@@ -271,6 +277,7 @@ export default function Home() {
       );
       if (seq !== reqSeq.current) return; // stale response
       setRoutes(resp.routes);
+      setChoice(null);
       setGoogleMapsHref(googleMapsDirectionsUrl(origin, destination));
       // Results are the reason to look at the panel, so raise it. Done here in
       // the response handler rather than in an effect watching `routes`: this
@@ -292,6 +299,28 @@ export default function Home() {
       if (seq === reqSeq.current) setLoading(false);
     }
   }, [origin, destination, departure, safety, detourBudget, meta]);
+
+  const applyPlan = useCallback(
+    (resp: PlanResponse) => {
+      // Invalidate any /route still in flight, so it cannot overwrite the plan.
+      ++reqSeq.current;
+      setLoading(false);
+      setError(null);
+      setRoutes(resp.routes);
+      setChoice(resp.choice);
+      if (origin && destination)
+        setGoogleMapsHref(googleMapsDirectionsUrl(origin, destination));
+      if (resp.routes.length > 0) setSheetOpen(true);
+      setSelected(
+        (prev) =>
+          resp.choice ??
+          (prev && resp.routes.some((r) => r.kind === prev)
+            ? prev
+            : (resp.routes[0]?.kind ?? null)),
+      );
+    },
+    [origin, destination],
+  );
 
   // Debounced so a moving origin (or rapid edits) coalesces into one request.
   useEffect(() => {
@@ -582,23 +611,41 @@ export default function Home() {
               )}
             </div>
 
+            {PLANNER_URL && (
+              <TripPlanner
+                origin={origin}
+                destination={destination}
+                nowLocal={nowLocalIso}
+                onPlan={applyPlan}
+              />
+            )}
+
             {coverageNote && <div className="status note">{coverageNote}</div>}
             {loading && <div className="status">Routing…</div>}
             {error && <div className="status error">{error}</div>}
 
             <div className="cards" id="route-panel">
               {comparisonRows.map(({ route: r, deltaS }) => (
-                <RouteCard
+                // The wrapper carries the Trip planner's highlight, so the
+                // card itself is unchanged.
+                <div
                   key={r.kind}
-                  route={r}
-                  // A time delta only means something with something to
-                  // compare against — omit it when safety is off and the
-                  // response is a lone "fast" route.
-                  deltaS={comparisonRows.length > 1 ? deltaS : undefined}
-                  units={units}
-                  selected={selected === r.kind}
-                  onSelect={() => setSelected(r.kind)}
-                />
+                  className={choice === r.kind ? "planner-choice" : undefined}
+                >
+                  {choice === r.kind && (
+                    <span className="choice-badge">Trip planner’s Choice</span>
+                  )}
+                  <RouteCard
+                    route={r}
+                    // A time delta only means something with something to
+                    // compare against — omit it when safety is off and the
+                    // response is a lone "fast" route.
+                    deltaS={comparisonRows.length > 1 ? deltaS : undefined}
+                    units={units}
+                    selected={selected === r.kind}
+                    onSelect={() => setSelected(r.kind)}
+                  />
+                </div>
               ))}
             </div>
             {routes.length > 0 && googleMapsHref && (
