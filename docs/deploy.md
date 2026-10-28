@@ -20,9 +20,10 @@ env vars.
 
 ## What it costs
 
-Both Fly apps are one always-on `shared-cpu-1x` machine in `sjc`: 1 GB for the
-route API (both packs live in RAM), 256 MB for the commute service, plus a 1 GB
-volume. At Fly's list prices that is roughly $6 + $2 + $0.15 a month. Vercel's
+Both Fly apps are one always-on `shared-cpu-1x` machine in `sjc`: 512 MB for
+the route API (151 MiB measured with both packs loaded), 256 MB for the commute
+service, plus a 1 GB volume. At Fly's list prices that is roughly
+$3.20 + $2 + $0.15 a month. Vercel's
 Hobby tier is free for this.
 
 ## One-time setup

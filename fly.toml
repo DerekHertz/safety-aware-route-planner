@@ -54,6 +54,9 @@ primary_region = "sjc"
     timeout = "5s"
     grace_period = "30s"
 
+# Measured 2026-10-27: 151 MiB resident with both packs loaded and a route
+# served in each. 512 MB leaves 3x headroom for the response cache and
+# request bursts.
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "1gb"
+  memory = "512mb"
