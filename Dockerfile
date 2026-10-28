@@ -21,6 +21,39 @@ RUN pip install --no-cache-dir "pybind11>=2.12" "setuptools>=68" wheel \
  && pip wheel --no-cache-dir --no-deps -w /wheels ./core
 
 # ---------------------------------------------------------------------------
+# Commute service image (`docker build --target commute`, fly.commute.toml).
+#
+# A separate image from the route API: commute/ imports nothing from the
+# engine, so it ships no numpy, scipy, sr_core or packs. It sits before the
+# runtime stage because the LAST stage is the default target, and a plain
+# `docker build .` must keep producing the route API.
+# ---------------------------------------------------------------------------
+FROM python:3.12-slim AS commute
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# The same pins as the route API, taken from requirements.txt rather than
+# restated, so the two services never drift onto different FastAPI versions.
+COPY requirements.txt .
+RUN grep -E '^(fastapi|pydantic|uvicorn)' requirements.txt > /tmp/req.txt \
+ && pip install --no-cache-dir -r /tmp/req.txt \
+ && rm /tmp/req.txt
+
+COPY commute/ commute/
+
+# Starts as root only to take ownership of the mounted volume (Fly mounts it
+# root-owned), then drops to the app user; see commute/entrypoint.sh.
+RUN useradd --create-home --uid 10001 app \
+ && chmod +x commute/entrypoint.sh
+
+EXPOSE 8080
+CMD ["commute/entrypoint.sh"]
+
+# ---------------------------------------------------------------------------
 # Stage 2 — runtime.
 # ---------------------------------------------------------------------------
 FROM python:3.12-slim
@@ -55,11 +88,22 @@ COPY sim/ sim/
 COPY config/ config/
 COPY packs.lock .
 
-# Packs are NOT baked in. api/packs_fetch.py pulls them from object storage at
-# startup, verified against the digests in packs.lock, so adding a region is an
-# upload plus a restart rather than an image rebuild. The directory is created
-# and owned here because the app writes into it as a non-root user.
+# Packs are baked in at build time: every region in PACK_REGIONS is fetched
+# from the public bucket in packs.lock and verified against its digest, by the
+# same api/packs_fetch.py the API runs at startup. The startup fetch then finds
+# them present and never touches the network, so a deployed machine boots
+# without depending on the bucket, and the image digest pins the packs too.
+# The bucket is public-read, so this needs no build secret.
+#
+# Build with `--build-arg PACK_REGIONS=` to bake nothing and fetch at startup
+# instead. Keep the default in step with `[api] regions` in config/config.toml.
+# The directory is owned by the app user because a startup fetch writes into
+# it as non-root.
+ARG PACK_REGIONS=berkeley_oakland,san_francisco
 RUN mkdir -p /app/data/packs \
+ && if [ -n "$PACK_REGIONS" ]; then \
+      python -m api.packs_fetch --regions "$PACK_REGIONS" --dest /app/data/packs; \
+    fi \
  && useradd --create-home --uid 10001 app \
  && chown -R app:app /app/data
 USER app

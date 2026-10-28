@@ -212,9 +212,11 @@ the image at ~520 MB instead of well over a gigabyte. The build **fails** if
 the pure-Python engine with only a warning, and that is a ~20× latency
 regression whose only symptom is slow responses.
 
-Packs are not baked in — the container downloads them at boot from the bucket
-pinned in `packs.lock` (see *Pack distribution*), so adding a region is an
-upload and a restart rather than an image rebuild.
+The served packs are baked in at build time, fetched from the public bucket
+pinned in `packs.lock` (see *Pack distribution*) and checked against its
+digests, so a deployed machine boots without depending on the bucket. Build
+with `--build-arg PACK_REGIONS=` to skip that, and the container downloads them
+at boot instead.
 
 `/health` reports readiness, not just liveness: 503 until every served pack is
 loaded, and it includes `engine` so a silent downgrade to the pure-Python path
@@ -278,7 +280,9 @@ either call it by full path or add that directory to your user PATH.
 
 ### If you deploy it later
 
-Nothing here is host-specific — it is a container that reads its configuration
+The MVP runs on Fly.io (route API and commute service) and Vercel (`web/`);
+the runbook is [`docs/deploy.md`](docs/deploy.md). Nothing here is
+host-specific, though — it is a container that reads its configuration
 from the environment (`SR_CORS_ORIGINS`, `SR_CORS_ORIGIN_REGEX`,
 `SR_PACKS_URL`, `SR_REGIONS`, `SR_NOMINATIM_CONTACT`, `SR_REDIS_URL`,
 `SR_TRUSTED_PROXIES`). Four constraints carry over to any host:

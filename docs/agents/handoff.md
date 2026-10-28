@@ -217,10 +217,11 @@ Google-as-router waits on ADR-0015's G0 terms clearance. Work in this order:
         on when `NEXT_PUBLIC_COMMUTE_URL` and `NEXT_PUBLIC_ENABLE_LIVE_NAV` are both set.
         Scenario tests in `tripRecorder.test.ts` run against a fake server that validates
         like `commute/schemas.py`.
-  - [ ] (4c) **Deploy the commute service** (follow-up). Image and host, `SR_COMMUTE_DB`
-        on a persistent volume, `SR_COMMUTE_CORS_ORIGINS` or a same-origin proxy like
-        `/api`, a daily `python -m commute.retention purge`, and minting the testers'
-        tokens. Until then it runs under uvicorn only.
+  - [x] (4c) **Deploy the commute service.** Done 2026-10-27 with the route API and the
+        web client, runbook in [`docs/deploy.md`](../deploy.md). Its own Fly app
+        (`fly.commute.toml`, the Dockerfile's `commute` stage), SQLite on a Fly volume,
+        CORS for the Vercel origin, the daily purge in `commute/entrypoint.sh`, and
+        tester tokens minted over `fly ssh console`.
 - [ ] (5) **Wait extraction and calibration** (ADR-0017). Match traces against the
       followed route, count time below 2 m/s in the last 60 m, and fit ADR-0016's
       constants on pooled data. The output is config, never live lookups.
