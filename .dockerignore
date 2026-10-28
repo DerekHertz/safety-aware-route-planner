@@ -12,6 +12,10 @@
 !sim/
 !config/
 
+# The commute service, built from the `commute` Dockerfile stage. The route
+# API stage never copies it.
+!commute/
+
 # The C++ extension is compiled in the builder stage.
 !core/
 

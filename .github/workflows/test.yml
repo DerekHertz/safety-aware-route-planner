@@ -153,5 +153,45 @@ jobs:
               || { docker logs sr-ci; echo "::error::image did not serve a route for $od"; exit 1; }
           done
 
+          # Baked, not fetched: a startup download means the image would depend
+          # on the bucket at boot, which the deploy (fly.toml) relies on it not to.
+          if docker logs sr-ci 2>&1 | grep -q 'fetched pack(s)'; then
+            docker logs sr-ci; echo "::error::packs were fetched at startup, not baked into the image"; exit 1
+          fi
+
           echo "image size: $(docker image inspect sr-api:ci --format '{{.Size}}' | numfmt --to=iec)"
           docker rm -f sr-ci >/dev/null
+
+      # The commute service's image (fly.commute.toml). The bind mount is
+      # root-owned like a Fly volume, so this also proves the entrypoint hands
+      # it to the app user, and the token round trip is the runbook's command.
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          target: commute
+          load: true
+          tags: sr-commute:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Boot the commute image and check it serves
+        run: |
+          set -euo pipefail
+          vol=$(mktemp -d) && sudo chown root:root "$vol"
+          docker run -d --name sr-commute-ci -p 8100:8080 \
+            -v "$vol:/data" -e SR_COMMUTE_DB=/data/commute.sqlite3 sr-commute:ci
+
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8100/health >/dev/null; then break; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:8100/health
+
+          token=$(docker exec -u app sr-commute-ci python -m commute.tokens issue --label ci | tail -1)
+          curl -fsS http://localhost:8100/v1/me -H "Authorization: Bearer $token" | grep -q '"label":"ci"' \
+            || { docker logs sr-commute-ci; echo "::error::minted token was not accepted"; exit 1; }
+
+          # The daily retention purge also runs once at boot.
+          docker logs sr-commute-ci 2>&1 | grep -q '^Purged ' \
+            || { docker logs sr-commute-ci; echo "::error::retention purge did not run"; exit 1; }
+          docker rm -f sr-commute-ci >/dev/null

@@ -1,0 +1,46 @@
+# Fly.io app for the commute service (`commute/`, trip-trace ingest, ADR-0018).
+# Runbook: docs/deploy.md.
+#
+#   fly deploy -c fly.commute.toml --ha=false
+#
+# Its own app rather than a process group of safety-route-api: it has its own
+# hostname (a process group would share the API's, and could only be told
+# apart by port), it owns a volume the route API must not, and it deploys
+# without rebuilding or restarting the route API.
+#
+# Exactly one machine: SQLite on a Fly volume, and a volume attaches to one
+# machine. The daily retention purge runs inside that machine
+# (commute/entrypoint.sh), so it must also stay up rather than scale to zero.
+app = "safety-route-commute"
+primary_region = "sjc"
+
+[build]
+  dockerfile = "Dockerfile"
+  build-target = "commute"
+
+[env]
+  SR_COMMUTE_DB = "/data/commute.sqlite3"
+  SR_COMMUTE_CORS_ORIGINS = "https://safety-route.vercel.app"
+
+[mounts]
+  source = "commute_data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/health"
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "10s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
