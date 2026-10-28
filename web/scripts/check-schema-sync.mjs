@@ -3,8 +3,9 @@
 // Usage:  node scripts/check-schema-sync.mjs <openapi.json>
 //
 // The document is scripts/dump_openapi.py's: the route service's schema with
-// the commute planner's (commute/, ADR-0018) merged in, so both services are
-// held to types.ts by this one check.
+// the commute planner's (commute/, ADR-0018) and the Trip planner's
+// (planner/, ADR-0019) merged in, so every service is held to types.ts by
+// this one check.
 //
 // WHAT IS COMPARED: property names, and whether each is required or optional.
 // WHAT IS NOT: types.
@@ -68,6 +69,17 @@ const PAIRS = {
   TripEnd: "TripEnd",
   TripEndReceipt: "TripEndReceipt",
   TesterInfo: "TesterInfo",
+
+  // The Trip planner (planner/schemas.py, ADR-0019), merged in the same way.
+  // PlanPoint is the planner's name for a LatLon.
+  PlanPoint: "LatLon",
+  PlanRequest: "PlanRequest",
+  TripParse: "TripParse",
+  RouteSummary: "RouteSummary",
+  Relaxation: "Relaxation",
+  PlanTiming: "PlanTiming",
+  PlanResponse: "PlanResponse",
+  PlannerHealth: "PlannerHealth",
 };
 
 const IGNORED = new Set([

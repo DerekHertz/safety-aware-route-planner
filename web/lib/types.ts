@@ -270,3 +270,82 @@ export interface TripEndReceipt {
 export interface TesterInfo {
   label: string;
 }
+
+// --- The Trip planner (planner/schemas.py, ADR-0019) -------------------------
+// A separate service, `POST /v1/plan`. Its `PlanPoint` is the server's name for
+// a LatLon, and maps onto `LatLon` above.
+
+export type ConstraintName =
+  "no_unprotected_lefts" | "no_uncontrolled_crossings" | "detour_budget";
+
+/** Body of `POST /v1/plan`. `request` is the user's own words: how, not where.
+ *  `now_local` is the device's wall clock without an offset; departure buckets
+ *  ("weekday morning peak") resolve against it. `relax` confirms a Relaxation. */
+export interface PlanRequest {
+  origin: LatLon;
+  destination: LatLon;
+  request: string;
+  now_local?: string | null;
+  relax?: ConstraintName[];
+}
+
+/** What the Request was read as. Buckets, not free numbers. */
+export interface TripParse {
+  no_unprotected_lefts: boolean;
+  no_uncontrolled_crossings: boolean;
+  narrowed_all_lefts: boolean;
+  tradeoff: number;
+  detour: string;
+  detour_budget_pct: number | null;
+  departure: string;
+  departure_time: string | null;
+  unsupported: string[];
+  has_unsupported: boolean;
+}
+
+/** One alternative as the Explanation quotes it: whole minutes. */
+export interface RouteSummary {
+  kind: RouteKind;
+  minutes: number;
+  extra_minutes: number;
+  unprotected_lefts: number;
+  uncontrolled_crossings: number;
+  wait_minutes: number;
+  candidate: boolean;
+  violates: ConstraintName[];
+}
+
+/** Proposed, never applied: resend with `relax` to confirm. */
+export interface Relaxation {
+  constraints: ConstraintName[];
+  would_allow: RouteKind[];
+}
+
+export interface PlanTiming {
+  total_ms: number;
+  jev_ms: number;
+  route_ms: number;
+  jev_input_tokens: number;
+  jev_cost_usd: number;
+}
+
+/** `ok`: a Choice was made. `infeasible`: no Candidate, see `relaxation`.
+ *  `unavailable`: the plain comparison, no Choice (the planner failed). */
+export interface PlanResponse {
+  status: "ok" | "infeasible" | "unavailable";
+  routes: RouteAlternative[];
+  summaries: RouteSummary[];
+  parse: TripParse | null;
+  choice: RouteKind | null;
+  choice_source: "jev" | "only_candidate" | null;
+  choice_confidence: number | null;
+  rule_choice: RouteKind | null;
+  explanation: string[];
+  relaxation: Relaxation | null;
+  timing: PlanTiming;
+}
+
+export interface PlannerHealth {
+  status: string;
+  jev_configured: boolean;
+}

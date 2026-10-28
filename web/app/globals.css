@@ -824,3 +824,77 @@ body {
     animation: none;
   }
 }
+
+/* --- Trip planner (ADR-0019) ------------------------------------------- */
+.trip-planner {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trip-request-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.trip-request-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.trip-request-row button,
+.explanation button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+
+.explanation {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  background: #eff6ff;
+  line-height: 1.4;
+}
+
+.explanation.infeasible {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.explanation.unavailable {
+  border-color: var(--border);
+  background: #f8fafc;
+  color: var(--muted);
+}
+
+/* The Choice's card: an outline around RouteCard, which stays unchanged. */
+.planner-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+  border: 2px solid #2563eb;
+  border-radius: 12px;
+}
+
+.choice-badge {
+  align-self: flex-start;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
