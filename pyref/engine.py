@@ -21,6 +21,7 @@ from pyref.costs import (
     heuristic,
 )
 from pyref.graph import GraphPack
+from pyref.handoff import pin_waypoints
 from pyref.metrics import compute_metrics
 from pyref.search import PathResult, shortest_path, topo_of
 from pyref.snap import SnapCandidate, SnapIndex
@@ -69,6 +70,10 @@ class RouteOut:
     # inside eta_s, broken out so the fast-vs-safe trade is legible.
     control_delay_s: float = 0.0
     schema_version: int = ROUTE_SCHEMA_VERSION
+    # Waypoints that steer a time-optimal navigator onto this route's safety
+    # (ADR-0020): {waypoints: [{lat, lon}], predicted_unsafe}. Set by route();
+    # None on a reroute, which serves our own live nav instead.
+    handoff: dict | None = None
 
 
 @dataclass
@@ -212,13 +217,29 @@ class Router:
                                   safety_enabled, detour_budget_pct)
         if not alts:
             raise RoutingError("no route found between these points")
-        routes = [self._describe(a.kind, a.result, plan.qc,
-                                 plan.o_by_edge[a.result.first_edge],
-                                 plan.d_by_edge[a.result.dest_edge],
-                                 lam=lam_by_kind[a.kind], budget=budget,
-                                 departure=departure, basis=plan.basis)
-                  for a in alts]
+        routes = []
+        for a in alts:
+            r = self._describe(a.kind, a.result, plan.qc,
+                               plan.o_by_edge[a.result.first_edge],
+                               plan.d_by_edge[a.result.dest_edge],
+                               lam=lam_by_kind[a.kind], budget=budget,
+                               departure=departure, basis=plan.basis)
+            r.handoff = self._handoff(a.result, plan)
+            routes.append(r)
         return _with_detour_pct(routes)
+
+    def _handoff(self, result: PathResult, plan: _Plan) -> dict:
+        """Pin `result` for a Google Maps deep link (ADR-0020)."""
+        hp = pin_waypoints(
+            self.pack, plan.qc, result,
+            seeds=plan.seeds, dests=plan.dests, h_dest=plan.h,
+            run=lambda ac, hh, s, d: self._shortest_path(ac, hh, s, d),
+            max_waypoints=int(self.cfg["handoff"]["max_waypoints"]),
+            frac_origin=plan.o_by_edge[result.first_edge].frac,
+            frac_dest=plan.d_by_edge[result.dest_edge].frac)
+        return {"waypoints": [{"lat": lat, "lon": lon}
+                              for lat, lon in hp.waypoints],
+                "predicted_unsafe": hp.predicted_unsafe}
 
     def reroute(self, origin_lat: float, origin_lon: float,
                 dest_lat: float, dest_lon: float,

@@ -15,7 +15,11 @@ import {
   preflight,
   regionLabel as labelOf,
 } from "@/lib/coverage";
-import { googleMapsDirectionsUrl } from "@/lib/googleMapsLink";
+import {
+  googleMapsDirectionsUrl,
+  googleMapsNavigateUrl,
+  handoffShortfall,
+} from "@/lib/googleMapsLink";
 import { compareRoutes } from "@/lib/routeComparison";
 import {
   DEFAULT_DETOUR_BUDGET,
@@ -78,7 +82,12 @@ export default function Home() {
   // "Compare in Google Maps" (ADR-0015 amendment): built from the endpoints
   // THIS set of routes was requested for, not the live origin/destination,
   // which may already have moved while the debounced re-route is pending.
-  const [googleMapsHref, setGoogleMapsHref] = useState<string | null>(null);
+  // The endpoints the current `routes` were computed for: both Google Maps
+  // links are built from these, never from pickers edited since.
+  const [routedEnds, setRoutedEnds] = useState<{
+    origin: LatLon;
+    destination: LatLon;
+  } | null>(null);
   const [selected, setSelected] = useState<RouteKind | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,7 +280,7 @@ export default function Home() {
       );
       if (seq !== reqSeq.current) return; // stale response
       setRoutes(resp.routes);
-      setGoogleMapsHref(googleMapsDirectionsUrl(origin, destination));
+      setRoutedEnds({ origin, destination });
       // Results are the reason to look at the panel, so raise it. Done here in
       // the response handler rather than in an effect watching `routes`: this
       // is a reaction to an event, not derived state.
@@ -601,12 +610,38 @@ export default function Home() {
                 />
               ))}
             </div>
-            {routes.length > 0 && googleMapsHref && (
+            {activeRoute?.handoff && routedEnds && (
+              // Voice turn-by-turn in Google Maps, held to this route's
+              // safety by the server's pinned waypoints (ADR-0020).
+              <a
+                className="gmaps-link gmaps-navigate"
+                href={googleMapsNavigateUrl(
+                  routedEnds.origin,
+                  routedEnds.destination,
+                  activeRoute.handoff.waypoints,
+                )}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`Drive the ${activeRoute.kind} route in Google Maps (opens Google Maps)`}
+              >
+                Drive the {activeRoute.kind} route in Google Maps
+                <span aria-hidden="true">↗</span>
+              </a>
+            )}
+            {activeRoute && handoffShortfall(activeRoute) && (
+              <p className="hint handoff-shortfall">
+                {handoffShortfall(activeRoute)}
+              </p>
+            )}
+            {routes.length > 0 && routedEnds && (
               // A plain link: no key, no Google script, no prefetch. Nothing
               // is sent to Google until it is followed.
               <a
                 className="gmaps-link"
-                href={googleMapsHref}
+                href={googleMapsDirectionsUrl(
+                  routedEnds.origin,
+                  routedEnds.destination,
+                )}
                 target="_blank"
                 rel="noopener noreferrer"
                 aria-label="Compare in Google Maps (opens in a new tab)"

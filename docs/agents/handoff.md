@@ -18,6 +18,26 @@ them — follow the links.
 
 ## Now / Next (update on every merge)
 
+**Two-day MVP (decided 2026-10-27) — this is the current spine.** Drivable by the owner,
+then a few testers in Berkeley, Oakland and SF. Our router plans; **Google Maps drives**
+via a pinned-waypoint handoff ([ADR-0020](../adr/0020-google-maps-handoff.md)). No
+native app, no OSRM rebuild, no iOS yet. Order:
+
+- [x] (M1) **Google Maps handoff.** `pyref/handoff.py` pins waypoints (farthest reach,
+      against our lambda-0 search as Google's stand-in); `/route` alternatives carry
+      `handoff`; the client's "Drive the … route in Google Maps" button and the
+      shortfall note. Read ADR-0020's "Not verified until a real drive" before (M4).
+- [ ] (M2) **Deploy** — Fly.io (route API + commute service), Vercel (`web/`). This is
+      Phase 4b (4c) below, widened to the route API.
+- [ ] (M3) **Trip planner on Jev** — Phase 4c PR A below, with Jev (TypeSafe) replacing
+      Claude Opus and a templated Explanation (ADR-0019 amendment).
+- [ ] (M4) **First real drive.** Per trip: did Google follow the pins, what did it
+      announce at each one, and did `/route` latency hold up on `sr_core`?
+- **Open for the owner:** ADR-0017 calibration loses its trace source when drives go
+  through Google Maps (ADR-0020 "Consequences").
+
+Everything below predates the MVP and is paused unless the MVP needs it.
+
 The robust-core milestone (ADR-0008) is **complete**; that ADR is resolved. The current
 spine is the **scalability + commute-planner** sequence below, decided 2026-09-17 and
 recorded in ADR-0010, ADR-0011, ADR-0012 plus amendments to ADR-0005 and ADR-0009.

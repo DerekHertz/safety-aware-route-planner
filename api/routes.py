@@ -103,6 +103,7 @@ def _artifact(r) -> dict:
         "control_delay_s": r.control_delay_s,
         "preference": r.preference,
         "schema_version": r.schema_version,
+        "handoff": r.handoff,
     }
 
 

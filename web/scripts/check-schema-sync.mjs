@@ -47,6 +47,8 @@ const PAIRS = {
   // client still following a v1 artifact can reroute (ADR-0004 schema v2).
   CarriedPreference: "CarriedPreference",
   RouteAlternative: "RouteAlternative",
+  // RouteAlternative.handoff: the Google Maps deep-link pins (ADR-0020).
+  Handoff: "Handoff",
   RouteResponse: "RouteResponse",
   RerouteRequest: "RerouteRequest",
   RerouteResponse: "RerouteResponse",

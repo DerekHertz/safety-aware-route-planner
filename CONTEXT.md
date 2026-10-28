@@ -131,8 +131,21 @@ _Avoid_: frontend, the app.
 **Nav consumer** (a.k.a. **routing handler**):
 Any consumer that takes a chosen route artifact and drives live turn-by-turn
 navigation (GPS, HUD, voice, rerouting). A downstream consumer of the artifact, never
-part of the engine. Currently parked.
+part of the engine. Our own is parked; for the MVP the nav consumer is Google Maps,
+reached by a **handoff** (ADR-0020).
 _Avoid_: navigator, GPS module.
+
+**Handoff**:
+Giving a chosen route to a third-party navigator (Google Maps) as a deep link through
+**pins**, so a time-optimal navigator drives it without taking the flagged maneuvers the
+route avoids. Carried on each `/route` alternative as `handoff`.
+_Avoid_: export, share link.
+
+**Pin**:
+One handoff waypoint: the midpoint of a route edge that the navigator must drive through.
+Pins are placed against the **stand-in**, our own time-only search, because the
+navigator's routing cannot be observed. They protect safety, not geometry.
+_Avoid_: via point, stop (the navigator may treat them as stops, but that is its choice).
 
 **Reroute**:
 A nav consumer re-invoking the route service mid-trip with the artifact's carried

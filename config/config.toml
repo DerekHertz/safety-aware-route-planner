@@ -222,6 +222,14 @@ detour_budget_pct = 0.25
 # route exists, and would break the A* heuristic's admissibility.
 avoid_surcharge_s = 1.0e6
 
+# -----------------------------------------------------------------------------
+# Google Maps handoff (ADR-0020): waypoints that keep a time-optimal navigator
+# on a route's safety. 9 is the Maps URLs Directions limit outside mobile
+# browsers (3 there); the Android and iOS apps take 9.
+# -----------------------------------------------------------------------------
+[handoff]
+max_waypoints = 9
+
 [search]
 algo = "astar"                # "astar" | "dijkstra"
 snap_k = 20                   # KD-tree candidates examined per snap

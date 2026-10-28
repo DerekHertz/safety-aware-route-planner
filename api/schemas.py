@@ -128,6 +128,17 @@ class CarriedPreference(_PreferenceParams):
     traffic_basis: TrafficBasis | None = None
 
 
+class Handoff(BaseModel):
+    """How to hand this route to Google Maps (ADR-0020): a Directions deep
+    link through `waypoints`, in order. Google's routing is unobservable, so
+    the pins are placed against our own time-only search as its stand-in.
+    `predicted_unsafe` is the flagged-maneuver count that stand-in still takes
+    through the pins; above the route's own `unsafe.total` it means the
+    waypoint cap ran out, and the client should say so."""
+    waypoints: list[LatLon]
+    predicted_unsafe: int
+
+
 class RouteAlternative(BaseModel):
     kind: str                 # "fast" | "balanced" | "safe"
     geometry: dict            # GeoJSON LineString
@@ -143,6 +154,8 @@ class RouteAlternative(BaseModel):
     control_delay_s: float
     preference: Preference    # how to reproduce/reroute this route (ADR-0004)
     schema_version: int       # artifact contract version; bumped on breaking change
+    # Additive (ADR-0020); set on /route, null on /reroute.
+    handoff: Handoff | None = None
 
 
 class RouteResponse(BaseModel):

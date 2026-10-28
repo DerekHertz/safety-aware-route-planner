@@ -40,6 +40,12 @@ def _edge_coords(pack: GraphPack, e: int,
     return [point_at(d0)] + inner + [point_at(d1)]
 
 
+def edge_point(pack: GraphPack, e: int, frac: float) -> tuple[float, float]:
+    """(lat, lon) at fraction `frac` of edge e's polyline length."""
+    lon, lat = _edge_coords(pack, e, frac, frac)[0]
+    return lat, lon
+
+
 def route_geometry(pack: GraphPack, result: PathResult,
                    frac_origin: float = 0.0, frac_dest: float = 1.0) -> dict:
     """GeoJSON LineString for the whole route."""
