@@ -346,6 +346,17 @@ body {
   text-decoration: none;
 }
 
+.gmaps-navigate {
+  border-color: #1a73e8;
+  background: #1a73e8;
+  color: #fff;
+  font-weight: 600;
+}
+
+.handoff-shortfall {
+  color: #b45309;
+}
+
 .gmaps-link:focus-visible {
   outline: 2px solid #2563eb;
   outline-offset: 2px;

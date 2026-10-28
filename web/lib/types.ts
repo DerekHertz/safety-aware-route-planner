@@ -112,6 +112,15 @@ export interface CarriedPreference {
   traffic_basis?: TrafficBasis;
 }
 
+/** How to hand a route to Google Maps (ADR-0020): a Directions deep link
+ *  through `waypoints`, in order. The pins are placed against the server's
+ *  own time-only search as a stand-in for Google's, so `predicted_unsafe`
+ *  above the route's own `unsafe.total` means the waypoint cap ran out. */
+export interface Handoff {
+  waypoints: LatLon[];
+  predicted_unsafe: number;
+}
+
 export interface RouteAlternative {
   kind: RouteKind;
   geometry: LineString;
@@ -129,6 +138,8 @@ export interface RouteAlternative {
   preference: Preference;
   /** Route-artifact contract version; bumped only on a breaking shape change. */
   schema_version: number;
+  /** Set on /route, null on /reroute (ADR-0020). */
+  handoff?: Handoff | null;
 }
 
 /** How far out of the way the router may go for a safer crossing, as a

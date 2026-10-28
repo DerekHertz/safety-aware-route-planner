@@ -47,8 +47,12 @@ def test_route_contract_shape(client):
         assert set(r.keys()) == {"kind", "geometry", "distance_m", "eta_s",
                                  "unsafe", "segments", "unsafe_points",
                                  "maneuvers", "detour_pct", "control_delay_s",
-                                 "preference", "schema_version"}
+                                 "preference", "schema_version", "handoff"}
         assert 0.0 <= r["control_delay_s"] <= r["eta_s"]
+        # handoff: additive, ADR-0020 (schema_version stays 2)
+        assert set(r["handoff"].keys()) == {"waypoints", "predicted_unsafe"}
+        for wp in r["handoff"]["waypoints"]:
+            assert set(wp.keys()) == {"lat", "lon"}
         assert r["kind"] in ("fast", "balanced", "safe")
         # route artifact v2 (ADR-0004): self-describing preference + version.
         # Detailed assertions live in test_route_artifact_v1.py (the three
@@ -89,6 +93,30 @@ def test_route_scenario_through_api(client):
     # the fastest route in the response defines the baseline
     assert by_kind["fast"]["detour_pct"] == 0.0
     assert by_kind["safe"]["detour_pct"] > 0.0
+
+
+def test_handoff_pins_the_safe_route_for_google_maps(client):
+    """ADR-0020: the safe route carries the one waypoint that keeps a
+    time-optimal navigator off the unprotected left; fast needs none."""
+    data = client.post("/route",
+                       json=_route_body(client.pack, client.ids)).json()
+    by_kind = {r["kind"]: r for r in data["routes"]}
+    assert by_kind["fast"]["handoff"] == {"waypoints": [],
+                                          "predicted_unsafe": 1}
+    safe = by_kind["safe"]["handoff"]
+    assert len(safe["waypoints"]) == 1
+    assert safe["predicted_unsafe"] == 0
+
+
+def test_reroute_carries_no_handoff(client):
+    """A reroute serves our own live nav, not a handoff (ADR-0020)."""
+    route = client.post("/route",
+                        json=_route_body(client.pack, client.ids)).json()["routes"][0]
+    body = {"origin": _route_body(client.pack, client.ids)["origin"],
+            "destination": _route_body(client.pack, client.ids)["destination"],
+            "preference": route["preference"]}
+    art = client.post("/reroute", json=body).json()["route"]
+    assert art["handoff"] is None
 
 
 def test_detour_budget_caps_how_far_the_safe_route_may_go(client):
