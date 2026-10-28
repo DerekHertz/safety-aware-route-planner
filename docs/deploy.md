@@ -6,7 +6,7 @@ Three pieces, two hosts:
 |---|---|---|---|
 | Route API (`api/`) | Fly.io app `safety-route-api` | [`fly.toml`](../fly.toml) | https://safety-route-api.fly.dev |
 | Commute service (`commute/`) | Fly.io app `safety-route-commute` | [`fly.commute.toml`](../fly.commute.toml) | https://safety-route-commute.fly.dev |
-| Web client (`web/`) | Vercel project `safety-route` | Vercel project settings (below) | https://safety-route.vercel.app |
+| Web client (`web/`) | Vercel project `safety-route` | Vercel project settings (below) | https://safety-route-flax.vercel.app |
 
 The browser calls both Fly apps directly (CORS), not through a Vercel `/api`
 rewrite. A rewrite would put Vercel's egress addresses in front of the API, and
@@ -113,7 +113,9 @@ owned by root.
 ## Deploy the web client (Vercel)
 
 In the Vercel dashboard, import this GitHub repository as a new project named
-`safety-route`:
+`safety-route`. `safety-route.vercel.app` was taken, so Vercel assigned
+`safety-route-flax.vercel.app`; that domain is the CORS origin in both Fly
+configs.
 
 - **Root Directory:** `web` (Framework Preset: Next.js, detected).
 - **Environment variables** (Production). `NEXT_PUBLIC_*` values are inlined at
@@ -132,12 +134,12 @@ fail. That is on purpose: allowing them takes an anchored
 
 ## Smoke test
 
-From a phone, open https://safety-route.vercel.app, allow location, and plan a
+From a phone, open https://safety-route-flax.vercel.app, allow location, and plan a
 route inside Berkeley/Oakland or San Francisco: three route cards (fast,
 balanced, safe) should appear. From a shell, the same call without the browser:
 
 ```bash
-curl -s -X POST https://safety-route-api.fly.dev/route -H "Origin: https://safety-route.vercel.app" -H "Content-Type: application/json" -d '{"origin":{"lat":37.8715,"lon":-122.2680},"destination":{"lat":37.8044,"lon":-122.2712},"safety_enabled":true}'
+curl -s -X POST https://safety-route-api.fly.dev/route -H "Origin: https://safety-route-flax.vercel.app" -H "Content-Type: application/json" -d '{"origin":{"lat":37.8715,"lon":-122.2680},"destination":{"lat":37.8044,"lon":-122.2712},"safety_enabled":true}'
 ```
 
 ## Operating it
