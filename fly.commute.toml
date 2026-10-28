@@ -20,7 +20,7 @@ primary_region = "sjc"
 
 [env]
   SR_COMMUTE_DB = "/data/commute.sqlite3"
-  SR_COMMUTE_CORS_ORIGINS = "https://safety-route.vercel.app"
+  SR_COMMUTE_CORS_ORIGINS = "https://safety-route-flax.vercel.app"
 
 [mounts]
   source = "commute_data"

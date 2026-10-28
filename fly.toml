@@ -29,7 +29,7 @@ primary_region = "sjc"
   SR_TRUSTED_PROXIES = "2"
   # The Vercel production origin. Preview deployments are not allowed: an
   # anchored SR_CORS_ORIGIN_REGEX could add them later (see .env.example).
-  SR_CORS_ORIGINS = "https://safety-route.vercel.app"
+  SR_CORS_ORIGINS = "https://safety-route-flax.vercel.app"
   # SR_NOMINATIM_CONTACT is a Fly secret, so a personal contact never lands in
   # version control (docs/deploy.md).
 
