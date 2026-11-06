@@ -1,0 +1,7 @@
+:root { --ford: #c2410c; --bridge: #2f7d4f; --unknown: #8a6d0b; --failed: #6b7280; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --ford: #fb8b5a; --bridge: #5cc48a; --unknown: #e2c15a; --failed: #9ca3af; } }
+:root[data-theme="dark"] { --ford: #fb8b5a; --bridge: #5cc48a; --unknown: #e2c15a; --failed: #9ca3af; }
+.chip.flagged { border-color: var(--ford); color: var(--ford); }
+.chip.unflagged { border-color: var(--bridge); color: var(--bridge); }
+.chip.unknown { border-color: var(--unknown); color: var(--unknown); }
+.chip.check_failed { border-color: var(--failed); color: var(--failed); }

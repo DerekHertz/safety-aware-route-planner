@@ -24,9 +24,12 @@ Issues live in this repo's GitHub Issues (`gh` CLI). See `docs/agents/issue-trac
 
 ### Domain docs
 
-Single-context: root `CONTEXT.md` + `docs/adr/`, created lazily by
-`/grill-with-docs` as terms and decisions resolve. Neither exists yet. See
-`docs/agents/domain.md`.
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+### Design and handoff
+
+The settled design is in `docs/design/` (abstract, concrete, properties, slices).
+Start any build session from `docs/handoff.md`.
 
 ### Vendored skills
 
