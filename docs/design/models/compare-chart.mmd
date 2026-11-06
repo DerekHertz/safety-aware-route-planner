@@ -1,0 +1,47 @@
+---
+title: "One comparison"
+---
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: result
+    lg1: working
+  }
+  class lg0 teal
+  class lg1 blue
+  s0: Getting the route
+  s1: Checking the default's crossings
+  s2: Route couldn't be obtained
+  s3: Crossings couldn't be checked
+  s4: Default route only
+  s5: No improvement found
+  s6: Searching nearby crossings
+  s7: Comparing (deadline hit)
+  s8: Search incomplete
+  s9: Comparing (search finished)
+  s10: Alternative shown
+  s11: No improvement within budget
+  [*] --> s0
+  s0 --> s1: the route arrives
+  s0 --> s2: the routing source fails
+  s1 --> s3: a check failed
+  s1 --> s4: checks done [avoidance off]
+  s1 --> s6: checks done [avoidance on, flags found]
+  s1 --> s5: checks done [no flags to avoid]
+  s6 --> s7: 10 seconds pass
+  s7 --> s8: the comparison decides
+  s6 --> s9: every candidate is checked
+  s9 --> s5: the comparison decides
+  s9 --> s10: the comparison decides
+  s9 --> s11: the comparison decides
+  class s0 blue
+  class s1 blue
+  class s2 teal
+  class s3 teal
+  class s4 teal
+  class s5 teal
+  class s6 blue
+  class s7 blue
+  class s8 teal
+  class s9 blue
+  class s10 teal
+  class s11 teal

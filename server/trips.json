@@ -1,0 +1,15 @@
+{
+  "trips": [
+    {
+      "id": "bowl-west-to-campus",
+      "name": "Berkeley Bowl West to UC Berkeley",
+      "origin": {"lat": 37.853371, "lon": -122.289979},
+      "destination": {"lat": 37.871934, "lon": -122.258335},
+      "example_via": [
+        {"lat": 37.855819, "lon": -122.28128},
+        {"lat": 37.856117, "lon": -122.27895}
+      ],
+      "bbox": {"south": 37.850, "west": -122.293, "north": 37.875, "east": -122.255}
+    }
+  ]
+}
