@@ -167,6 +167,17 @@ successful fetch tries once, and reports `check_failed` if that fails.
 **S6 check: met.** `compare()` for the demo trip on the self-hosted OSRM, with the corridor
 snapshot held, finishes in about 0.5 s (p50; max 0.6 s) and finds the Ward improvement.
 
+**Jev (S7):** model pinned to `jev-1.14.0`. One batch per route: 0.21–0.27 s for 2–15 questions
+on a cache miss; a full hit makes no call. The live service reads the cache the corridor pre-run
+filled (`uv run python -m gapcross.prerun`), so `compare()` with Jev still takes about 0.5 s.
+`approach_control = stops_for_us` means the main street's traffic stops for the driver
+(unflagged); `does_not_stop` means a gap crossing (flagged).
+
+**Jev gate (S7, first corridor run 2026-11-06):** 27 rule-settled crossings, Jev confident on 2
+(both agree), abstained on 25; 2 open crossings asked. The gate needs at least 10 confident
+agreements and no confident disagreement (`MIN_AGREE`), so it fails and Jev's answers stay leads
+until better evidence or wording raises its confidence.
+
 **Candidate limit: 8.** The demo search generates 4 candidates; each costs about 20 ms of OSRM and
 about 0.1 s of interpretation and assessment. Jev adds about 0.3 s per route batch on a cache miss
 (S7), so 8 candidates plus the default stay under 4 s even with no Jev answer cached.

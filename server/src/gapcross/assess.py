@@ -163,18 +163,14 @@ class _Rules:
     def crossing(self, c: RouteCrossing) -> _Verdict:
         parts = [self.carriageway(m, c.main_street) for m in c.movements]
         facts = tuple(f for p in parts for f in p.facts)
+        state = jev_state(c, facts)
         flagged = [p for p in parts if p.status == "flagged"]
         if flagged:
-            return _Verdict("flagged", flagged[0].explanation, facts)
+            return _Verdict("flagged", flagged[0].explanation, facts, state=state)
         if all(p.status == "unflagged" for p in parts):
-            return _Verdict("unflagged", parts[0].explanation, facts)
+            return _Verdict("unflagged", parts[0].explanation, facts, state=state)
         first_open = next(p for p in parts if p.status != "unflagged")
         ask = any(p.ask for p in parts)
-        state = {
-            "main_street": c.main_street, "kind": c.kind,
-            "approach_bearing": round(c.approach_bearing), "from_street": c.movements[0].from_street,
-            "records": [f.claim for f in facts],
-        }
         return _Verdict("unknown", first_open.explanation, facts, ask, state)
 
     def carriageway(self, m: Movement, main: str) -> _Verdict:
@@ -291,6 +287,34 @@ class _Rules:
         return False
 
 
+def jev_state(c: RouteCrossing, facts: Sequence[_Fact]) -> dict[str, Any]:
+    """What Jev is given about one crossing: its records as text, approach bearing and kind. The
+    service and the corridor pre-run both build it here, so their cache keys match."""
+    return {
+        "main_street": c.main_street, "kind": c.kind, "approach_bearing": round(c.approach_bearing),
+        "from_street": c.movements[0].from_street,
+        "records": [f"{f.ref}: {f.claim}" for f in dict.fromkeys(facts) if f.source == "osm"],
+    }
+
+
+@dataclass(frozen=True)
+class RuleVerdict:
+    crossing: RouteCrossing
+    status: Status
+    state: dict[str, Any]
+    open_question: bool  # Jev may settle it
+
+
+def rule_verdicts(interpretation: Interpretation, snapshot: RecordSnapshot) -> list[RuleVerdict]:
+    """The rules alone, for the corridor pre-run: settled crossings feed the gate, open ones the cache."""
+    rules = _Rules(snapshot)
+    out = []
+    for c in interpretation.crossings:
+        v = rules.crossing(c)
+        out.append(RuleVerdict(c, v.status, v.state, v.status == "unknown" and v.ask))
+    return out
+
+
 def _apply_jev(c: RouteCrossing, verdict: _Verdict, advice: Advice | None, rules: _Rules) -> _Verdict:
     if advice is None:
         return verdict
@@ -303,8 +327,11 @@ def _apply_jev(c: RouteCrossing, verdict: _Verdict, advice: Advice | None, rules
                  f"Jev: {answer.choice.replace('_', ' ')} (p={answer.probability:.2f})",
                  is_lead=not counts, source="jev")
     facts = verdict.facts + (fact,)
+    # The question asks whether the main street's traffic stops for the driver (gapcross.jev).
+    if counts and answer.choice == "does_not_stop":
+        return _Verdict("flagged", f"{c.main_street} traffic does not stop for you, so you wait for a gap.", facts)
     if counts and answer.choice == "stops_for_us":
-        return _Verdict("flagged", f"You stop for {c.main_street}, and nothing recorded stops its traffic.", facts)
+        return _Verdict("unflagged", f"{c.main_street} traffic stops for your crossing.", facts)
     return replace_facts(verdict, facts)
 
 
