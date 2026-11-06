@@ -231,7 +231,10 @@ stateDiagram-v2
 - Geometry, distances and ETA values: budget and placement are yes/no choices made by the model.
 - Ranking among several improving candidates beyond the worst-case count (ETA ties).
 - Partial crossings on the default route that the alternative shares; every candidate avoids the
-  default's one crossing.
+  default's one crossing. **Settled in S4 (owner, 2026-11-06):** a crossing on both routes is the
+  same crossing with the same truth, so rule 3 compares only the crossings that differ: the
+  alternative's own crossings, counting every unknown as a flag, must have fewer flags than the
+  default's own known flags. Ranking still uses whole-route counts.
 - Concurrency inside a comparison, retries, and cache freshness.
 - Simulated playback controls (start, pause, restart) inside a drive.
 - Rules 10 and 14, which are tests, not states.
