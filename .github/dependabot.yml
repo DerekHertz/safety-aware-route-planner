@@ -1,0 +1,29 @@
+version: 2
+updates:
+  # The service's Python dependencies: server/pyproject.toml and server/uv.lock.
+  - package-ecosystem: uv
+    directory: "/server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      # fastapi, pydantic, starlette and uvicorn move together; one PR keeps them in step.
+      web:
+        patterns: ["fastapi", "pydantic", "pydantic-core", "starlette", "uvicorn"]
+      dev:
+        dependency-type: development
+
+  # server/Dockerfile: the python base image and the uv binary.
+  - package-ecosystem: docker
+    directory: "/server"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 2
+    ignore:
+      # pyproject.toml pins Python to 3.12 (requires-python ">=3.12,<3.13"). A newer base image
+      # would not match it, so only patch updates of the 3.12 image are wanted.
+      - dependency-name: "python"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+
+  # compose.yaml is not watched: the osrm image version must match the graph that
+  # server/osrm/prepare.sh built, so an OSRM upgrade is a deliberate rebuild, not a bump.
