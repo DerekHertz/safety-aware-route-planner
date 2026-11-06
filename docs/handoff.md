@@ -29,7 +29,7 @@ Branch `build/mvp-design-and-s0` (cut from `rewrite/mvp-2026-11-05`). Nothing is
 | S2 movement interpretation | Committed (`feat(server): S2 movement interpretation`): `gapcross.interpret`; bbox widened and Overpass re-recorded. Open: roundabout entries and Adeline→Shattuck, for S3. |
 | S3 assessment rules | Committed (`feat(server): S3 assessment rules`): `gapcross.assess`; Jev seam is `Advisor`, stubbed by `FixedAdvisor`. |
 | S4 search and comparison | Built, tests green (`gapcross.search`, `gapcross.compare`). Candidate routes recorded from the S6 local OSRM with `uv run python -m gapcross.record --search http://localhost:5000`. Rule 3 compares only unshared crossings (properties.md). |
-| S5 HTTP service | Not started |
+| S5 HTTP service | Committed: `gapcross.app` (`create_app(Service)`, config from `GAPCROSS_*` env), `reroute`, drive reports in `server/var/drive_reports.sqlite`, snapshot kept per corridor, via-point turns announced as turns. |
 | S6, S7 | In progress in worktrees `~/tcrf-s6` (branch `build/s6-live-sources`) and `~/tcrf-s7` (branch `build/s7-jev`), uncommitted |
 | S8 (iOS, on the Mac) | Not started; needs only `api/openapi.json` |
 | S9, S10 | Not started |

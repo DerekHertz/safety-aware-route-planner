@@ -14,10 +14,11 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .assess import Advisor, assess_route
+from .interpret import _bearing, _Polyline, _turn
 from .search import Target, crosses_as_intended, targets
 from .sources import BBox, RawRoute, RecordSnapshot, RecordSource, Sources, SourceUnavailable
 from .trips import TripPlan
-from .types import Comparison, Crossing, Maneuver, Route, Step
+from .types import Comparison, Crossing, LatLon, Maneuver, Route, Step
 
 DEADLINE_S = 10.0
 CANDIDATE_LIMIT = 8  # provisional (S6): OSRM is ~20 ms a route; the snapshot and Jev set the limit
@@ -36,10 +37,13 @@ TEMPLATES: dict[str, str] = {
     "incomplete": "The search did not finish in time, and no alternative was found before it stopped.",
     "check_failed": "Crossings couldn't be checked.",
     "depart": "Start on {street}",
+    "depart_toward": "Start toward {street}",
     "arrive": "Arrive at your destination",
     "turn": "Turn {modifier} onto {street}",
+    "uturn": "Make a U-turn onto {street}",
     "end of road": "At the end of the road, turn {modifier} onto {street}",
     "roundabout": "At the roundabout, exit onto {street}",
+    "keep": "Keep {modifier} onto {street}",
     "continue": "Continue on {street}",
     "minute": "1 minute",
     "minutes": "{n} minutes",
@@ -166,26 +170,73 @@ def _duration(seconds: float) -> str:
     return TEMPLATES["minute"] if minutes == 1 else TEMPLATES["minutes"].format(n=minutes)
 
 
+def reroute(position: LatLon, trip: TripPlan, sources: Sources,
+            source: Literal["osrm", "recorded"] = "recorded") -> Route:
+    """An unassessed route from where the driver is, labeled rerouted (rule 11).
+    Raises SourceUnavailable when the route can't be obtained (HTTP 503)."""
+    raw = sources.routes.route([position, trip.destination])
+    return _route(raw, (), "rerouted", source)
+
+
 def _route(raw: RawRoute, crossings: Sequence[Crossing], label, source) -> Route:
-    steps, along = [], 0.0
-    for s in raw.steps:
-        steps.append(Step(
-            instruction=_instruction(s.maneuver_type, s.modifier, s.name),
-            maneuver=Maneuver(type=s.maneuver_type, modifier=s.modifier), street=s.name,
-            distance_m=s.distance_m, along_m=along, location=s.location,
-        ))
-        along += s.distance_m
     return Route(label=label, source=source, geometry=list(raw.geometry), distance_m=raw.distance_m,
-                 eta_s=raw.duration_s, steps=steps, crossings=list(crossings))
+                 eta_s=raw.duration_s, steps=_steps(raw), crossings=list(crossings))
 
 
-def _instruction(kind: str, modifier: str | None, street: str) -> str:
-    street = street or "the road"
-    if kind in ("depart", "arrive", "roundabout", "rotary", "exit roundabout"):
-        key = {"rotary": "roundabout", "exit roundabout": "roundabout"}.get(kind, kind)
-        return TEMPLATES[key].format(street=street)
+def _steps(raw: RawRoute) -> list[Step]:
+    """Wire steps. A via point splits OSRM's legs, which leaves a bare `continue` where the driver
+    may actually turn: its turn is measured from the route geometry. Straight continuations on
+    the same street are folded into the step before them."""
+    line = _Polyline(raw.geometry)
+    named = [s.name for s in raw.steps]
+    out: list[dict] = []
+    along = 0.0
+    for i, s in enumerate(raw.steps):
+        kind, modifier = s.maneuver_type, s.modifier
+        if kind == "continue" and modifier is None and 0 < i < len(raw.steps) - 1:
+            kind, modifier = _turn_from_geometry(line, s.location)
+        street = s.name or next((n for n in named[i + 1:] if n), "")
+        straight_on = kind in ("continue", "new name") and modifier in (None, "straight")
+        if out and straight_on and out[-1]["street"] == street and out[-1]["type"] != "arrive":
+            out[-1]["distance_m"] += s.distance_m
+        else:
+            out.append({"type": kind, "modifier": modifier, "street": street, "distance_m": s.distance_m,
+                        "along_m": along, "location": s.location, "depart_unnamed": kind == "depart" and not s.name})
+        along += s.distance_m
+    return [
+        Step(instruction=_instruction(o["type"], o["modifier"], o["street"], o["depart_unnamed"]),
+             maneuver=Maneuver(type=o["type"], modifier=o["modifier"]), street=o["street"],
+             distance_m=o["distance_m"], along_m=o["along_m"], location=o["location"])
+        for o in out
+    ]
+
+
+def _turn_from_geometry(line: _Polyline, at: LatLon) -> tuple[str, str | None]:
+    along = line.locate(at)
+    if along < 1 or along > line.length - 1:
+        return "continue", None
+    here = line.point_at(along)
+    turn = _turn(_bearing(line.point_at(along - 20), here), _bearing(here, line.point_at(along + 20)))
+    if turn == "straight":
+        return "continue", "straight"
+    if turn == "u_turn":
+        return "turn", "uturn"
+    return "turn", turn
+
+
+def _instruction(kind: str, modifier: str | None, street: str, depart_unnamed: bool = False) -> str:
+    if kind == "depart":
+        return TEMPLATES["depart_toward" if depart_unnamed else "depart"].format(street=street)
+    if kind == "arrive":
+        return TEMPLATES["arrive"]
+    if modifier == "uturn":
+        return TEMPLATES["uturn"].format(street=street)
+    if kind in ("roundabout", "rotary", "exit roundabout", "exit rotary", "roundabout turn"):
+        return TEMPLATES["roundabout"].format(street=street)
     if kind in ("turn", "end of road") and modifier and modifier != "straight":
         return TEMPLATES[kind].format(modifier=modifier, street=street)
+    if kind in ("fork", "merge", "on ramp", "off ramp") and modifier and modifier != "straight":
+        return TEMPLATES["keep"].format(modifier=modifier.replace("slight ", ""), street=street)
     return TEMPLATES["continue"].format(street=street)
 
 

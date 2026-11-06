@@ -46,9 +46,15 @@ def record_search(osrm_url: str) -> None:
     from .transport import FixtureTransport, RecordingTransport
 
     sources = Sources(OsrmRouteSource(RecordingTransport(), osrm_url), OverpassRecordSource(FixtureTransport()))
-    for trip in load_trips().values():
+    trips = load_trips()
+    for trip in trips.values():
         result = compare(trip, sources, FixedAdvisor(), deadline_s=math.inf)
         print(f"{trip.id}: {result.outcome}, alternative eta {result.alternative.eta_s if result.alternative else '-'}")
+    extra = json.loads((FIXTURE_DIR / "extra_routes.json").read_text())
+    for item in extra.get("reroutes", ()):
+        trip = trips[item["trip"]]
+        route = sources.routes.route([LatLon(**item["position"]), trip.destination])
+        print(f"{item['name']}: {route.duration_s:.0f} s")
 
 
 if __name__ == "__main__":

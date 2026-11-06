@@ -1,7 +1,37 @@
-"""HTTP surface of the service. Handlers are stubs until S5."""
+"""HTTP surface of the service.
 
-from fastapi import FastAPI, HTTPException, status
+Configuration (environment):
+- GAPCROSS_SOURCES: `recorded` (default; fixtures, labeled recorded) or `live`.
+- GAPCROSS_OSRM_URL, GAPCROSS_OVERPASS_URL: live endpoints (default: the public servers).
+- GAPCROSS_REPORTS: the drive-report SQLite file (default server/var/drive_reports.sqlite).
 
+The record snapshot is fetched once per trip corridor and kept for the life of the process, so
+Overpass stays off the request path after the first request. A failed fetch is not kept.
+"""
+
+import os
+import sqlite3
+import threading
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+from fastapi import FastAPI, HTTPException, Response, status
+
+from .assess import Advisor, FixedAdvisor, assess_route
+from .compare import _route, compare, reroute
+from .sources import (
+    PUBLIC_OSRM,
+    PUBLIC_OVERPASS,
+    BBox,
+    RecordSnapshot,
+    RecordSource,
+    Sources,
+    SourceUnavailable,
+    live_sources,
+    offline_sources,
+)
+from .trips import TripPlan, load_trips
 from .types import (
     Comparison,
     ComparisonRequest,
@@ -12,35 +42,130 @@ from .types import (
     Trip,
 )
 
-app = FastAPI(title="Gap-crossing route comparison", version="0.1.0")
-
-ROUTE_UNAVAILABLE = {503: {"model": Problem, "description": "Route couldn't be obtained."}}
-
-
-def _not_built() -> HTTPException:
-    return HTTPException(status.HTTP_501_NOT_IMPLEMENTED, "Not built yet.")
-
-
-@app.get("/trips", response_model=list[Trip])
-def list_trips() -> list[Trip]:
-    raise _not_built()
+REPORTS_PATH = Path(__file__).resolve().parents[2] / "var" / "drive_reports.sqlite"
+ROUTE_UNAVAILABLE = "Route couldn't be obtained."
+RESPONSES = {
+    404: {"model": Problem, "description": "No such trip."},
+    503: {"model": Problem, "description": ROUTE_UNAVAILABLE},
+}
 
 
-@app.post("/trips/{trip_id}/default", response_model=Route, responses=ROUTE_UNAVAILABLE)
-def default_route(trip_id: str) -> Route:
-    raise _not_built()
+class CorridorRecords:
+    """The record source behind one snapshot per bbox, kept once fetched."""
+
+    def __init__(self, inner: RecordSource):
+        self.inner = inner
+        self._kept: dict[BBox, RecordSnapshot] = {}
+        self._lock = threading.Lock()
+
+    def snapshot(self, bbox: BBox) -> RecordSnapshot:
+        with self._lock:
+            if bbox not in self._kept:
+                self._kept[bbox] = self.inner.snapshot(bbox)
+            return self._kept[bbox]
 
 
-@app.post("/trips/{trip_id}/comparison", response_model=Comparison, responses=ROUTE_UNAVAILABLE)
-def comparison(trip_id: str, request: ComparisonRequest) -> Comparison:
-    raise _not_built()
+@dataclass
+class Service:
+    sources: Sources
+    advisor: Advisor
+    source: Literal["osrm", "recorded"]
+    reports_path: Path = REPORTS_PATH
+    trips: dict[str, TripPlan] = field(default_factory=load_trips)
+
+    def __post_init__(self) -> None:
+        self.sources = Sources(self.sources.routes, CorridorRecords(self.sources.records))
+
+    def trip(self, trip_id: str) -> TripPlan:
+        if trip_id not in self.trips:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No such trip.")
+        return self.trips[trip_id]
+
+    def default(self, trip: TripPlan) -> Route:
+        raw = self.sources.routes.route([trip.origin, *trip.example_via, trip.destination])
+        assessed = assess_route(raw, self.sources.records, trip.bbox, self.advisor)
+        crossings = () if assessed.status == "check_failed" else assessed.crossings
+        return _route(raw, crossings, "example", self.source)
+
+    def store_report(self, report: DriveReport) -> None:
+        self.reports_path.parent.mkdir(parents=True, exist_ok=True)
+        with sqlite3.connect(self.reports_path) as db:
+            db.execute("CREATE TABLE IF NOT EXISTS drive_reports (id INTEGER PRIMARY KEY, trip_id TEXT, "
+                       "route_label TEXT, depart_at TEXT, received_json TEXT)")
+            db.execute("CREATE TABLE IF NOT EXISTS drive_report_crossings (report_id INTEGER, trip_id TEXT, "
+                       "route_label TEXT, crossing_key TEXT, answer TEXT)")
+            cur = db.execute("INSERT INTO drive_reports (trip_id, route_label, depart_at, received_json) "
+                             "VALUES (?, ?, ?, ?)",
+                             (report.trip_id, report.route_label, report.depart_at.isoformat(),
+                              report.model_dump_json()))
+            db.executemany("INSERT INTO drive_report_crossings VALUES (?, ?, ?, ?, ?)",
+                           [(cur.lastrowid, report.trip_id, report.route_label, c.key, c.answer)
+                            for c in report.crossings])
 
 
-@app.post("/trips/{trip_id}/reroute", response_model=Route, responses=ROUTE_UNAVAILABLE)
-def reroute(trip_id: str, request: RerouteRequest) -> Route:
-    raise _not_built()
+def service_from_env() -> Service:
+    if os.environ.get("GAPCROSS_SOURCES", "recorded") == "live":
+        sources = live_sources(osrm_url=os.environ.get("GAPCROSS_OSRM_URL", PUBLIC_OSRM),
+                               overpass_url=os.environ.get("GAPCROSS_OVERPASS_URL", PUBLIC_OVERPASS))
+        source: Literal["osrm", "recorded"] = "osrm"
+    else:
+        sources, source = offline_sources(), "recorded"
+    reports = Path(os.environ.get("GAPCROSS_REPORTS", REPORTS_PATH))
+    return Service(sources=sources, advisor=FixedAdvisor(), source=source, reports_path=reports)
 
 
-@app.post("/drive-reports", status_code=status.HTTP_204_NO_CONTENT)
-def drive_report(report: DriveReport) -> None:
-    raise _not_built()
+def create_app(service: Service | None = None) -> FastAPI:
+    app = FastAPI(title="Gap-crossing route comparison", version="0.1.0")
+    state: dict[str, Service] = {}
+
+    def svc() -> Service:
+        if "s" not in state:
+            state["s"] = service or service_from_env()
+        return state["s"]
+
+    @app.get("/trips", response_model=list[Trip])
+    def list_trips() -> list[Trip]:
+        return [t.wire() for t in svc().trips.values()]
+
+    @app.post("/trips/{trip_id}/default", response_model=Route, responses=RESPONSES)
+    def default_route(trip_id: str) -> Route:
+        s = svc()
+        trip = s.trip(trip_id)
+        try:
+            return s.default(trip)
+        except SourceUnavailable:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, ROUTE_UNAVAILABLE) from None
+
+    @app.post("/trips/{trip_id}/comparison", response_model=Comparison,
+              responses={**RESPONSES, 422: {"model": Problem, "description": "Avoidance is off: call /default."}})
+    def comparison(trip_id: str, request: ComparisonRequest) -> Comparison:
+        s = svc()
+        trip = s.trip(trip_id)
+        if not request.avoid:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Avoidance is off: call /default.")
+        try:
+            return compare(trip, s.sources, s.advisor, source=s.source)
+        except SourceUnavailable:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, ROUTE_UNAVAILABLE) from None
+
+    @app.post("/trips/{trip_id}/reroute", response_model=Route, responses=RESPONSES)
+    def reroute_route(trip_id: str, request: RerouteRequest) -> Route:
+        s = svc()
+        trip = s.trip(trip_id)
+        try:
+            return reroute(request.position, trip, s.sources, s.source)
+        except SourceUnavailable:
+            raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, ROUTE_UNAVAILABLE) from None
+
+    @app.post("/drive-reports", status_code=status.HTTP_204_NO_CONTENT,
+              responses={404: {"model": Problem, "description": "No such trip."}})
+    def drive_report(report: DriveReport) -> Response:
+        s = svc()
+        s.trip(report.trip_id)
+        s.store_report(report)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    return app
+
+
+app = create_app()
