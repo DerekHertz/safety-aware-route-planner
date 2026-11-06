@@ -1,0 +1,14 @@
+{
+  "routes": [
+    {
+      "name": "dohr-ward (for S2's interpretation test; the search must find it on its own)",
+      "waypoints": [
+        {"lat": 37.853371, "lon": -122.289979},
+        {"lat": 37.855819, "lon": -122.28128},
+        {"lat": 37.857699, "lon": -122.281654},
+        {"lat": 37.857936, "lon": -122.279099},
+        {"lat": 37.871934, "lon": -122.258335}
+      ]
+    }
+  ]
+}
