@@ -32,5 +32,29 @@ def main() -> None:
         print(f"{item['name']}: {route.duration_s:.0f} s")
 
 
+def record_search(osrm_url: str) -> None:
+    """Record every candidate route the search asks for, against the recorded snapshot.
+
+    `uv run python -m gapcross.record --search http://localhost:5000` (the self-hosted OSRM from
+    S6; fixtures are keyed by request meaning, so they answer for any OSRM). No deadline applies.
+    """
+    import math
+
+    from .assess import FixedAdvisor
+    from .compare import compare
+    from .sources import OsrmRouteSource, OverpassRecordSource, Sources
+    from .transport import FixtureTransport, RecordingTransport
+
+    sources = Sources(OsrmRouteSource(RecordingTransport(), osrm_url), OverpassRecordSource(FixtureTransport()))
+    for trip in load_trips().values():
+        result = compare(trip, sources, FixedAdvisor(), deadline_s=math.inf)
+        print(f"{trip.id}: {result.outcome}, alternative eta {result.alternative.eta_s if result.alternative else '-'}")
+
+
 if __name__ == "__main__":
-    main()
+    import sys
+
+    if len(sys.argv) == 3 and sys.argv[1] == "--search":
+        record_search(sys.argv[2])
+    else:
+        main()
