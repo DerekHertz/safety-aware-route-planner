@@ -12,4 +12,9 @@ from the desktop app. Project skills in `.claude/skills/` are.
 | `grilling` | `skills/productivity/grilling` | the interview itself |
 | `domain-modeling` | `skills/engineering/domain-modeling` | writes `CONTEXT.md` and `docs/adr/`; this repo already follows its format |
 
+Refreshed 2026-11-05 from the WSL plugin copy (mattpocock-skills 1.3.1): `grilling` now
+words each question so "yes" accepts the recommendation. `domain-modeling` was **not**
+refreshed: 1.3.1 renamed `CONTEXT.md` to `GLOSSARY.md`, but this repo keeps `CONTEXT.md`
+(see `AGENTS.md`). `.agents/skills/` (untracked) mirrors this directory.
+
 To refresh, re-download the same paths from upstream `main` and update the SHA above.
