@@ -28,3 +28,6 @@ web/*:*
 # which are noise at best and a small personal-info leak at worst.
 # .claude/launch.json IS tracked on purpose — it is shared project config.
 .claude/settings.local.json
+
+# Service runtime data (Jev answer cache, drive reports)
+server/var/
