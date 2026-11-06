@@ -27,7 +27,8 @@ Branch `build/mvp-design-and-s0` (cut from `rewrite/mvp-2026-11-05`). Nothing is
 | S0 scaffold, wire types, OpenAPI contract | Committed `2712264` |
 | S1 source seams, trips, recorded fixtures | Committed `e38413f` (docs in `2d4bc5e`) |
 | S2 movement interpretation | Committed (`feat(server): S2 movement interpretation`): `gapcross.interpret`; bbox widened and Overpass re-recorded. Open: roundabout entries and Adeline→Shattuck, for S3. |
-| S3–S5 (service) | Not started |
+| S3 assessment rules | Committed (`feat(server): S3 assessment rules`): `gapcross.assess`; Jev seam is `Advisor`, stubbed by `FixedAdvisor`. |
+| S4, S5 (service) | Not started |
 | S6, S7 | In progress in worktrees `~/tcrf-s6` (branch `build/s6-live-sources`) and `~/tcrf-s7` (branch `build/s7-jev`), uncommitted |
 | S8 (iOS, on the Mac) | Not started; needs only `api/openapi.json` |
 | S9, S10 | Not started |
