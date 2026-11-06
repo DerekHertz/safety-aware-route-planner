@@ -1,0 +1,361 @@
+{
+ "request": {
+  "model": "jev-1.14.0",
+  "questions": {
+   "1993196224/left_onto/N.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 1993196224/left_onto/N, whose records are at `crossings[\"1993196224/left_onto/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53034977/straight/NW.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53034977/straight/NW, whose records are at `crossings[\"53034977/straight/NW\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53041093/straight/N.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53041093/straight/N, whose records are at `crossings[\"53041093/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53050625+240469696/straight/E.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53050625+240469696/straight/E, whose records are at `crossings[\"53050625+240469696/straight/E\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53050627+240469515/straight/E.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53050627+240469515/straight/E, whose records are at `crossings[\"53050627+240469515/straight/E\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53050629+240469627/straight/E.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53050629+240469627/straight/E, whose records are at `crossings[\"53050629+240469627/straight/E\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53055616/straight/N.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53055616/straight/N, whose records are at `crossings[\"53055616/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53055620/straight/N.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53055620/straight/N, whose records are at `crossings[\"53055620/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53063558/straight/E.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53063558/straight/E, whose records are at `crossings[\"53063558/straight/E\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53063558/straight/W.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53063558/straight/W, whose records are at `crossings[\"53063558/straight/W\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53073464/left_onto/S.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53073464/left_onto/S, whose records are at `crossings[\"53073464/left_onto/S\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53090675/straight/E.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53090675/straight/E, whose records are at `crossings[\"53090675/straight/E\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   }
+  },
+  "state": {
+   "crossings": {
+    "1993196224/left_onto/N": {
+     "approach_bearing": 354,
+     "from_street": "College Avenue",
+     "kind": "left_onto",
+     "main_street": "Bancroft Way",
+     "records": [
+      "node/320402594: stop sign facing College Avenue",
+      "node/8436435938: stop sign facing Bancroft Way traffic"
+     ]
+    },
+    "53034977/straight/NW": {
+     "approach_bearing": 313,
+     "from_street": "Piedmont Avenue",
+     "kind": "straight",
+     "main_street": "Stadium Rim Way",
+     "records": [
+      "node/286079887: stop sign facing Piedmont Avenue",
+      "node/9509603329: stop sign facing Stadium Rim Way traffic"
+     ]
+    },
+    "53041093/straight/N": {
+     "approach_bearing": 351,
+     "from_street": "Telegraph Avenue",
+     "kind": "straight",
+     "main_street": "Haste Street",
+     "records": [
+      "node/53041093: traffic signal at the Haste Street junction"
+     ]
+    },
+    "53050625+240469696/straight/E": {
+     "approach_bearing": 81,
+     "from_street": "Derby Street",
+     "kind": "straight",
+     "main_street": "Sacramento Street",
+     "records": [
+      "node/2215072646: stop sign facing Derby Street",
+      "convention: a local street usually stops for Sacramento Street"
+     ]
+    },
+    "53050627+240469515/straight/E": {
+     "approach_bearing": 81,
+     "from_street": "Ward Street",
+     "kind": "straight",
+     "main_street": "Sacramento Street",
+     "records": [
+      "node/53050627: traffic signal at the Sacramento Street junction",
+      "node/240469515: traffic signal at the Sacramento Street junction"
+     ]
+    },
+    "53050629+240469627/straight/E": {
+     "approach_bearing": 78,
+     "from_street": "Russell Street",
+     "kind": "straight",
+     "main_street": "Sacramento Street",
+     "records": [
+      "node/4363724419: stop sign facing Russell Street",
+      "convention: a local street usually stops for Sacramento Street"
+     ]
+    },
+    "53055616/straight/N": {
+     "approach_bearing": 353,
+     "from_street": "Piedmont Avenue",
+     "kind": "straight",
+     "main_street": "Bancroft Way",
+     "records": [
+      "node/8436435687: stop sign facing Piedmont Avenue"
+     ]
+    },
+    "53055620/straight/N": {
+     "approach_bearing": 349,
+     "from_street": "Piedmont Avenue",
+     "kind": "straight",
+     "main_street": "Durant Avenue",
+     "records": [
+      "node/8436435766: stop sign facing Piedmont Avenue"
+     ]
+    },
+    "53063558/straight/E": {
+     "approach_bearing": 84,
+     "from_street": "Channing Way",
+     "kind": "straight",
+     "main_street": "College Avenue",
+     "records": [
+      "node/53063558: traffic signal at the College Avenue junction"
+     ]
+    },
+    "53063558/straight/W": {
+     "approach_bearing": 264,
+     "from_street": "Channing Way",
+     "kind": "straight",
+     "main_street": "College Avenue",
+     "records": [
+      "node/53063558: traffic signal at the College Avenue junction"
+     ]
+    },
+    "53073464/left_onto/S": {
+     "approach_bearing": 171,
+     "from_street": "Bowditch Street",
+     "kind": "left_onto",
+     "main_street": "Durant Avenue",
+     "records": [
+      "node/53073464: traffic signal at the Durant Avenue junction"
+     ]
+    },
+    "53090675/straight/E": {
+     "approach_bearing": 95,
+     "from_street": "Durant Avenue",
+     "kind": "straight",
+     "main_street": "College Avenue",
+     "records": [
+      "node/53090675: traffic signal at the College Avenue junction"
+     ]
+    }
+   }
+  }
+ },
+ "response": {
+  "answers": {
+   "1993196224/left_onto/N.approach_control": {
+    "choice": "stops_for_us",
+    "confidence": 0.86,
+    "probabilities": {
+     "cannot_tell": 0.03,
+     "does_not_stop": 0.06,
+     "stops_for_us": 0.91
+    },
+    "type": "choice"
+   },
+   "53034977/straight/NW.approach_control": {
+    "choice": "stops_for_us",
+    "confidence": 0.77,
+    "probabilities": {
+     "cannot_tell": 0.05,
+     "does_not_stop": 0.1,
+     "stops_for_us": 0.85
+    },
+    "type": "choice"
+   },
+   "53041093/straight/N.approach_control": {
+    "choice": "cannot_tell",
+    "confidence": 0.33,
+    "probabilities": {
+     "cannot_tell": 0.55,
+     "does_not_stop": 0.09,
+     "stops_for_us": 0.36
+    },
+    "type": "choice"
+   },
+   "53050625+240469696/straight/E.approach_control": {
+    "choice": "does_not_stop",
+    "confidence": 0.53,
+    "probabilities": {
+     "cannot_tell": 0.3,
+     "does_not_stop": 0.69,
+     "stops_for_us": 0.01
+    },
+    "type": "choice"
+   },
+   "53050627+240469515/straight/E.approach_control": {
+    "choice": "stops_for_us",
+    "confidence": 0.16,
+    "probabilities": {
+     "cannot_tell": 0.3,
+     "does_not_stop": 0.26,
+     "stops_for_us": 0.44
+    },
+    "type": "choice"
+   },
+   "53050629+240469627/straight/E.approach_control": {
+    "choice": "does_not_stop",
+    "confidence": 0.72,
+    "probabilities": {
+     "cannot_tell": 0.19,
+     "does_not_stop": 0.81,
+     "stops_for_us": 0.0
+    },
+    "type": "choice"
+   },
+   "53055616/straight/N.approach_control": {
+    "choice": "cannot_tell",
+    "confidence": 0.53,
+    "probabilities": {
+     "cannot_tell": 0.69,
+     "does_not_stop": 0.3,
+     "stops_for_us": 0.01
+    },
+    "type": "choice"
+   },
+   "53055620/straight/N.approach_control": {
+    "choice": "cannot_tell",
+    "confidence": 0.52,
+    "probabilities": {
+     "cannot_tell": 0.68,
+     "does_not_stop": 0.32,
+     "stops_for_us": 0.0
+    },
+    "type": "choice"
+   },
+   "53063558/straight/E.approach_control": {
+    "choice": "stops_for_us",
+    "confidence": 0.38,
+    "probabilities": {
+     "cannot_tell": 0.32,
+     "does_not_stop": 0.09,
+     "stops_for_us": 0.59
+    },
+    "type": "choice"
+   },
+   "53063558/straight/W.approach_control": {
+    "choice": "stops_for_us",
+    "confidence": 0.31,
+    "probabilities": {
+     "cannot_tell": 0.36,
+     "does_not_stop": 0.1,
+     "stops_for_us": 0.54
+    },
+    "type": "choice"
+   },
+   "53073464/left_onto/S.approach_control": {
+    "choice": "does_not_stop",
+    "confidence": 0.07,
+    "probabilities": {
+     "cannot_tell": 0.29,
+     "does_not_stop": 0.38,
+     "stops_for_us": 0.33
+    },
+    "type": "choice"
+   },
+   "53090675/straight/E.approach_control": {
+    "choice": "stops_for_us",
+    "confidence": 0.18,
+    "probabilities": {
+     "cannot_tell": 0.35,
+     "does_not_stop": 0.2,
+     "stops_for_us": 0.45
+    },
+    "type": "choice"
+   }
+  },
+  "model": "jev-1.14.0",
+  "usage": {
+   "input_tokens": 4022,
+   "output_tokens": 752
+  }
+ }
+}

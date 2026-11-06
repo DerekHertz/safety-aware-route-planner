@@ -31,7 +31,7 @@ Branch `build/mvp-design-and-s0` (cut from `rewrite/mvp-2026-11-05`). Nothing is
 | S4 search and comparison | Built, tests green (`gapcross.search`, `gapcross.compare`). Candidate routes recorded from the S6 local OSRM with `uv run python -m gapcross.record --search http://localhost:5000`. Rule 3 compares only unshared crossings (properties.md). |
 | S5 HTTP service | Committed: `gapcross.app` (`create_app(Service)`, config from `GAPCROSS_*` env), `reroute`, drive reports in `server/var/drive_reports.sqlite`, snapshot kept per corridor, via-point turns announced as turns. |
 | S6 live sources | Committed: self-hosted OSRM (`server/osrm/prepare.sh`, compose `osrm`), env-configured live adapters, snapshot prefetched at startup, `gapcross.latency --compare`. Live `compare()` 0.5 s; numbers in concrete.md. Live tests: `uv run pytest -m live` with OSRM up. |
-| S7 Jev | In worktree `~/tcrf-s7` (branch `build/s7-jev`), being merged |
+| S7 Jev | Committed: `gapcross.jev` (client, cache, gate, `JevAdvisor`), `gapcross.prerun` over the real corridor. Gate FAILS on the first run (2 of 27 compared, needs 10), so Jev stays leads. Live service uses Jev when `TYPESAFE_API_KEY` is set. |
 | S8 (iOS, on the Mac) | Not started; needs only `api/openapi.json` |
 | S9, S10 | Not started |
 

@@ -145,11 +145,16 @@ def test_rule_2_jev_unavailable_fails_the_check(dohr_ward_raw, bare, trip):
     assert result.status == "check_failed" and result.flag_count is None
 
 
-def _stops_for_us(probability, gate_passed):
+def _jev_says(choice, probability, gate_passed):
+    """approach_control asks whether the main street's traffic stops for the driver."""
     return FixedAdvisor(Advice(
-        answers={f"{SHATTUCK_AT_PARKER}.approach_control": JevAnswer("stops_for_us", probability)},
+        answers={f"{SHATTUCK_AT_PARKER}.approach_control": JevAnswer(choice, probability)},
         model_version="jev-test", gate_passed=gate_passed,
     ))
+
+
+def _stops_for_us(probability, gate_passed):
+    return _jev_says("stops_for_us", probability, gate_passed)
 
 
 def test_rule_8_a_lead_never_changes_a_status(dohr_ward_raw, bare, trip):
@@ -161,14 +166,14 @@ def test_rule_8_a_lead_never_changes_a_status(dohr_ward_raw, bare, trip):
 
 
 def test_rule_9_jev_counts_only_after_its_gate(dohr_ward_raw, bare, trip):
-    before = assess_route(dohr_ward_raw, bare, trip.bbox, _stops_for_us(0.95, gate_passed=False))
-    assert _by_key(before)[SHATTUCK_AT_PARKER].assessment.status == "unknown"
+    for choice, expected in (("does_not_stop", "flagged"), ("stops_for_us", "unflagged")):
+        before = assess_route(dohr_ward_raw, bare, trip.bbox, _jev_says(choice, 0.95, gate_passed=False))
+        assert _by_key(before)[SHATTUCK_AT_PARKER].assessment.status == "unknown"
 
-    after = assess_route(dohr_ward_raw, bare, trip.bbox, _stops_for_us(0.95, gate_passed=True))
-    shattuck = _by_key(after)[SHATTUCK_AT_PARKER].assessment
-    # The scan found nothing that stops Shattuck's traffic, so a stop for us makes a gap crossing.
-    assert shattuck.status == "flagged"
-    assert any(e.source == "jev" and not e.is_lead for e in shattuck.evidence)
+        after = assess_route(dohr_ward_raw, bare, trip.bbox, _jev_says(choice, 0.95, gate_passed=True))
+        shattuck = _by_key(after)[SHATTUCK_AT_PARKER].assessment
+        assert shattuck.status == expected, choice
+        assert any(e.source == "jev" and not e.is_lead for e in shattuck.evidence)
 
 
 def test_jev_is_asked_once_per_route_and_only_open_questions(dohr_ward_raw, bare, trip):

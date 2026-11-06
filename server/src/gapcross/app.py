@@ -21,6 +21,7 @@ from fastapi import FastAPI, HTTPException, Response, status
 
 from .assess import Advisor, FixedAdvisor, assess_route
 from .compare import _route, compare, reroute
+from .jev import API_KEY_ENV, CACHE_PATH, AnswerCache, JevAdvisor, live_jev
 from .sources import (
     BBox,
     RecordSnapshot,
@@ -112,13 +113,17 @@ class Service:
 
 
 def service_from_env() -> Service:
+    advisor: Advisor = FixedAdvisor()  # recorded mode: no Jev answers, open questions stay unknown
     if os.environ.get("GAPCROSS_SOURCES", "recorded") == "live":
         sources = live_sources()  # GAPCROSS_OSRM_URL / GAPCROSS_OVERPASS_URL, else the public servers
         source: Literal["osrm", "recorded"] = "osrm"
+        if os.environ.get(API_KEY_ENV):
+            # the cache the corridor pre-run filled; misses go to Jev, one request per route
+            advisor = JevAdvisor(live_jev(), AnswerCache(os.environ.get("GAPCROSS_JEV_CACHE", CACHE_PATH)))
     else:
         sources, source = offline_sources(), "recorded"
     reports = Path(os.environ.get("GAPCROSS_REPORTS", REPORTS_PATH))
-    return Service(sources=sources, advisor=FixedAdvisor(), source=source, reports_path=reports)
+    return Service(sources=sources, advisor=advisor, source=source, reports_path=reports)
 
 
 def create_app(service: Service | None = None) -> FastAPI:
