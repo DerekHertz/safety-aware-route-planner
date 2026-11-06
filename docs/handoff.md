@@ -25,10 +25,32 @@ Branch `build/mvp-design-and-s0` (cut from `rewrite/mvp-2026-11-05`). Nothing is
 |---|---|
 | Design (abstract, concrete, properties, slices) | Committed `6e5b72e` |
 | S0 scaffold, wire types, OpenAPI contract | Committed `2712264` |
-| S1 source seams, trips, recorded fixtures | **Built, tests green, not committed.** Commit it first. |
-| S2–S7 (service) | Not started |
+| S1 source seams, trips, recorded fixtures | Committed `e38413f` (docs in `2d4bc5e`) |
+| S2 movement interpretation | Committed (`feat(server): S2 movement interpretation`): `gapcross.interpret`; bbox widened and Overpass re-recorded. Open: roundabout entries and Adeline→Shattuck, for S3. |
+| S3–S5 (service) | Not started |
+| S6, S7 | In progress in worktrees `~/tcrf-s6` (branch `build/s6-live-sources`) and `~/tcrf-s7` (branch `build/s7-jev`), uncommitted |
 | S8 (iOS, on the Mac) | Not started; needs only `api/openapi.json` |
 | S9, S10 | Not started |
+
+
+### S2 decisions (owner, 2026-11-06)
+
+1. **Unclassified cross streets are local.** Only `highway` primary/secondary/tertiary makes a
+   crossing; residential, living_street, service and unclassified are local.
+2. **Widen the corridor bbox and re-record.** `trips.json`'s bbox misses Piedmont × Durant and
+   Bancroft (tertiary) and campus. Widen it to cover all recorded routes plus ~3 blocks (one
+   corridor snapshot, not per route) and re-record Overpass with `gapcross.record`. A junction
+   intersection with no OSM node within 3 m is reported as uncovered; S3 makes that
+   `check_failed`.
+3. **Geometry.** Turn = departure minus approach heading: straight within ±45°, left −45° to
+   −135°, right +45° to +135°, beyond is a U-turn. Movements of the same-named main street within
+   50 m merge into one crossing (any left makes it `left_onto`). A divided-street group whose
+   route arrived on that same street is a left off it, not a crossing.
+
+S2 notes from the recorded data: a via point can sit on a junction (Oregon/Dohr on the Dohr/Ward
+route), where OSRM gives no approach bearing, so take headings from the route geometry around
+the matched junction node, and count junction degree from OSM ways, not OSRM bearings.
+`server/var/explore_s2.py` (gitignored) prints every intersection with its nearest junction.
 
 Tonight's demo target: S0–S5 plus S8.
 

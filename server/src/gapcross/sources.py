@@ -21,6 +21,7 @@ __all__ = ["FixtureMissing", "LatLon", "SourceUnavailable", "offline_sources", "
 USER_AGENT = "gapcross/0.1 (gap-crossing route comparison; research)"
 PUBLIC_OSRM = "https://router.project-osrm.org"
 PUBLIC_OVERPASS = "https://overpass-api.de/api/interpreter"
+OVERPASS_TIMEOUT_S = 120  # the query itself allows the server 90 s
 
 
 @dataclass(frozen=True)
@@ -98,9 +99,9 @@ class RecordSource(Protocol):
     def snapshot(self, bbox: BBox) -> RecordSnapshot: ...
 
 
-def _http_json(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+def _http_json(method: str, url: str, timeout: float = 30, **kwargs: Any) -> dict[str, Any]:
     try:
-        response = httpx.request(method, url, headers={"User-Agent": USER_AGENT}, timeout=30, **kwargs)
+        response = httpx.request(method, url, headers={"User-Agent": USER_AGENT}, timeout=timeout, **kwargs)
         response.raise_for_status()
         return response.json()
     except (httpx.HTTPError, ValueError) as error:
@@ -196,7 +197,7 @@ class OverpassRecordSource:
         query = overpass_query(bbox)
         body = self.transport.get_json(
             "overpass", {"query": query},
-            lambda: _http_json("POST", self.url, data={"data": query}),
+            lambda: _http_json("POST", self.url, timeout=OVERPASS_TIMEOUT_S, data={"data": query}),
         )
         return _parse_overpass(body)
 
