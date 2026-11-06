@@ -10,5 +10,12 @@
         {"lat": 37.871934, "lon": -122.258335}
       ]
     }
+  ],
+  "reroutes": [
+    {
+      "name": "off route on Ward Street east of California Street (S5's reroute test)",
+      "trip": "bowl-west-to-campus",
+      "position": {"lat": 37.8582, "lon": -122.2768}
+    }
   ]
 }

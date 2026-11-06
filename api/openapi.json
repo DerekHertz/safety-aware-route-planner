@@ -561,6 +561,16 @@
           "204": {
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such trip."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -632,15 +642,25 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such trip."
+          },
           "422": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
+                  "$ref": "#/components/schemas/Problem"
                 }
               }
             },
-            "description": "Validation Error"
+            "description": "Avoidance is off: call /default."
           },
           "503": {
             "content": {
@@ -681,6 +701,16 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such trip."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -707,7 +737,7 @@
     },
     "/trips/{trip_id}/reroute": {
       "post": {
-        "operationId": "reroute_trips__trip_id__reroute_post",
+        "operationId": "reroute_route_trips__trip_id__reroute_post",
         "parameters": [
           {
             "in": "path",
@@ -740,6 +770,16 @@
             },
             "description": "Successful Response"
           },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "No such trip."
+          },
           "422": {
             "content": {
               "application/json": {
@@ -761,7 +801,7 @@
             "description": "Route couldn't be obtained."
           }
         },
-        "summary": "Reroute"
+        "summary": "Reroute Route"
       }
     }
   }
