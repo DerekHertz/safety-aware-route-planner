@@ -31,3 +31,6 @@ web/*:*
 
 # Service runtime data (Jev answer cache, drive reports)
 server/var/
+
+# OSRM extract and prepared graph (large)
+server/osrm/data/

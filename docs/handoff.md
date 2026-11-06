@@ -30,7 +30,8 @@ Branch `build/mvp-design-and-s0` (cut from `rewrite/mvp-2026-11-05`). Nothing is
 | S3 assessment rules | Committed (`feat(server): S3 assessment rules`): `gapcross.assess`; Jev seam is `Advisor`, stubbed by `FixedAdvisor`. |
 | S4 search and comparison | Built, tests green (`gapcross.search`, `gapcross.compare`). Candidate routes recorded from the S6 local OSRM with `uv run python -m gapcross.record --search http://localhost:5000`. Rule 3 compares only unshared crossings (properties.md). |
 | S5 HTTP service | Committed: `gapcross.app` (`create_app(Service)`, config from `GAPCROSS_*` env), `reroute`, drive reports in `server/var/drive_reports.sqlite`, snapshot kept per corridor, via-point turns announced as turns. |
-| S6, S7 | In progress in worktrees `~/tcrf-s6` (branch `build/s6-live-sources`) and `~/tcrf-s7` (branch `build/s7-jev`), uncommitted |
+| S6 live sources | Committed: self-hosted OSRM (`server/osrm/prepare.sh`, compose `osrm`), env-configured live adapters, snapshot prefetched at startup, `gapcross.latency --compare`. Live `compare()` 0.5 s; numbers in concrete.md. Live tests: `uv run pytest -m live` with OSRM up. |
+| S7 Jev | In worktree `~/tcrf-s7` (branch `build/s7-jev`), being merged |
 | S8 (iOS, on the Mac) | Not started; needs only `api/openapi.json` |
 | S9, S10 | Not started |
 

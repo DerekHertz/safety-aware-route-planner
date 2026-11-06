@@ -1,5 +1,6 @@
 """The RouteSource and RecordSource seams, their raw types, and the adapters behind them."""
 
+import os
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol
@@ -233,6 +234,9 @@ def offline_sources() -> Sources:
     return Sources(OsrmRouteSource(transport), OverpassRecordSource(transport))
 
 
-def live_sources(record: bool = False, osrm_url: str = PUBLIC_OSRM, overpass_url: str = PUBLIC_OVERPASS) -> Sources:
+def live_sources(record: bool = False, osrm_url: str | None = None, overpass_url: str | None = None) -> Sources:
+    """Live adapters. URLs come from the argument, else GAPCROSS_OSRM_URL / GAPCROSS_OVERPASS_URL, else the public servers."""
+    osrm_url = osrm_url or os.environ.get("GAPCROSS_OSRM_URL") or PUBLIC_OSRM
+    overpass_url = overpass_url or os.environ.get("GAPCROSS_OVERPASS_URL") or PUBLIC_OVERPASS
     transport: Transport = RecordingTransport() if record else LiveTransport()
     return Sources(OsrmRouteSource(transport, osrm_url), OverpassRecordSource(transport, overpass_url))
