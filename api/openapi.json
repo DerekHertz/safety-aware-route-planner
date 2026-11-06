@@ -1,0 +1,768 @@
+{
+  "components": {
+    "schemas": {
+      "Assessment": {
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "items": {
+              "$ref": "#/components/schemas/Evidence"
+            },
+            "title": "Evidence",
+            "type": "array"
+          },
+          "explanation": {
+            "title": "Explanation",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "flagged",
+              "unflagged",
+              "unknown",
+              "check_failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "status",
+          "explanation",
+          "evidence"
+        ],
+        "title": "Assessment",
+        "type": "object"
+      },
+      "Comparison": {
+        "additionalProperties": false,
+        "properties": {
+          "added_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Added S"
+          },
+          "alternative": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Route"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "budget_s": {
+            "minimum": 0.0,
+            "title": "Budget S",
+            "type": "number"
+          },
+          "default": {
+            "$ref": "#/components/schemas/Route"
+          },
+          "outcome": {
+            "enum": [
+              "improvement",
+              "no_improvement",
+              "over_budget",
+              "incomplete",
+              "check_failed"
+            ],
+            "title": "Outcome",
+            "type": "string"
+          },
+          "search_complete": {
+            "title": "Search Complete",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          }
+        },
+        "required": [
+          "default",
+          "outcome",
+          "search_complete",
+          "budget_s",
+          "summary"
+        ],
+        "title": "Comparison",
+        "type": "object"
+      },
+      "ComparisonRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "avoid": {
+            "title": "Avoid",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "avoid"
+        ],
+        "title": "ComparisonRequest",
+        "type": "object"
+      },
+      "Crossing": {
+        "additionalProperties": false,
+        "properties": {
+          "along_m": {
+            "minimum": 0.0,
+            "title": "Along M",
+            "type": "number"
+          },
+          "approach_bearing": {
+            "exclusiveMaximum": 360.0,
+            "minimum": 0.0,
+            "title": "Approach Bearing",
+            "type": "number"
+          },
+          "assessment": {
+            "$ref": "#/components/schemas/Assessment"
+          },
+          "key": {
+            "description": "{sorted junction OSM node ids}/{kind}/{approach octant}",
+            "title": "Key",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "straight",
+              "left_onto"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LatLon"
+          },
+          "main_street": {
+            "title": "Main Street",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "main_street",
+          "kind",
+          "approach_bearing",
+          "along_m",
+          "location",
+          "assessment"
+        ],
+        "title": "Crossing",
+        "type": "object"
+      },
+      "CrossingReport": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "enum": [
+              "as_described",
+              "not_as_described",
+              "not_sure"
+            ],
+            "title": "Answer",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "answer"
+        ],
+        "title": "CrossingReport",
+        "type": "object"
+      },
+      "DriveReport": {
+        "additionalProperties": false,
+        "properties": {
+          "crossings": {
+            "items": {
+              "$ref": "#/components/schemas/CrossingReport"
+            },
+            "title": "Crossings",
+            "type": "array"
+          },
+          "depart_at": {
+            "format": "date-time",
+            "title": "Depart At",
+            "type": "string"
+          },
+          "route_label": {
+            "enum": [
+              "provider",
+              "example",
+              "rerouted"
+            ],
+            "title": "Route Label",
+            "type": "string"
+          },
+          "trip_id": {
+            "title": "Trip Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "trip_id",
+          "route_label",
+          "depart_at",
+          "crossings"
+        ],
+        "title": "DriveReport",
+        "type": "object"
+      },
+      "Evidence": {
+        "additionalProperties": false,
+        "properties": {
+          "claim": {
+            "title": "Claim",
+            "type": "string"
+          },
+          "is_lead": {
+            "description": "A lead is shown but never changes a status.",
+            "title": "Is Lead",
+            "type": "boolean"
+          },
+          "observed_on": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Observed On"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "retrieved_at": {
+            "format": "date-time",
+            "title": "Retrieved At",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "osm",
+              "jev",
+              "city_record"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source",
+          "ref",
+          "claim",
+          "retrieved_at",
+          "is_lead"
+        ],
+        "title": "Evidence",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "LatLon": {
+        "additionalProperties": false,
+        "properties": {
+          "lat": {
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat",
+            "type": "number"
+          },
+          "lon": {
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lon",
+            "type": "number"
+          }
+        },
+        "required": [
+          "lat",
+          "lon"
+        ],
+        "title": "LatLon",
+        "type": "object"
+      },
+      "Maneuver": {
+        "additionalProperties": false,
+        "properties": {
+          "modifier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modifier"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Maneuver",
+        "type": "object"
+      },
+      "Problem": {
+        "additionalProperties": false,
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "string"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "Problem",
+        "type": "object"
+      },
+      "RerouteRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "position": {
+            "$ref": "#/components/schemas/LatLon"
+          }
+        },
+        "required": [
+          "position"
+        ],
+        "title": "RerouteRequest",
+        "type": "object"
+      },
+      "Route": {
+        "additionalProperties": false,
+        "properties": {
+          "crossings": {
+            "description": "Empty on a rerouted route, which is not assessed.",
+            "items": {
+              "$ref": "#/components/schemas/Crossing"
+            },
+            "title": "Crossings",
+            "type": "array"
+          },
+          "distance_m": {
+            "minimum": 0.0,
+            "title": "Distance M",
+            "type": "number"
+          },
+          "eta_s": {
+            "minimum": 0.0,
+            "title": "Eta S",
+            "type": "number"
+          },
+          "geometry": {
+            "items": {
+              "$ref": "#/components/schemas/LatLon"
+            },
+            "title": "Geometry",
+            "type": "array"
+          },
+          "label": {
+            "enum": [
+              "provider",
+              "example",
+              "rerouted"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "description": "Where the route data came from, shown to the driver.",
+            "enum": [
+              "osrm",
+              "recorded"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/Step"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "label",
+          "source",
+          "geometry",
+          "distance_m",
+          "eta_s",
+          "steps",
+          "crossings"
+        ],
+        "title": "Route",
+        "type": "object"
+      },
+      "Step": {
+        "additionalProperties": false,
+        "properties": {
+          "along_m": {
+            "description": "Distance from the route start to this step.",
+            "minimum": 0.0,
+            "title": "Along M",
+            "type": "number"
+          },
+          "distance_m": {
+            "minimum": 0.0,
+            "title": "Distance M",
+            "type": "number"
+          },
+          "instruction": {
+            "title": "Instruction",
+            "type": "string"
+          },
+          "location": {
+            "$ref": "#/components/schemas/LatLon"
+          },
+          "maneuver": {
+            "$ref": "#/components/schemas/Maneuver"
+          },
+          "street": {
+            "title": "Street",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instruction",
+          "maneuver",
+          "street",
+          "distance_m",
+          "along_m",
+          "location"
+        ],
+        "title": "Step",
+        "type": "object"
+      },
+      "Trip": {
+        "additionalProperties": false,
+        "properties": {
+          "destination": {
+            "$ref": "#/components/schemas/LatLon"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/LatLon"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "origin",
+          "destination"
+        ],
+        "title": "Trip",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Gap-crossing route comparison",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/drive-reports": {
+      "post": {
+        "operationId": "drive_report_drive_reports_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DriveReport"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Drive Report"
+      }
+    },
+    "/trips": {
+      "get": {
+        "operationId": "list_trips_trips_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Trip"
+                  },
+                  "title": "Response List Trips Trips Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Trips"
+      }
+    },
+    "/trips/{trip_id}/comparison": {
+      "post": {
+        "operationId": "comparison_trips__trip_id__comparison_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComparisonRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Comparison"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Route couldn't be obtained."
+          }
+        },
+        "summary": "Comparison"
+      }
+    },
+    "/trips/{trip_id}/default": {
+      "post": {
+        "operationId": "default_route_trips__trip_id__default_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Route couldn't be obtained."
+          }
+        },
+        "summary": "Default Route"
+      }
+    },
+    "/trips/{trip_id}/reroute": {
+      "post": {
+        "operationId": "reroute_trips__trip_id__reroute_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "trip_id",
+            "required": true,
+            "schema": {
+              "title": "Trip Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RerouteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Route"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Problem"
+                }
+              }
+            },
+            "description": "Route couldn't be obtained."
+          }
+        },
+        "summary": "Reroute"
+      }
+    }
+  }
+}
