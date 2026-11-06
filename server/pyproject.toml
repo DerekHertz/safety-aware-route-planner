@@ -25,3 +25,5 @@ packages = ["src/gapcross"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m \"not live\""
+markers = ["live: touches the network or a local OSRM; run with -m live"]

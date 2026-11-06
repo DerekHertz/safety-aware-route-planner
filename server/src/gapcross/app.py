@@ -12,6 +12,7 @@ Overpass stays off the request path after the first request. A failed fetch is n
 import os
 import sqlite3
 import threading
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -21,8 +22,6 @@ from fastapi import FastAPI, HTTPException, Response, status
 from .assess import Advisor, FixedAdvisor, assess_route
 from .compare import _route, compare, reroute
 from .sources import (
-    PUBLIC_OSRM,
-    PUBLIC_OVERPASS,
     BBox,
     RecordSnapshot,
     RecordSource,
@@ -76,6 +75,15 @@ class Service:
     def __post_init__(self) -> None:
         self.sources = Sources(self.sources.routes, CorridorRecords(self.sources.records))
 
+    def prefetch(self) -> None:
+        """Fetch every corridor's snapshot so Overpass is off the request path. Failures are
+        left for the first request to meet (it then reports check_failed)."""
+        for trip in self.trips.values():
+            try:
+                self.sources.records.snapshot(trip.bbox)
+            except SourceUnavailable:
+                pass
+
     def trip(self, trip_id: str) -> TripPlan:
         if trip_id not in self.trips:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "No such trip.")
@@ -105,8 +113,7 @@ class Service:
 
 def service_from_env() -> Service:
     if os.environ.get("GAPCROSS_SOURCES", "recorded") == "live":
-        sources = live_sources(osrm_url=os.environ.get("GAPCROSS_OSRM_URL", PUBLIC_OSRM),
-                               overpass_url=os.environ.get("GAPCROSS_OVERPASS_URL", PUBLIC_OVERPASS))
+        sources = live_sources()  # GAPCROSS_OSRM_URL / GAPCROSS_OVERPASS_URL, else the public servers
         source: Literal["osrm", "recorded"] = "osrm"
     else:
         sources, source = offline_sources(), "recorded"
@@ -115,13 +122,21 @@ def service_from_env() -> Service:
 
 
 def create_app(service: Service | None = None) -> FastAPI:
-    app = FastAPI(title="Gap-crossing route comparison", version="0.1.0")
     state: dict[str, Service] = {}
+    lock = threading.Lock()
 
     def svc() -> Service:
-        if "s" not in state:
-            state["s"] = service or service_from_env()
-        return state["s"]
+        with lock:
+            if "s" not in state:
+                state["s"] = service or service_from_env()
+            return state["s"]
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI):
+        threading.Thread(target=lambda: svc().prefetch(), daemon=True).start()
+        yield
+
+    app = FastAPI(title="Gap-crossing route comparison", version="0.1.0", lifespan=lifespan)
 
     @app.get("/trips", response_model=list[Trip])
     def list_trips() -> list[Trip]:

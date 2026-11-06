@@ -93,7 +93,12 @@ of 10^10 and above.
 - **Jev answer cache:** SQLite at `server/var/jev_cache.sqlite`, gitignored, filled for the corridor
   by a pre-run command.
 - **OSRM:** self-hosted in Docker on a Berkeley-only extract, preprocessed in WSL and uploaded. The
-  public demo server is for checks only.
+  public demo server is for checks only. Built by `server/osrm/prepare.sh` (Geofabrik NorCal
+  extract, clipped to W-122.34 S37.80 E-122.20 N37.93, MLD car profile, `osrm-backend` v5.27.1);
+  served by the `osrm` service in `compose.yaml`; data lands in gitignored `server/osrm/data/`.
+- **Live source URLs:** `live_sources()` reads `GAPCROSS_OSRM_URL` and `GAPCROSS_OVERPASS_URL`
+  (argument beats environment beats the public servers); compose sets the first to `http://osrm:5000`.
+  Live tests carry the `live` marker and are skipped unless run with `-m live`.
 
 ## Drive reports
 
@@ -137,3 +142,31 @@ drive). The follower cannot tell the two feeds apart.
 
 One always-on cloud VM runs the service, the OSRM container and both SQLite files. Start on a free
 Google Cloud e2-micro (1 GB); if measured memory does not fit, move to a Hetzner 4 GB plan.
+
+## Measured latency and candidate limit (S6, 2026-11-06)
+
+Self-hosted OSRM (v5.27.1, MLD) in Docker on WSL2, Berkeley extract (prepared graph about 40 MB,
+container memory about 30 MiB idle). Measured with `uv run python -m gapcross.latency`; calls are
+sequential HTTP from the host. Local routes reproduce the recorded public-server fixtures exactly
+(provider 708 s / 5874 m, example 754 s / 6005 m).
+
+| Call | n | p50 | p95 |
+|---|---|---|---|
+| OSRM provider route (origin to destination) | 10 | 17.8 ms | 19.9 ms |
+| OSRM example route (via Oregon) | 10 | 18.0 ms | 19.6 ms |
+| OSRM candidate-like via route (12 spread points) | 12 | 17.6 ms | 28.4 ms |
+| Overpass snapshot of the trip bbox (public overpass-api.de) | 1 | 35 s | - |
+| `compare()` end to end: live OSRM, snapshot held, no Jev | 5 | 0.52 s | 0.60 s |
+
+Overpass: the public server took 35 s for the corridor snapshot (three earlier attempts timed out
+or answered 502). It is therefore never on the request path: the service fetches each corridor's
+snapshot once at startup (`Service.prefetch`) and keeps it for the life of the process. The
+adapter's HTTP timeout is 120 s (the query's own limit is 90 s). A request that arrives before a
+successful fetch tries once, and reports `check_failed` if that fails.
+
+**S6 check: met.** `compare()` for the demo trip on the self-hosted OSRM, with the corridor
+snapshot held, finishes in about 0.5 s (p50; max 0.6 s) and finds the Ward improvement.
+
+**Candidate limit: 8.** The demo search generates 4 candidates; each costs about 20 ms of OSRM and
+about 0.1 s of interpretation and assessment. Jev adds about 0.3 s per route batch on a cache miss
+(S7), so 8 candidates plus the default stay under 4 s even with no Jev answer cached.

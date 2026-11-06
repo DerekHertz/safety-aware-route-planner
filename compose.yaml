@@ -3,3 +3,17 @@ services:
     build: ./server
     ports:
       - "8000:8000"
+    environment:
+      # recorded (default, tonight's demo) or live: GAPCROSS_SOURCES=live docker compose up
+      GAPCROSS_SOURCES: ${GAPCROSS_SOURCES:-recorded}
+      GAPCROSS_OSRM_URL: http://osrm:5000
+    depends_on:
+      - osrm
+  # Berkeley-only OSRM (MLD, car). Build the data first: server/osrm/prepare.sh
+  osrm:
+    image: ghcr.io/project-osrm/osrm-backend:v5.27.1
+    command: osrm-routed --algorithm mld /data/berkeley.osrm
+    volumes:
+      - ./server/osrm/data:/data:ro
+    ports:
+      - "5000:5000"
