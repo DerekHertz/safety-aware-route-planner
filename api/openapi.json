@@ -374,6 +374,11 @@
             "title": "Crossings",
             "type": "array"
           },
+          "crossings_checked": {
+            "description": "False when the check failed or the route is not assessed (rerouted): show no markers or counts, since an empty `crossings` then does not mean no crossings.",
+            "title": "Crossings Checked",
+            "type": "boolean"
+          },
           "distance_m": {
             "minimum": 0.0,
             "title": "Distance M",
@@ -424,7 +429,8 @@
           "distance_m",
           "eta_s",
           "steps",
-          "crossings"
+          "crossings",
+          "crossings_checked"
         ],
         "title": "Route",
         "type": "object"

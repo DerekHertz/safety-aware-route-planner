@@ -54,7 +54,7 @@ tests. They are not part of the interface. Tests cross `compare()` with fixture 
 
 ```
 Route       { label: provider|example|rerouted, geometry: [LatLon], distance_m, eta_s,
-              steps: [Step], crossings: [Crossing] }
+              steps: [Step], crossings: [Crossing], crossings_checked }
 Step        { instruction, maneuver {type, modifier}, street, distance_m, along_m, location }
 Crossing    { key, main_street, kind: straight|left_onto, approach_bearing, along_m,
               location, assessment: Assessment }
@@ -66,6 +66,8 @@ Comparison  { default: Route, alternative?: Route,
               search_complete, budget_s, added_s? }
 ```
 
+- `crossings_checked` is false on a failed check and on a rerouted route; the app then shows no
+  markers or counts, since an empty `crossings` does not mean the route has none (rule 2).
 - Flag and unknown counts are never sent. The app derives them from `crossings`, so marker
   counts equal assessment counts by construction.
 - Lead evidence is shown but never changes a status.
@@ -174,7 +176,9 @@ filled (`uv run python -m gapcross.prerun`), so `compare()` with Jev still takes
 (unflagged); `does_not_stop` means a gap crossing (flagged).
 
 **Jev gate (S7, first corridor run 2026-11-06):** 27 rule-settled crossings, Jev confident on 2
-(both agree), abstained on 25; 2 open crossings asked. The gate needs at least 10 confident
+(both agree), abstained on 25; 2 open crossings asked. **Re-recorded 2026-11-06** after the
+roundabout and rename rules: 26 settled, Jev confident on none (abstained on all 26); no open
+crossings, since the two were the Piedmont roundabout passes. The gate needs at least 10 confident
 agreements and no confident disagreement (`MIN_AGREE`), so it fails and Jev's answers stay leads
 until better evidence or wording raises its confidence.
 

@@ -81,6 +81,25 @@ def test_records_failure_is_check_failed_not_503(tmp_path):
     client = _client(tmp_path, Sources(offline_sources().routes, Down()))
     body = client.post(f"/trips/{DEMO}/comparison", json={"avoid": True}).json()
     assert body["outcome"] == "check_failed" and body["alternative"] is None
+    assert body["default"]["crossings_checked"] is False
+
+
+def test_rule_2_default_says_when_its_check_failed(tmp_path):
+    """An empty crossings list must not read as "no crossings" when the check could not run."""
+    class Down:
+        def snapshot(self, bbox):
+            raise SourceUnavailable("overpass down")
+
+    route = _client(tmp_path, Sources(offline_sources().routes, Down())).post(f"/trips/{DEMO}/default").json()
+    assert route["crossings"] == []
+    assert route["crossings_checked"] is False
+
+
+def test_assessed_routes_say_their_crossings_were_checked(client):
+    assert client.post(f"/trips/{DEMO}/default").json()["crossings_checked"] is True
+    body = client.post(f"/trips/{DEMO}/comparison", json={"avoid": True}).json()
+    assert body["default"]["crossings_checked"] is True
+    assert body["alternative"]["crossings_checked"] is True
 
 
 def test_rule_10_same_request_gives_byte_identical_responses(tmp_path, client):
@@ -95,6 +114,7 @@ def test_rule_11_reroute_is_unassessed_and_labeled(client):
     route = client.post(f"/trips/{DEMO}/reroute", json={"position": REROUTE_AT}).json()
     assert route["label"] == "rerouted"
     assert route["crossings"] == []
+    assert route["crossings_checked"] is False
     start = route["geometry"][0]
     assert _metres(start, REROUTE_AT) < 50
 

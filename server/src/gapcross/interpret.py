@@ -12,6 +12,10 @@ Knows OSM structure and route geometry, nothing about traffic controls. Rules (o
 - Movements onto or across the same-named main street within 50 m merge into one crossing; any
   left makes it `left_onto`. A group whose route arrived on that same street is a left off it, not
   a crossing. Right turns are movements but never crossings.
+- A straight group whose route continues onto that same street within 50 m joins it under a new
+  name (Adeline becoming Shattuck), so it is not a crossing.
+- Movements entering, circulating in or leaving a roundabout are never crossings: entering is a
+  right merge, and traffic entering after us yields to us.
 """
 
 import math
@@ -25,6 +29,7 @@ MATCH_RADIUS_M = 3.0
 MERGE_WINDOW_M = 50.0
 HEADING_REACH_M = 20.0
 MAIN_HIGHWAYS = frozenset({"primary", "secondary", "tertiary"})
+ROUNDABOUTS = frozenset({"roundabout", "circular"})
 OCTANTS = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
 Turn = Literal["straight", "left", "right", "u_turn"]
@@ -106,7 +111,9 @@ def _movement(node, along, line, junctions, snapshot, gap_before, gap_after) -> 
     leaving = _closest_arm(arms, departure)
     from_street, to_street = _name(arrival.way), _name(leaving.way)
     main = None
-    if turn == "left" and _is_main(leaving.way) and to_street != from_street:
+    if _is_roundabout(arrival.way) or _is_roundabout(leaving.way):
+        pass
+    elif turn == "left" and _is_main(leaving.way) and to_street != from_street:
         main = to_street
     elif turn == "straight":
         crossed = [a.way for a in arms if a is not arrival and a is not leaving and _is_main(a.way)
@@ -142,6 +149,12 @@ def _crossings(movements: list[Movement]) -> tuple[RouteCrossing, ...]:
         if arrived_on_it:
             continue
         kind = "left_onto" if any(m.turn == "left" for m in group) else "straight"
+        continues_onto_it = kind == "straight" and any(
+            m.to_street == street and m.turn == "straight" for m in movements
+            if first.along_m <= m.along_m <= group[-1].along_m + MERGE_WINDOW_M
+        )
+        if continues_onto_it:
+            continue
         nodes = "+".join(str(n) for n in sorted(m.node_id for m in group))
         crossings.append(RouteCrossing(
             key=f"{nodes}/{kind}/{octant(first.approach_bearing)}",
@@ -168,6 +181,10 @@ def _turn(approach: float, departure: float) -> Turn:
 
 def _is_main(way: OsmWay) -> bool:
     return way.tags.get("highway") in MAIN_HIGHWAYS
+
+
+def _is_roundabout(way: OsmWay) -> bool:
+    return way.tags.get("junction") in ROUNDABOUTS
 
 
 def _rank(way: OsmWay) -> int:

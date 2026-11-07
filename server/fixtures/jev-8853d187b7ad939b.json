@@ -20,15 +20,6 @@
     "instructions": "The driver follows the route through the crossing 53034977/straight/NW, whose records are at `crossings[\"53034977/straight/NW\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
     "type": "choice"
    },
-   "53041093/straight/N.approach_control": {
-    "criteria": {
-     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
-     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
-     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
-    },
-    "instructions": "The driver follows the route through the crossing 53041093/straight/N, whose records are at `crossings[\"53041093/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
-    "type": "choice"
-   },
    "53050625+240469696/straight/E.approach_control": {
     "criteria": {
      "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
@@ -133,15 +124,6 @@
       "node/9509603329: stop sign facing Stadium Rim Way traffic"
      ]
     },
-    "53041093/straight/N": {
-     "approach_bearing": 351,
-     "from_street": "Telegraph Avenue",
-     "kind": "straight",
-     "main_street": "Haste Street",
-     "records": [
-      "node/53041093: traffic signal at the Haste Street junction"
-     ]
-    },
     "53050625+240469696/straight/E": {
      "approach_bearing": 81,
      "from_street": "Derby Street",
@@ -233,129 +215,119 @@
   "answers": {
    "1993196224/left_onto/N.approach_control": {
     "choice": "stops_for_us",
-    "confidence": 0.86,
+    "confidence": 0.8,
     "probabilities": {
-     "cannot_tell": 0.03,
-     "does_not_stop": 0.06,
-     "stops_for_us": 0.91
+     "cannot_tell": 0.05,
+     "does_not_stop": 0.08,
+     "stops_for_us": 0.87
     },
     "type": "choice"
    },
    "53034977/straight/NW.approach_control": {
     "choice": "stops_for_us",
-    "confidence": 0.77,
+    "confidence": 0.79,
     "probabilities": {
-     "cannot_tell": 0.05,
+     "cannot_tell": 0.04,
      "does_not_stop": 0.1,
-     "stops_for_us": 0.85
-    },
-    "type": "choice"
-   },
-   "53041093/straight/N.approach_control": {
-    "choice": "cannot_tell",
-    "confidence": 0.33,
-    "probabilities": {
-     "cannot_tell": 0.55,
-     "does_not_stop": 0.09,
-     "stops_for_us": 0.36
+     "stops_for_us": 0.86
     },
     "type": "choice"
    },
    "53050625+240469696/straight/E.approach_control": {
     "choice": "does_not_stop",
-    "confidence": 0.53,
+    "confidence": 0.56,
     "probabilities": {
-     "cannot_tell": 0.3,
-     "does_not_stop": 0.69,
+     "cannot_tell": 0.28,
+     "does_not_stop": 0.71,
      "stops_for_us": 0.01
     },
     "type": "choice"
    },
    "53050627+240469515/straight/E.approach_control": {
-    "choice": "stops_for_us",
-    "confidence": 0.16,
+    "choice": "cannot_tell",
+    "confidence": 0.09,
     "probabilities": {
-     "cannot_tell": 0.3,
-     "does_not_stop": 0.26,
-     "stops_for_us": 0.44
+     "cannot_tell": 0.39,
+     "does_not_stop": 0.27,
+     "stops_for_us": 0.34
     },
     "type": "choice"
    },
    "53050629+240469627/straight/E.approach_control": {
     "choice": "does_not_stop",
-    "confidence": 0.72,
+    "confidence": 0.67,
     "probabilities": {
-     "cannot_tell": 0.19,
-     "does_not_stop": 0.81,
+     "cannot_tell": 0.22,
+     "does_not_stop": 0.78,
      "stops_for_us": 0.0
     },
     "type": "choice"
    },
    "53055616/straight/N.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.53,
+    "confidence": 0.43,
     "probabilities": {
-     "cannot_tell": 0.69,
-     "does_not_stop": 0.3,
-     "stops_for_us": 0.01
+     "cannot_tell": 0.62,
+     "does_not_stop": 0.35,
+     "stops_for_us": 0.03
     },
     "type": "choice"
    },
    "53055620/straight/N.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.52,
+    "confidence": 0.49,
     "probabilities": {
-     "cannot_tell": 0.68,
-     "does_not_stop": 0.32,
+     "cannot_tell": 0.66,
+     "does_not_stop": 0.34,
      "stops_for_us": 0.0
     },
     "type": "choice"
    },
    "53063558/straight/E.approach_control": {
     "choice": "stops_for_us",
-    "confidence": 0.38,
+    "confidence": 0.2,
     "probabilities": {
-     "cannot_tell": 0.32,
+     "cannot_tell": 0.44,
      "does_not_stop": 0.09,
-     "stops_for_us": 0.59
+     "stops_for_us": 0.47
     },
     "type": "choice"
    },
    "53063558/straight/W.approach_control": {
-    "choice": "stops_for_us",
-    "confidence": 0.31,
+    "choice": "cannot_tell",
+    "confidence": 0.19,
     "probabilities": {
-     "cannot_tell": 0.36,
-     "does_not_stop": 0.1,
-     "stops_for_us": 0.54
+     "cannot_tell": 0.46,
+     "does_not_stop": 0.09,
+     "stops_for_us": 0.45
     },
     "type": "choice"
    },
    "53073464/left_onto/S.approach_control": {
-    "choice": "does_not_stop",
-    "confidence": 0.07,
+    "choice": "stops_for_us",
+    "confidence": 0.13,
     "probabilities": {
-     "cannot_tell": 0.29,
-     "does_not_stop": 0.38,
-     "stops_for_us": 0.33
+     "cannot_tell": 0.34,
+     "does_not_stop": 0.24,
+     "stops_for_us": 0.42
     },
     "type": "choice"
    },
    "53090675/straight/E.approach_control": {
     "choice": "stops_for_us",
-    "confidence": 0.18,
+    "confidence": 0.11,
     "probabilities": {
-     "cannot_tell": 0.35,
+     "cannot_tell": 0.39,
      "does_not_stop": 0.2,
-     "stops_for_us": 0.45
+     "stops_for_us": 0.41
     },
     "type": "choice"
    }
   },
   "model": "jev-1.14.0",
   "usage": {
-   "input_tokens": 4022,
-   "output_tokens": 752
+   "input_tokens": 3726,
+   "output_tokens": 692
   }
  }
 }

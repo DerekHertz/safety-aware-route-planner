@@ -93,8 +93,8 @@ class Service:
     def default(self, trip: TripPlan) -> Route:
         raw = self.sources.routes.route([trip.origin, *trip.example_via, trip.destination])
         assessed = assess_route(raw, self.sources.records, trip.bbox, self.advisor)
-        crossings = () if assessed.status == "check_failed" else assessed.crossings
-        return _route(raw, crossings, "example", self.source)
+        checked = assessed.status != "check_failed"
+        return _route(raw, assessed.crossings if checked else (), "example", self.source, checked=checked)
 
     def store_report(self, report: DriveReport) -> None:
         self.reports_path.parent.mkdir(parents=True, exist_ok=True)

@@ -20,15 +20,6 @@
     "instructions": "The driver follows the route through the crossing 240469682/straight/N, whose records are at `crossings[\"240469682/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
     "type": "choice"
    },
-   "275779890/straight/NE.approach_control": {
-    "criteria": {
-     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
-     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
-     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
-    },
-    "instructions": "The driver follows the route through the crossing 275779890/straight/NE, whose records are at `crossings[\"275779890/straight/NE\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
-    "type": "choice"
-   },
    "53020977/straight/N.approach_control": {
     "criteria": {
      "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
@@ -36,6 +27,15 @@
      "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
     },
     "instructions": "The driver follows the route through the crossing 53020977/straight/N, whose records are at `crossings[\"53020977/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
+    "type": "choice"
+   },
+   "53041093/straight/N.approach_control": {
+    "criteria": {
+     "cannot_tell": "The records do not settle whether the main street's traffic stops for the driver.",
+     "does_not_stop": "The records show, or clearly imply, that the main street's traffic does not stop for the driver.",
+     "stops_for_us": "The records show the main street's relevant traffic is controlled so it stops for the driver."
+    },
+    "instructions": "The driver follows the route through the crossing 53041093/straight/N, whose records are at `crossings[\"53041093/straight/N\"]`. Using only those records, does the main street's traffic that the driver must cross or turn left across have to stop for the driver's approach, through an all-way stop or a signal? A stop sign facing only the driver does not count.",
     "type": "choice"
    },
    "53050621+240469619/left_onto/E.approach_control": {
@@ -159,15 +159,6 @@
       "node/240469682: traffic signal at the Dwight Way junction"
      ]
     },
-    "275779890/straight/NE": {
-     "approach_bearing": 33,
-     "from_street": "Adeline Street",
-     "kind": "straight",
-     "main_street": "Shattuck Avenue",
-     "records": [
-      "node/275779890: traffic signal at the Shattuck Avenue junction"
-     ]
-    },
     "53020977/straight/N": {
      "approach_bearing": 359,
      "from_street": "Telegraph Avenue",
@@ -175,6 +166,15 @@
      "main_street": "Dwight Way",
      "records": [
       "node/53020977: traffic signal at the Dwight Way junction"
+     ]
+    },
+    "53041093/straight/N": {
+     "approach_bearing": 351,
+     "from_street": "Telegraph Avenue",
+     "kind": "straight",
+     "main_street": "Haste Street",
+     "records": [
+      "node/53041093: traffic signal at the Haste Street junction"
      ]
     },
     "53050621+240469619/left_onto/E": {
@@ -289,131 +289,131 @@
   "answers": {
    "240404682+240469798/straight/N.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.26,
+    "confidence": 0.28,
     "probabilities": {
-     "cannot_tell": 0.51,
-     "does_not_stop": 0.11,
-     "stops_for_us": 0.38
+     "cannot_tell": 0.52,
+     "does_not_stop": 0.13,
+     "stops_for_us": 0.35
     },
     "type": "choice"
    },
    "240469682/straight/N.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.49,
+    "confidence": 0.48,
     "probabilities": {
-     "cannot_tell": 0.66,
-     "does_not_stop": 0.08,
-     "stops_for_us": 0.26
-    },
-    "type": "choice"
-   },
-   "275779890/straight/NE.approach_control": {
-    "choice": "stops_for_us",
-    "confidence": 0.11,
-    "probabilities": {
-     "cannot_tell": 0.41,
-     "does_not_stop": 0.18,
-     "stops_for_us": 0.41
+     "cannot_tell": 0.65,
+     "does_not_stop": 0.06,
+     "stops_for_us": 0.29
     },
     "type": "choice"
    },
    "53020977/straight/N.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.4,
+    "confidence": 0.34,
     "probabilities": {
-     "cannot_tell": 0.6,
-     "does_not_stop": 0.11,
-     "stops_for_us": 0.29
+     "cannot_tell": 0.56,
+     "does_not_stop": 0.12,
+     "stops_for_us": 0.32
+    },
+    "type": "choice"
+   },
+   "53041093/straight/N.approach_control": {
+    "choice": "cannot_tell",
+    "confidence": 0.22,
+    "probabilities": {
+     "cannot_tell": 0.48,
+     "does_not_stop": 0.14,
+     "stops_for_us": 0.38
     },
     "type": "choice"
    },
    "53050621+240469619/left_onto/E.approach_control": {
     "choice": "does_not_stop",
-    "confidence": 0.7,
+    "confidence": 0.74,
     "probabilities": {
-     "cannot_tell": 0.2,
-     "does_not_stop": 0.8,
+     "cannot_tell": 0.17,
+     "does_not_stop": 0.83,
      "stops_for_us": 0.0
     },
     "type": "choice"
    },
    "53050628+240469698/straight/E.approach_control": {
     "choice": "does_not_stop",
-    "confidence": 0.85,
+    "confidence": 0.76,
     "probabilities": {
-     "cannot_tell": 0.1,
-     "does_not_stop": 0.9,
-     "stops_for_us": 0.0
+     "cannot_tell": 0.15,
+     "does_not_stop": 0.84,
+     "stops_for_us": 0.01
     },
     "type": "choice"
    },
    "53055185/straight/E.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.28,
+    "confidence": 0.14,
     "probabilities": {
-     "cannot_tell": 0.52,
+     "cannot_tell": 0.43,
      "does_not_stop": 0.14,
-     "stops_for_us": 0.34
+     "stops_for_us": 0.43
     },
     "type": "choice"
    },
    "53055193+239616965/straight/E.approach_control": {
     "choice": "stops_for_us",
-    "confidence": 0.3,
+    "confidence": 0.14,
     "probabilities": {
-     "cannot_tell": 0.32,
-     "does_not_stop": 0.15,
-     "stops_for_us": 0.53
+     "cannot_tell": 0.3,
+     "does_not_stop": 0.27,
+     "stops_for_us": 0.43
     },
     "type": "choice"
    },
    "53055195/straight/E.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.26,
+    "confidence": 0.24,
     "probabilities": {
-     "cannot_tell": 0.51,
-     "does_not_stop": 0.17,
+     "cannot_tell": 0.49,
+     "does_not_stop": 0.19,
      "stops_for_us": 0.32
     },
     "type": "choice"
    },
    "53055202/straight/E.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.25,
+    "confidence": 0.14,
     "probabilities": {
-     "cannot_tell": 0.5,
-     "does_not_stop": 0.14,
-     "stops_for_us": 0.36
+     "cannot_tell": 0.43,
+     "does_not_stop": 0.16,
+     "stops_for_us": 0.41
     },
     "type": "choice"
    },
    "53055544/left_onto/S.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.14,
+    "confidence": 0.18,
     "probabilities": {
-     "cannot_tell": 0.43,
-     "does_not_stop": 0.2,
-     "stops_for_us": 0.37
+     "cannot_tell": 0.45,
+     "does_not_stop": 0.21,
+     "stops_for_us": 0.34
     },
     "type": "choice"
    },
    "53064679+275782464/left_onto/E.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.28,
+    "confidence": 0.24,
     "probabilities": {
-     "cannot_tell": 0.52,
-     "does_not_stop": 0.25,
-     "stops_for_us": 0.23
+     "cannot_tell": 0.49,
+     "does_not_stop": 0.26,
+     "stops_for_us": 0.25
     },
     "type": "choice"
    },
    "53099277/left_onto/E.approach_control": {
     "choice": "cannot_tell",
-    "confidence": 0.22,
+    "confidence": 0.18,
     "probabilities": {
-     "cannot_tell": 0.48,
-     "does_not_stop": 0.28,
-     "stops_for_us": 0.24
+     "cannot_tell": 0.45,
+     "does_not_stop": 0.38,
+     "stops_for_us": 0.17
     },
     "type": "choice"
    },
@@ -429,19 +429,19 @@
    },
    "53117370+243673082/left_onto/E.approach_control": {
     "choice": "does_not_stop",
-    "confidence": 0.06,
+    "confidence": 0.09,
     "probabilities": {
-     "cannot_tell": 0.34,
-     "does_not_stop": 0.37,
-     "stops_for_us": 0.29
+     "cannot_tell": 0.29,
+     "does_not_stop": 0.39,
+     "stops_for_us": 0.32
     },
     "type": "choice"
    }
   },
   "model": "jev-1.14.0",
   "usage": {
-   "input_tokens": 5097,
-   "output_tokens": 970
+   "input_tokens": 5089,
+   "output_tokens": 967
   }
  }
 }
