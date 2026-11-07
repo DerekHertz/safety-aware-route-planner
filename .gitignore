@@ -34,3 +34,11 @@ server/var/
 
 # OSRM extract and prepared graph (large)
 server/osrm/data/
+
+# iOS build output and per-user Xcode state
+ios/GapcrossKit/.build/
+ios/GapcrossKit/.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+DerivedData/
+.DS_Store
