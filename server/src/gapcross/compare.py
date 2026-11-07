@@ -185,10 +185,15 @@ def _route(raw: RawRoute, crossings: Sequence[Crossing], label, source, *, check
                  crossings_checked=checked)
 
 
+MIN_STEP_M = 5.0  # shorter steps are leg-split stubs, not maneuvers
+
+
 def _steps(raw: RawRoute) -> list[Step]:
     """Wire steps. A via point splits OSRM's legs, which leaves a bare `continue` where the driver
     may actually turn: its turn is measured from the route geometry. Straight continuations on
-    the same street are folded into the step before them."""
+    the same street are folded into the step before them. A step shorter than MIN_STEP_M, which a
+    leg split on a corner leaves before the real turn, is folded too: it would announce a second
+    turn where the driver makes one."""
     line = _Polyline(raw.geometry)
     named = [s.name for s in raw.steps]
     out: list[dict] = []
@@ -199,7 +204,8 @@ def _steps(raw: RawRoute) -> list[Step]:
             kind, modifier = _turn_from_geometry(line, s.location)
         street = s.name or next((n for n in named[i + 1:] if n), "")
         straight_on = kind in ("continue", "new name") and modifier in (None, "straight")
-        if out and straight_on and out[-1]["street"] == street and out[-1]["type"] != "arrive":
+        stub = 0 < i < len(raw.steps) - 1 and s.distance_m < MIN_STEP_M and kind != "arrive"
+        if out and (stub or straight_on and out[-1]["street"] == street) and out[-1]["type"] != "arrive":
             out[-1]["distance_m"] += s.distance_m
         else:
             out.append({"type": kind, "modifier": modifier, "street": street, "distance_m": s.distance_m,

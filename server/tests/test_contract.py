@@ -59,3 +59,25 @@ def test_counts_are_never_sent():
     for name in ("Route", "Comparison"):
         fields = set(schemas[name]["properties"])
         assert not {f for f in fields if "count" in f}, name
+
+
+def test_optional_fields_carry_no_null_branch():
+    """swift-openapi-generator skips any property written as `anyOf: [X, {type: null}]`, which
+    would silently drop `Comparison.alternative` from the app. Optional fields are left out of
+    `required` instead, and a null on the wire decodes as absent."""
+    schemas = json.loads(render_contract())["components"]["schemas"]
+
+    def nulls(node):
+        if isinstance(node, dict):
+            return (node.get("type") == "null") + sum(nulls(v) for v in node.values())
+        if isinstance(node, list):
+            return sum(nulls(v) for v in node)
+        return 0
+
+    assert nulls(schemas) == 0
+    optional = {("Comparison", "alternative"), ("Comparison", "added_s"), ("Maneuver", "modifier"),
+                ("Evidence", "observed_on")}
+    for name, field in optional:
+        assert field in schemas[name]["properties"], (name, field)
+        assert field not in schemas[name].get("required", []), (name, field)
+    assert schemas["Comparison"]["properties"]["alternative"] == {"$ref": "#/components/schemas/Route"}

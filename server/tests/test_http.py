@@ -145,6 +145,19 @@ def test_turns_at_via_points_are_announced_as_turns(client):
                 assert not s["instruction"].startswith("Continue"), (s["instruction"], round(turn))
 
 
+def test_a_via_point_never_adds_an_instruction(client):
+    """The alternative passes a via point on the Park/Oregon corner. Its leg split must not leave a
+    second "turn" there: every maneuver after the first is at least 5 m along from the one before."""
+    body = client.post(f"/trips/{DEMO}/comparison", json={"avoid": True}).json()
+    for route in (body["default"], body["alternative"]):
+        steps = route["steps"]
+        for before, after in zip(steps, steps[1:]):
+            assert after["along_m"] - before["along_m"] >= 5, (before["instruction"], after["instruction"])
+    instructions = [s["instruction"] for s in body["alternative"]["steps"]]
+    oregon = instructions.index("Turn right onto Oregon Street")
+    assert instructions[oregon - 1] == "Continue on Park Street"
+
+
 def _turn_at(geometry, at, reach=20.0):
     pts = [(p["lat"], p["lon"]) for p in geometry]
     k = _closest(pts, (at["lat"], at["lon"]))

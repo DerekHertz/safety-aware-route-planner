@@ -38,25 +38,11 @@
         "additionalProperties": false,
         "properties": {
           "added_s": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Added S"
+            "title": "Added S",
+            "type": "number"
           },
           "alternative": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/Route"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/Route"
           },
           "budget_s": {
             "minimum": 0.0,
@@ -235,16 +221,9 @@
             "type": "boolean"
           },
           "observed_on": {
-            "anyOf": [
-              {
-                "format": "date",
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Observed On"
+            "format": "date",
+            "title": "Observed On",
+            "type": "string"
           },
           "ref": {
             "title": "Ref",
@@ -315,15 +294,8 @@
         "additionalProperties": false,
         "properties": {
           "modifier": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Modifier"
+            "title": "Modifier",
+            "type": "string"
           },
           "type": {
             "title": "Type",

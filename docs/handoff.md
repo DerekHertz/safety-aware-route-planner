@@ -115,7 +115,7 @@ PR.
 | S6 live sources and self-hosted OSRM | Merged, #133. Live `compare()` takes about 0.5 s. |
 | S7 Jev adapter, cache, pre-run and gate | Merged, #134. The gate fails (2 of 27 compared, needs 10), so Jev stays a lead. |
 | Dependabot for `server/` | Merged, #135. Takes effect once the rewrite reaches `main`. |
-| S8 iOS planning and simulated drive | **Next, on the Mac.** |
+| S8 iOS planning and simulated drive | Built on the Mac, 2026-11-06; see `ios/README.md`. The check passed in the simulator: both routes and their markers, counts from `crossings`, and a simulated drive to the destination with turns in order. Rules 11 to 14 are tested in `GapcrossCore`. |
 | S9 deploy to a GCP e2-micro | Not started. Needs a Google Cloud account and project. |
 | S10 in-car drive | Not started. Needs S8, S9, the iPhone and an Apple ID for signing. |
 
@@ -156,7 +156,8 @@ lives in the gitignored `.env` at the repo root.
   - `interpret.py`, `assess.py`, `search.py`, `compare.py`: the engine, S2 to S4.
   - `app.py`: the endpoints. `jev.py`, `prerun.py`: Jev and the corridor gate.
   - `trips.json`: preset trips. The alternative is never listed; the search finds it.
-- `api/openapi.json`: the only file the iOS app reads from the service.
+- `api/openapi.json`: the only file the iOS app reads from the service. `gapcross.contract` writes optional fields without their null branch, because swift-openapi-generator skips any property whose `anyOf` includes null.
+- `ios/`: the app (S8). See `ios/README.md`.
 - `compose.yaml`: the service on :8000, and `osrm` under the `live` profile.
 - `.claude/launch.json`: a `server` preview config that runs uvicorn in WSL (Windows only).
 
