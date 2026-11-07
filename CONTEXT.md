@@ -13,7 +13,7 @@ A street established, by positive evidence, as carrying through traffic. A two-l
 _Avoid_: Arterial, major road
 
 **Crossing**:
-One passage of a route straight across, or left onto, a main street, however many carriageways or intersections it spans. Right turns onto a main street, and left turns off one, are movements but never crossings.
+One passage of a route straight across, or left onto, a main street, however many carriageways or intersections it spans. Right turns onto a main street, and left turns off one, are movements but never crossings. Neither is joining a main street that the route's own street becomes, nor passing through a roundabout: entering it is a right merge, and traffic entering after you yields to you.
 _Avoid_: Intersection (that is where a crossing happens, not the crossing)
 
 **Gap crossing**:

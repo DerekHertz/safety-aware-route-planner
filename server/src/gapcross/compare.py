@@ -136,9 +136,10 @@ def compare(trip: TripPlan, sources: Sources, advisor: Advisor, clock: Callable[
     alternative = None
     if decision.chosen is not None:
         a, cand_raw, target = found[decision.chosen]
-        alternative = _route(cand_raw, a.crossings, "provider", source)
+        alternative = _route(cand_raw, a.crossings, "provider", source, checked=True)
     return Comparison(
-        default=_route(raw, () if default_a.failed else default.crossings, "example", source),
+        default=_route(raw, () if default_a.failed else default.crossings, "example", source,
+                       checked=not default_a.failed),
         alternative=alternative,
         outcome=decision.outcome,
         search_complete=decision.search_complete,
@@ -175,12 +176,13 @@ def reroute(position: LatLon, trip: TripPlan, sources: Sources,
     """An unassessed route from where the driver is, labeled rerouted (rule 11).
     Raises SourceUnavailable when the route can't be obtained (HTTP 503)."""
     raw = sources.routes.route([position, trip.destination])
-    return _route(raw, (), "rerouted", source)
+    return _route(raw, (), "rerouted", source, checked=False)
 
 
-def _route(raw: RawRoute, crossings: Sequence[Crossing], label, source) -> Route:
+def _route(raw: RawRoute, crossings: Sequence[Crossing], label, source, *, checked: bool) -> Route:
     return Route(label=label, source=source, geometry=list(raw.geometry), distance_m=raw.distance_m,
-                 eta_s=raw.duration_s, steps=_steps(raw), crossings=list(crossings))
+                 eta_s=raw.duration_s, steps=_steps(raw), crossings=list(crossings),
+                 crossings_checked=checked)
 
 
 def _steps(raw: RawRoute) -> list[Step]:

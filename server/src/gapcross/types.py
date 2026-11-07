@@ -73,6 +73,9 @@ class Route(Wire):
     eta_s: float = Field(ge=0)
     steps: list[Step]
     crossings: list[Crossing] = Field(description="Empty on a rerouted route, which is not assessed.")
+    crossings_checked: bool = Field(
+        description="False when the check failed or the route is not assessed (rerouted): show no "
+                    "markers or counts, since an empty `crossings` then does not mean no crossings.")
 
 
 class Comparison(Wire):

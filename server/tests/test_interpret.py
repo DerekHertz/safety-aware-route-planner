@@ -21,6 +21,7 @@ SACRAMENTO_AT_OREGON = "53050628+240469698/straight/E"
 SACRAMENTO_AT_WARD = "53050627+240469515/straight/E"
 OREGON_AT_DOHR = 53064667
 DOHR_AT_WARD = 53103724
+ADELINE_AT_SHATTUCK = 275779890  # Shattuck joins Adeline here; 21 m on, Adeline becomes Shattuck
 
 
 @pytest.fixture(scope="module")
@@ -92,6 +93,26 @@ def test_right_turns_are_movements_but_never_crossings(example):
     assert 243673085 in rights  # San Pablo right onto Russell
     for c in example.crossings:
         assert not _nodes(c) & rights, c.key
+
+
+def test_passing_through_a_roundabout_is_never_a_crossing(example, snapshot):
+    """Entering is a right merge and traffic entering after us yields to us (owner, 2026-11-06).
+    The roundabout nodes are read from the snapshot's ways here, not from the code under test."""
+    roundabout = {n for w in snapshot.ways.values() if w.tags.get("junction") in ("roundabout", "circular")
+                  for n in w.node_ids}
+    on_route = {m.node_id for m in example.movements} & roundabout
+    assert {267631972, 56819279} <= on_route  # the two Piedmont entries the route circulates past
+    for c in example.crossings:
+        assert not _nodes(c) & roundabout, c.key
+    assert not any(c.main_street == "Piedmont Avenue" for c in example.crossings)
+
+
+def test_continuing_onto_a_main_street_under_a_new_name_is_not_a_crossing(example):
+    """Adeline becomes Shattuck: the route joins Shattuck rather than crossing it (owner, 2026-11-06)."""
+    movement = next(m for m in example.movements if m.node_id == ADELINE_AT_SHATTUCK)
+    assert movement.turn == "straight"
+    assert not any(ADELINE_AT_SHATTUCK in _nodes(c) for c in example.crossings)
+    assert not any(c.main_street == "Shattuck Avenue" for c in example.crossings)
 
 
 def test_crossings_are_in_route_order(example, dohr_ward):

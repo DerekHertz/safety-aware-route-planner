@@ -67,11 +67,11 @@ What the app must do, from the design and the service as built:
   alternative. `comparison` with `{"avoid": false}` returns 422: with avoidance off, call only
   `/default`.
 - **Markers** on every crossing of a displayed route: `!` for `flagged`, `?` for `unknown`, a quiet
-  check for `unflagged`. Derive counts from `crossings`; the API never sends counts. If any
-  crossing is `check_failed`, or the comparison outcome is `check_failed`, show "Crossings couldn't
-  be checked" and no markers or counts (rule 2). Each marker opens its `assessment.explanation` and
-  evidence; lead evidence (`is_lead`) is shown but never changes anything. See the open question
-  below: `/default` cannot yet say that its check failed.
+  check for `unflagged`. Derive counts from `crossings`; the API never sends counts. If
+  `Route.crossings_checked` is false, any crossing is `check_failed`, or the comparison outcome is
+  `check_failed`, show "Crossings couldn't be checked" and no markers or counts (rule 2). Each
+  marker opens its `assessment.explanation` and evidence; lead evidence (`is_lead`) is shown but
+  never changes anything.
 - **Outcome text.** Show `Comparison.summary` as given. `incomplete` and `no_improvement` are
   different messages; never merge them.
 - **Labels.** Show the route `label` (`example` for the demo's default) and `source` (`recorded`
@@ -92,8 +92,9 @@ What the app must do, from the design and the service as built:
 
 What the demo should show, from the recorded data:
 
-- Default (example) route, 754 s: 14 crossings. Flagged: Sacramento Street at Oregon, Durant
-  Avenue, Bancroft Way. Unknown: Martin Luther King Jr Way at Oregon, the Piedmont roundabout.
+- Default (example) route, 754 s: 12 crossings. Flagged: Sacramento Street at Oregon, Durant
+  Avenue, Bancroft Way. Unknown: Martin Luther King Jr Way at Oregon. The Piedmont roundabout and
+  Adeline becoming Shattuck are not crossings.
 - Avoidance on: `improvement`, an alternative via Dohr and Ward Streets, 815 s (61 s more, inside
   the 151 s budget). Sacramento is crossed at Ward, unflagged (signals). Durant and Bancroft stay
   flagged on both routes.
@@ -123,29 +124,26 @@ PR.
 - **Crossings (S2).** Only `highway` primary, secondary and tertiary make a main street. A turn is
   departure minus approach heading: straight within ±45°, left −45° to −135°, right +45° to
   +135°, beyond is a U-turn. Movements of the same-named main street within 50 m merge into one
-  crossing. A left off a divided street is not a crossing.
+  crossing. A left off a divided street is not a crossing. A straight pass that continues onto the
+  same main street within 50 m joins it under a new name (Adeline becoming Shattuck) and is not a
+  crossing. Entering, circulating in or leaving a roundabout is never a crossing: entering is a
+  right merge, and traffic entering after you yields to you.
 - **Rules (S3).** With nothing recorded that stops the main street, a stop or yield facing the
   driver is flagged. Stop signs on every approach count as an all-way stop. An undirected sign on
   the junction node is unknown.
 - **Rule 3 (S4).** Only the crossings the two routes do not share are compared; see
   properties.md. An alternative crosses on a local street within 3 blocks and rejoins the default
   300 m after the crossing. The alternative's label is `provider`.
-- **Service (S5, S6).** The record snapshot is fetched once per corridor at startup. Compose runs
+- **Service (S5, S6).** `Route.crossings_checked` is false on a failed check and on a rerouted
+  route, so an empty `crossings` list never reads as "no crossings". The record snapshot is
+  fetched once per corridor at startup. Compose runs
   recorded data by default; `GAPCROSS_SOURCES=live docker compose --profile live up` adds OSRM.
 - **Jev (S7).** The model is pinned to `jev-1.14.0`. `approach_control = stops_for_us` means the
   main street's traffic stops for the driver. The gate needs 10 confident agreements.
 
-Open questions for the owner:
-
-1. **`/default` cannot report a failed check.** When the record snapshot cannot be fetched, the
-   service returns the default route with an empty `crossings` list, and `Route` has no field that
-   says the check failed, so the app would read it as "no crossings" (rule 2). Only
-   `Comparison.outcome` carries `check_failed`. Recommended: add a `crossings_checked: bool` to
-   `Route` (false on a failed check and on a rerouted route), regenerate the contract, and have the
-   app show "Crossings couldn't be checked" when it is false. Settle this before S8 draws markers.
-2. Roundabout entries: the two Piedmont passes stay unknown. Recommended: keep them unknown until
-   a roundabout rule exists.
-3. Adeline becoming Shattuck shows as a crossing of Shattuck. Recommended: accept for the demo.
+Open questions for the owner: none. The corridor pre-run was re-recorded after the roundabout and
+rename rules (26 settled, Jev abstained on all; the gate still fails). On the Mac, `TYPESAFE_API_KEY`
+lives in the gitignored `.env` at the repo root.
 
 ## How the code is laid out
 
